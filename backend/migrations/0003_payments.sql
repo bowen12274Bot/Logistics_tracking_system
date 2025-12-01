@@ -1,0 +1,11 @@
+CREATE TABLE IF NOT EXISTS payments (
+  id TEXT PRIMARY KEY,
+  total_amount INTEGER,
+  service_fee INTEGER,
+  distance_fee INTEGER,
+  weight_volume_fee INTEGER,
+  special_fee INTEGER,
+  calculated_at TEXT,
+  paid_at TEXT,
+  package_id TEXT REFERENCES packages(id)
+);
