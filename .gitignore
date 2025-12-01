@@ -1,0 +1,13 @@
+# Node dependencies (do NOT override deeper .gitignore!)
+node_modules/
+
+# OS & IDE stuff
+.DS_Store
+Thumbs.db
+.vscode/
+
+# Env files
+*.env
+
+# Logs
+*.log

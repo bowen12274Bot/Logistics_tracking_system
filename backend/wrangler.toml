@@ -1,0 +1,8 @@
+name = "logistics-backend"
+compatibility_date = "2024-11-26"
+
+# 本地開發環境資料庫 (D1)
+[[d1_databases]]
+binding = "DB"
+database_name = "local-db2"
+database_id = "51f0397b-8c9e-4773-9c15-e3483d6527f6"
