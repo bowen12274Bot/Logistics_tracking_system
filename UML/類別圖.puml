@@ -1,0 +1,171 @@
+@startuml
+skinparam classAttributeIconSize 0
+hide empty members
+left to right direction
+
+' ===== User Module =====
+package "User Module" {
+  enum UserRole {
+    CUSTOMER
+    CUSTOMER_SERVICE
+    WAREHOUSE
+    DRIVER
+    ADMIN
+  }
+
+  abstract class User {
+    +id: UUID
+    +name: string
+    +role: UserRole
+  }
+
+  class Customer {
+    +customerNo: string
+    +isContractCustomer: boolean
+  }
+
+  class Employee {
+    +employeeNo: string
+  }
+
+  class WarehouseStaff
+  class Driver
+  class CustomerServiceAgent
+  class Admin
+
+  class UserService {
+    +register()
+    +login()
+  }
+
+  User <|-- Customer
+  User <|-- Employee
+  Employee <|-- WarehouseStaff
+  Employee <|-- Driver
+  Employee <|-- CustomerServiceAgent
+  Employee <|-- Admin
+  User --> UserService
+}
+
+' ===== Cargo Module (預約 / 寄貨 / 取貨 / 貨態 / 運費) =====
+package "Cargo Module (貨物)" {
+  enum ServiceLevel {
+    OVERNIGHT
+    TWO_DAY
+    STANDARD
+    ECONOMY
+  }
+
+  enum ShipmentEventType {
+    ORIGIN_PICKUP
+    TRUCK_TRANSFER
+    SORTING
+    FINAL_DELIVERY
+  }
+
+  class Booking {
+    +id: UUID
+    +size: string
+    +weight: float
+    +service: ServiceLevel
+    +dangerous: boolean
+    +fragile: boolean
+    +international: boolean
+    +note: string
+  }
+
+  class Shipment {
+    +id: UUID
+    +trackingNo: string
+    +status: string
+  }
+
+  class ShipmentEvent {
+    +type: ShipmentEventType
+    +timestamp: datetime
+  }
+
+  class TrackingQuery {
+    +trackingNo: string
+    +dateFrom: date
+    +dateTo: date
+    +truckId: string
+    +warehouse: string
+  }
+
+  class CargoService {
+    +book(cust: Customer, info: Booking)
+    +confirmBooking(b: Booking): Shipment
+    +pickup(cust: Customer)
+    +track(u: User, q: TrackingQuery)
+    +recordEvent(emp: Employee, s: Shipment, t: ShipmentEventType)
+    +calculateFreight(b: Booking): decimal
+  }
+
+  Customer "1" --> "0..*" Booking
+  Booking "0..1" --> "1" Shipment : confirmed >
+  Shipment "1" --> "0..*" ShipmentEvent
+  Employee "1" --> "0..*" ShipmentEvent : confirms >
+
+  Customer --> CargoService
+  WarehouseStaff --> CargoService
+  Driver --> CargoService
+  User --> CargoService : track()
+  CargoService ..> TrackingQuery : uses
+}
+
+' ===== Payment Module (金流) =====
+package "Payment Module (金流)" {
+  enum PaymentMethod {
+    CASH
+    CREDIT_CARD
+    ONLINE_BANK
+    MONTHLY_BILL
+    THIRD_PARTY
+  }
+
+  class Payment {
+    +amount: decimal
+    +method: PaymentMethod
+  }
+
+  class PaymentService {
+    +customerPay(s: Shipment, method: PaymentMethod)
+    +driverCollect(s: Shipment)
+  }
+
+  Shipment "0..1" --> Payment
+  Customer --> PaymentService
+  Driver --> PaymentService
+}
+
+' ===== Review Module (審核) =====
+package "Review Module (審核)" {
+  enum ContractStatus {
+    PENDING
+    REJECTED
+    CONCENT
+  }
+
+  class Contract {
+    +status: ContractStatus
+  }
+
+  class ContractService {
+    +applyForContract(c: Customer)
+    +reviewContractCustomer(csr: CustomerServiceAgent, contract: Contract)
+  }
+
+  Customer "1" --> "0..1" Contract
+  Customer --> ContractService
+  CustomerServiceAgent --> ContractService
+}
+
+' ===== Super User Management =====
+package "Super User Management" {
+  class AdminService {
+    +manageDatabase()
+  }
+  Admin --> AdminService
+}
+@enduml

@@ -1,0 +1,77 @@
+@startuml
+left to right direction
+skinparam actorStyle awesome
+
+' ===== Actors =====
+actor "客戶" as Customer
+actor "司機" as Driver
+actor "倉儲員" as WarehouseStaff
+actor "客服" as CSR
+actor "管理員" as Admin
+
+rectangle "物流追蹤與運費計算系統" {
+
+  ' --- 客戶主要功能 ---
+  usecase "寄貨\n(建立託運單)" as UC_Ship
+  usecase "預約寄貨\n(設定司機收件時間)" as UC_BookShip
+  usecase "取貨" as UC_Receive
+  usecase "貨態追蹤" as UC_Track
+  usecase "計算運費" as UC_CalcFreight
+  usecase "付款" as UC_Pay
+  usecase "申請合約客戶\n(簽約)" as UC_ApplyContract
+
+  ' --- 配送過程 ---
+  usecase "紀錄貨物事件" as UC_RecordEvent
+  usecase "收取到付運費" as UC_CollectCOD
+
+  ' --- 審核 / 客服 ---
+  usecase "審核合約申請" as UC_ReviewContract
+  usecase "調查配送異常" as UC_InvestigateIssue
+
+  ' --- 管理員 ---
+  usecase "管理資料庫" as UC_ManageDB
+
+  ' ===== Use Case 關係 =====
+  ' 寄貨一定會計算運費與付款
+  UC_Ship .> UC_CalcFreight : <<include>>
+  UC_Ship .> UC_Pay         : <<include>>
+
+  ' 「預約寄貨」是一種寄貨流程：在寄貨時多選一個司機上門時間
+  UC_BookShip .> UC_Ship : <<include>>
+
+  ' 客戶到站點取貨時，會產生一個「已取貨/簽收」事件
+  UC_Receive .> UC_RecordEvent : <<include>>
+
+  ' 調查異常時通常會先查看貨態
+  UC_InvestigateIssue ..> UC_Track : <<extend>>
+}
+
+' ===== Actor 與 Use Case 對應 =====
+
+' 客戶：寄貨 / 預約寄貨 / 取貨 / 付款 / 查貨態 / 簽約 / 運費試算
+Customer --> UC_Ship
+Customer --> UC_BookShip
+Customer --> UC_Receive
+Customer --> UC_Track
+Customer --> UC_Pay
+Customer --> UC_ApplyContract
+Customer --> UC_CalcFreight
+
+' 司機：紀錄事件 / 收費(貨到付款) / 看貨態
+Driver --> UC_RecordEvent
+Driver --> UC_CollectCOD
+Driver --> UC_Track
+
+' 倉儲員：紀錄事件 / 看貨態
+WarehouseStaff --> UC_RecordEvent
+WarehouseStaff --> UC_Track
+
+' 客服：看貨態 / 審核 / 調查異常
+CSR --> UC_Track
+CSR --> UC_ReviewContract
+CSR --> UC_InvestigateIssue
+
+' 管理員：直接操作資料庫
+Admin --> UC_ManageDB
+
+@enduml
