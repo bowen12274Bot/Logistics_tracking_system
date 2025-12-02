@@ -96,11 +96,16 @@ Logistics_tracking_system/
 
 1.  **安裝依賴**:
 
-    - 後端: `cd backend && npm install`
+    - 後端: `cd backend && npm install && npm install -g wrangler`
     - 前端: `cd frontend && npm install`
 
-2.  **啟動開發伺服器**:
-    - 後端: `cd backend && npm run dev`
+2. **初始化模擬器**:
+    - 後端: `cd backend && wrangler types`
+    - **[重要] 初始化資料庫**: `cd backend && npx wrangler d1 migrations apply DB --local`
+      - 這會將 `migrations/` 資料夾內的 SQL 檔案套用到本地的模擬資料庫中，建立 `users` 等資料表。
+
+3.  **啟動開發伺服器**:
+    - 後端: `cd backend && wrangler dev`
       - 啟動後打開 `http://localhost:8787/` 可以看到 **Swagger UI** (API 文件與測試介面)。
     - 前端: `cd frontend && npm run dev`
       - 啟動後打開 `http://localhost:5173/` 瀏覽網頁。
