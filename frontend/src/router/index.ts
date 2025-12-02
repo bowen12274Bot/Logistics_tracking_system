@@ -78,18 +78,22 @@ const router = createRouter({
 
 router.beforeEach((to) => {
   const auth = useAuthStore()
+  
+  // 沒有設定 roles → 這頁不需要權限 → 直接放行
   if (!to.meta?.roles) return true
 
+  // 有角色限制但沒登入 → 導去 login
   if (!auth.isLoggedIn) {
     return { name: 'login', query: { redirect: to.fullPath } }
   }
 
+  // 有登入 → 檢查 user_class 有沒有被允許
   const allowed = to.meta.roles as string[]
   if (auth.user && allowed.includes(auth.user.user_class)) {
     return true
   }
 
-  // 若角色不符，導回首頁
+  // 若角色不符 → 導回首頁
   return { name: 'home' }
 })
 
