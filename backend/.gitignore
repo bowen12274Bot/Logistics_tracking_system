@@ -165,3 +165,9 @@ dist
 .env*
 !.env.example
 .wrangler/
+
+# Auto-generated types
+worker-configuration.d.ts
+
+# Temporary files
+tmp.out
