@@ -17,72 +17,85 @@
 
 ## 📂 專案結構深度解析
 
-此專案採用前後端分離架構 (Monorepo)，以下根據**實際程式碼內容**進行解析。
-
-### 根目錄
+此專案採用前後端分離架構 (Monorepo)，以下為實際檔案結構：
 
 ```text
 Logistics_tracking_system/
 │  .gitignore           # Git 忽略檔案設定
-│  合作的流程.md        # 本文件
+│  readme.md            # 本文件
+│  todoList.md          # 待辦事項
 │
-├─backend/              # [後端] Cloudflare Workers + Hono + Chanfana (OpenAPI)
-│  │  wrangler.jsonc    # Workers 設定檔 (定義 D1 資料庫綁定、環境變數)
-│  │  package.json      # 專案依賴 (Hono, Chanfana, Zod 等)
+├─backend/              # [後端] Cloudflare Workers + Hono + Chanfana
+│  │  wrangler.jsonc    # Workers 設定
+│  │  package.json
+│  │  apply_migrations.py
 │  │
-│  ├─migrations/        # [資料庫模型] 定義了系統的核心資料結構 (SQL)
-│  │      0000_users.sql                 # 使用者表 (含 user_type, user_class)
-│  │      0001_packages.sql              # 包裹表 (重量、尺寸、危險品標記等)
-│  │      0002_package_events.sql        # 物流事件 (追蹤包裹運送歷程)
+│  ├─migrations/        # [資料庫模型]
+│  │      0000_users.sql                 # 使用者表
+│  │      0001_packages.sql              # 包裹表
+│  │      0002_package_events.sql        # 物流事件
 │  │      0003_payments.sql              # 支付紀錄
-│  │      0004_monthly_billing.sql       # 月結客戶帳單
+│  │      0004_monthly_billing.sql       # 月結帳單
+│  │      0005_monthly_billing_items.sql # 帳單細項
+│  │      0006_virtual_map.sql           # 虛擬地圖數據 (Nodes/Edges)
 │  │
 │  └─src/
-│      │  index.ts      # [核心入口]
-│      │                # 1. 初始化 Hono App 與 OpenAPI
-│      │                # 2. 處理 CORS (允許前端連線)
-│      │                # 3. 實作 Auth API (登入/註冊, 使用 SHA-256 雜湊)
-│      │                # 4. 實作基礎 Shipments API (目前直接寫在入口，未來應拆分)
+│      │  index.ts      # [入口] App 初始化, Auth, CORS
+│      │  types.ts      # 型別定義
 │      │
-│      └─endpoints/     # [API 模組範例]
-│              task*.ts # 目前是 Chanfana 的範例程式碼 (Task CRUD)
-│                       # 未來開發新功能 (如 PackageCreate) 應參考此結構建立新檔案
+│      └─endpoints/     # [API Endpoints]
+│              taskCreate.ts
+│              taskDelete.ts
+│              taskFetch.ts
+│              taskList.ts
 │
-└─frontend/             # [前端] Vue 3 + Vite + Pinia
-    │  vite.config.ts   # Vite 設定
-    │
-    └─src/
-        │  main.ts      # 前端入口，掛載 Vue App 與 Router
-        │  App.vue      # 根組件
-        │
-        ├─router/       # [路由與權限中心] (index.ts)
-        │               # 定義了所有頁面路徑，並設定了 meta.roles
-        │               # 負責攔截未登入使用者，並根據角色 (客戶/司機/管理員) 導向不同頁面
-        │
-        ├─stores/       # [狀態管理]
-        │      auth.ts  # 管理使用者登入狀態 (Token, User Info) 與權限判斷
-        │
-        ├─services/     # [API 整合層]
-        │      api.ts   # 封裝 fetch 呼叫後端 API 的邏輯
-        │
-        └─views/        # [頁面視圖] 根據角色功能劃分
-                # 公開頁面
-                LoginView.vue                   # 登入頁 (支援 Email/手機登入)
-                HomeView.vue                    # 首頁
-
-                # 客戶端 (Customer) - 簽約/非簽約客戶
-                CustomerDashboard.vue           # 客戶總覽
-                CustomerTrackView.vue           # 包裹查詢
-                CustomerSendView.vue            # 寄件功能
-                CustomerPaymentView.vue         # 費用支付
-
-                # 員工端 (Employee)
-                EmployeeDriverView.vue          # 司機專用 (配送任務)
-                EmployeeWarehouseView.vue       # 倉儲專用 (入庫/出庫)
-                EmployeeCustomerServiceView.vue # 客服專用
-
-                # 管理員
-                AdminView.vue                   # 系統管理
+├─frontend/             # [前端] Vue 3 + Vite + Pinia
+│  │  vite.config.ts
+│  │
+│  └─src/
+│      │  main.ts
+│      │  App.vue
+│      │
+│      ├─router/
+│      │      index.ts  # 路由定義 (含權限守門員)
+│      │
+│      ├─stores/
+│      │      auth.ts   # Pinia Auth Store (登入狀態)
+│      │
+│      ├─services/
+│      │      api.ts    # API 呼叫封裝
+│      │
+│      ├─components/
+│      │      HelloWorld.vue
+│      │      TheWelcome.vue
+│      │      WelcomeItem.vue
+│      │
+│      └─views/         # 頁面視圖
+│              LoginView.vue
+│              HomeView.vue
+│              AboutView.vue
+│              AdminView.vue
+│              # 客戶端
+│              CustomerDashboard.vue
+│              CustomerTrackView.vue
+│              CustomerSendView.vue
+│              CustomerPaymentView.vue
+│              CustomerContractView.vue
+│              CustomerScheduleView.vue
+│              # 員工端
+│              EmployeeDriverView.vue
+│              EmployeeWarehouseView.vue
+│              EmployeeCustomerServiceView.vue
+│
+├─UML/                  # 設計文件
+│      使用者案例圖.png
+│      使用者案例圖.puml
+│      類別圖.png
+│      類別圖.puml
+│
+└─Util/                 # 工具程式
+    └─virtual_map_generator/
+            generator.py # 地圖生成器 (Python)
 ```
 
 ## 🛠️ 技術細節 (Tech Stack Details)
@@ -109,3 +122,50 @@ Logistics_tracking_system/
       - 啟動後打開 `http://localhost:8787/` 可以看到 **Swagger UI** (API 文件與測試介面)。
     - 前端: `cd frontend && npm run dev`
       - 啟動後打開 `http://localhost:5173/` 瀏覽網頁。
+
+## 虛擬地圖定義
+
+本系統使用虛擬地圖模擬物流路網，由 `Util/virtual_map_generator/generator.py` 生成。
+
+### 節點層級 (Levels)
+
+地圖包含 4 種層級的節點，模擬真實世界的物流中心結構：
+
+1.  **HUB (轉運中心)**
+    -   數量: 4
+    -   功能: 全域樞紐，連接所有區域。
+    -   速度係數: 0.5 (最快，數值越小代表移動成本越低/速度越快)
+    -   間距: ~4000
+2.  **REG (區域中心)**
+    -   數量: 12
+    -   功能: 連接 HUB 與大量 LOC。
+    -   速度係數: 1.0 (幹線運輸)
+    -   間距: ~1500
+3.  **LOC (營業所)**
+    -   數量: 30
+    -   功能: 負責區域內的收派件管理。
+    -   速度係數: 2.0 (區域運輸)
+    -   間距: ~600
+4.  **END (收派點/終端)**
+    -   數量: 300
+    -   功能: 模擬詳細地址或代收點。
+    -   速度係數: 5.0 (市區慢速配送)
+    -   間距: ~100
+
+### 資料庫 Schema
+
+地圖數據儲存於 `nodes` 與 `edges` 資料表中 (參見 `backend/migrations/0006_virtual_map.sql`)：
+
+-   **nodes**: 節點資訊
+    -   `id` (TEXT): 節點唯一識別碼
+    -   `name` (TEXT): 節點名稱 (如 `HUB_0`, `REG_5`)
+    -   `level` (INTEGER): 層級 (1-4)
+    -   `x` (INTEGER), `y` (INTEGER): 座標位置
+
+-   **edges**: 路徑資訊 (雙向)
+    -   `id` (INTEGER PRIMARY KEY): 路徑 ID
+    -   `source` (TEXT), `target` (TEXT): 連接的節點 ID
+    -   `distance` (REAL): 兩點間距離
+    -   `road_multiple` (INTEGER): 道路權重係數 (通常取決於兩端點中較低級別者的速度係數)
+    -   `cost` (INTEGER): 運輸成本 (`distance * road_multiple`)
+
