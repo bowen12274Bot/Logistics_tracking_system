@@ -28,3 +28,22 @@ export const Edge = z.object({
 	road_multiple: z.number().int(),
 	cost: z.number().int(),
 });
+
+export const Package = z.object({
+	id: Str({ example: "pkg_123" }),
+	customer_id: Str({ required: false }),
+	tracking_number: Str({ required: false }),
+	weight: z.number().int().optional(),
+	size: Str({ required: false }),
+	service_type: Str({ required: false }),
+	payment_type: Str({ required: false }),
+});
+
+export const PackageEvent = z.object({
+	id: Str({ example: "evt_123" }),
+	package_id: Str({ example: "pkg_123" }),
+	delivery_status: Str({ example: "收件" }),
+	delivery_details: Str({ required: false }),
+	events_at: Str({ example: "2025-01-01T12:00:00Z" }),
+	location: Str({ required: false }),
+});

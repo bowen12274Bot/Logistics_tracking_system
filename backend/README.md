@@ -103,6 +103,36 @@ curl http://localhost:8787/api/shipments/{id}
 
 ---
 
+### 📦 包裹追蹤 (Packages) - T3 & T4
+
+| Method | Endpoint | 描述 |
+| :--- | :--- | :--- |
+| `GET` | `/api/packages` | 取得包裹列表 (可依 customer_id 篩選) |
+| `GET` | `/api/packages/:id/status` | 查詢包裹狀態與事件歷程 (T4) |
+| `POST` | `/api/packages/:id/events` | 建立貨態事件 (T3) |
+
+#### 使用範例
+
+**查詢包裹列表**
+```bash
+curl http://localhost:8787/api/packages
+curl http://localhost:8787/api/packages?customer_id=xxx
+```
+
+**查詢包裹狀態 (T4)**
+```bash
+curl http://localhost:8787/api/packages/{packageId}/status
+```
+
+**建立貨態事件 (T3)**
+```bash
+curl -X POST http://localhost:8787/api/packages/{packageId}/events \
+  -H "Content-Type: application/json" \
+  -d '{"delivery_status": "收件", "location": "HUB_0"}'
+```
+
+---
+
 ### 📋 任務 (Tasks) - 範例
 
 | Method | Endpoint | 描述 |
@@ -127,6 +157,7 @@ npm test
 - ✅ Hello API (`/api/hello`)
 - ✅ 認證 API (Register, Login)
 - ✅ 地圖 API (Fetch, Update Edge)
+- ✅ 包裹追蹤 API (T3, T4)
 - ⏭️ 物流 API (Skipped - 資料表尚未建立)
 - ✅ 任務 API (List)
 

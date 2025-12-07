@@ -144,6 +144,31 @@ describe("Backend API Tests", () => {
     });
   });
 
+  // ========== Package APIs (T3 & T4) ==========
+  describe("Package APIs", () => {
+    it("GET /api/packages should return package list", async () => {
+      const response = await fetch(`${BASE_URL}/api/packages`);
+      expect(response.status).toBe(200);
+      const data = await response.json() as { success: boolean; packages: any[] };
+      expect(data.success).toBe(true);
+      expect(Array.isArray(data.packages)).toBe(true);
+    });
+
+    it("GET /api/packages/:id/status should handle non-existent package", async () => {
+      const response = await fetch(`${BASE_URL}/api/packages/non_existent/status`);
+      expect(response.status).toBe(404);
+    });
+
+    it("POST /api/packages/:id/events should handle non-existent package", async () => {
+      const response = await fetch(`${BASE_URL}/api/packages/non_existent/events`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ delivery_status: "測試" }),
+      });
+      expect(response.status).toBe(404);
+    });
+  });
+
   // ========== Shipment APIs ==========
   // NOTE: Shipments table does not exist in migrations yet, skipping these tests
   describe.skip("Shipment APIs", () => {
