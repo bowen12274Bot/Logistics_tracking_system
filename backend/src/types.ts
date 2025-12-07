@@ -11,3 +11,20 @@ export const Task = z.object({
 	completed: z.boolean().default(false),
 	due_date: DateTime(),
 });
+
+export const Node = z.object({
+	id: Str({ example: "HUB_0" }),
+	name: Str({ example: "HUB_0" }),
+	level: z.number().int().min(1).max(4),
+	x: z.number().int(),
+	y: z.number().int(),
+});
+
+export const Edge = z.object({
+	id: z.number().int(),
+	source: Str({ example: "HUB_0" }),
+	target: Str({ example: "REG_1" }),
+	distance: z.number(),
+	road_multiple: z.number().int(),
+	cost: z.number().int(),
+});
