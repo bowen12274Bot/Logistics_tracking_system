@@ -57,12 +57,12 @@ const logout = () => {
   padding: 12px 18px;
   border: 1px solid var(--surface-stroke);
   border-radius: 16px;
-  background: linear-gradient(120deg, rgba(13, 18, 30, 0.9), rgba(27, 45, 76, 0.85));
-  color: #f5f7fb;
+  background: linear-gradient(120deg, rgba(255, 245, 237, 0.95), rgba(249, 210, 220, 0.92));
+  color: #5b3a2c;
   position: sticky;
   top: 16px;
   backdrop-filter: blur(12px);
-  box-shadow: 0 12px 40px rgba(9, 14, 26, 0.2);
+  box-shadow: 0 12px 40px rgba(168, 118, 96, 0.2);
   z-index: 5;
 }
 
@@ -80,7 +80,7 @@ const logout = () => {
 
 .brand-sub {
   font-size: 12px;
-  opacity: 0.8;
+  opacity: 0.7;
 }
 
 .nav-links {
@@ -91,21 +91,21 @@ const logout = () => {
 }
 
 .nav-links a {
-  color: #e1e7f5;
+  color: #7b5344;
   padding: 6px 10px;
   border-radius: 10px;
   transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 .nav-links a.router-link-active {
-  background: rgba(255, 255, 255, 0.1);
-  color: #ffffff;
+  background: rgba(255, 255, 255, 0.6);
+  color: #3f2620;
 }
 
 .small-btn {
   padding: 10px 14px;
-  background: linear-gradient(135deg, #3bd9d6, #2b9eda);
-  color: #0a1b2f;
+  background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+  color: #4a2623;
   border-radius: 12px;
   font-weight: 700;
 }
@@ -127,8 +127,8 @@ const logout = () => {
   padding: 8px 12px;
   border-radius: 12px;
   border: 1px solid var(--surface-stroke);
-  background: rgba(255, 255, 255, 0.06);
-  color: #e1e7f5;
+  background: rgba(255, 255, 255, 0.72);
+  color: #5b3a2c;
 }
 
 .user-role {

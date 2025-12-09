@@ -1,19 +1,20 @@
 @import './base.css';
 
 :root {
-  --surface-stroke: rgba(255, 255, 255, 0.1);
-  --surface-card: rgba(15, 22, 36, 0.85);
-  --surface-muted: rgba(255, 255, 255, 0.06);
-  --text-main: #e8edf7;
-  --text-muted: #a6b4d0;
-  --accent: #3bd9d6;
-  --accent-strong: #2b9eda;
+  --surface-stroke: rgba(165, 122, 99, 0.28);
+  --surface-card: rgba(255, 248, 241, 0.9);
+  --surface-muted: rgba(255, 255, 255, 0.7);
+  --text-main: #5b3a2c;
+  --text-muted: #8a6b63;
+  --accent: #f4b6c2;
+  --accent-strong: #e18b8b;
 }
 
 body {
-  background: radial-gradient(circle at 10% 20%, rgba(47, 91, 168, 0.25), transparent 25%),
-    radial-gradient(circle at 90% 10%, rgba(50, 215, 190, 0.2), transparent 20%),
-    linear-gradient(135deg, #060b18, #0f172a 45%, #0c1527);
+  background:
+    radial-gradient(circle at 18% 20%, rgba(249, 206, 218, 0.4), transparent 28%),
+    radial-gradient(circle at 82% 16%, rgba(240, 201, 177, 0.35), transparent 24%),
+    linear-gradient(135deg, #fff9f4, #f6e1d5 45%, #f9d9e5);
   color: var(--text-main);
 }
 
@@ -34,7 +35,7 @@ a {
   border: 1px solid var(--surface-stroke);
   border-radius: 16px;
   background: var(--surface-card);
-  box-shadow: 0 18px 60px rgba(3, 7, 18, 0.4);
+  box-shadow: 0 18px 60px rgba(170, 124, 105, 0.2);
   margin-bottom: 18px;
 }
 
@@ -96,7 +97,7 @@ a {
 
 .link-card:hover {
   transform: translateY(-2px);
-  border-color: rgba(255, 255, 255, 0.3);
+  border-color: rgba(165, 122, 99, 0.4);
 }
 
 .task-list {
@@ -131,7 +132,7 @@ a {
   padding: 10px 12px;
   border-radius: 10px;
   border: 1px solid var(--surface-stroke);
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.86);
   color: var(--text-main);
 }
 
@@ -142,7 +143,7 @@ a {
 .form-field input:focus,
 .form-field select:focus,
 .form-field textarea:focus {
-  outline: 2px solid rgba(59, 217, 214, 0.5);
+  outline: 2px solid rgba(225, 139, 139, 0.35);
 }
 
 .span-2 {
@@ -164,7 +165,7 @@ a {
 
 .primary-btn {
   background: linear-gradient(135deg, var(--accent), var(--accent-strong));
-  color: #0a1b2f;
+  color: #4a2623;
 }
 
 .ghost-btn {
@@ -179,7 +180,7 @@ a {
 }
 
 .page-hero {
-  background: linear-gradient(150deg, rgba(43, 158, 218, 0.14), rgba(59, 217, 214, 0.1));
+  background: linear-gradient(150deg, rgba(225, 139, 139, 0.12), rgba(242, 200, 170, 0.18));
 }
 
 .hero-grid {
@@ -205,12 +206,12 @@ a {
   padding: 10px 12px;
   border-radius: 10px;
   border: 1px solid var(--surface-stroke);
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(255, 255, 255, 0.78);
   text-align: center;
 }
 
 .highlight-card {
-  background: rgba(6, 11, 24, 0.75);
+  background: rgba(255, 255, 255, 0.9);
 }
 
 .stack {
@@ -248,5 +249,5 @@ a {
 }
 
 .tab-switch button.active {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(225, 139, 139, 0.16);
 }
