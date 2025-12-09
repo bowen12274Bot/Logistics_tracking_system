@@ -5,6 +5,10 @@ import { TaskCreate } from "./endpoints/taskCreate";
 import { TaskDelete } from "./endpoints/taskDelete";
 import { TaskFetch } from "./endpoints/taskFetch";
 import { TaskList } from "./endpoints/taskList";
+import { MapFetch } from "./endpoints/mapFetch";
+import { MapEdgeUpdate } from "./endpoints/mapUpdate";
+import { PackageEventCreate } from "./endpoints/packageEventCreate";
+import { PackageStatusQuery, PackageList } from "./endpoints/packageStatusQuery";
 
 type Bindings = {
   DB: D1Database;
@@ -177,6 +181,15 @@ openapi.get("/api/tasks", TaskList);
 openapi.post("/api/tasks", TaskCreate);
 openapi.get("/api/tasks/:taskSlug", TaskFetch);
 openapi.delete("/api/tasks/:taskSlug", TaskDelete);
+
+// Map APIs
+openapi.get("/api/map", MapFetch);
+openapi.put("/api/map/edges/:id", MapEdgeUpdate);
+
+// Package APIs (T3 & T4)
+openapi.post("/api/packages/:packageId/events", PackageEventCreate);
+openapi.get("/api/packages/:packageId/status", PackageStatusQuery);
+openapi.get("/api/packages", PackageList);
 
 // Export the Hono app
 export default app;
