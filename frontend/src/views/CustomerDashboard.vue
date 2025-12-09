@@ -3,7 +3,6 @@
 import { RouterLink } from 'vue-router'
 
 const quickLinks = [
-  { title: '排程取件', to: '/customer/schedule', description: '預約到府取件或門市寄件時段。' },
   { title: '建立寄件', to: '/customer/send', description: '設定寄件人/收件人、配送速度與付款方式。' },
   { title: '包裹追蹤', to: '/customer/track', description: '查看站點、車輛、物流中心的即時狀態。' },
   { title: '合約 / 月結', to: '/customer/contract', description: '申請或管理月結合約。' },
@@ -16,9 +15,7 @@ const quickLinks = [
     <header class="page-header">
       <p class="eyebrow">客戶</p>
       <h1>你的包裹主控台</h1>
-      <p class="lede">
-        監控每件貨態、排程取件，並以月結讓帳務更可預期。
-      </p>
+      <p class="lede">監控每件貨態、快速寄件，並以月結讓帳務更可預期。</p>
     </header>
 
     <div class="card-grid">

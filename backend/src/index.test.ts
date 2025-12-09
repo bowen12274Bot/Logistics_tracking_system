@@ -146,6 +146,48 @@ describe("Backend API Tests", () => {
 
   // ========== Package APIs (T3 & T4) ==========
   describe("Package APIs", () => {
+    it("POST /api/packages should create package", async () => {
+      const email = `package_${Date.now()}@example.com`;
+      const senderName = "Package User";
+      await fetch(`${BASE_URL}/api/auth/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_name: senderName,
+          email,
+          password: "password123",
+        }),
+      });
+
+      const response = await fetch(`${BASE_URL}/api/packages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sender: senderName,
+          receiver: "Receiver Test",
+          weight: 5,
+          size: "medium",
+          delivery_time: "standard",
+          payment_type: "prepaid",
+          payment_method: "credit_card",
+          dangerous_materials: false,
+          fragile_items: true,
+          international_shipments: false,
+          pickup_date: "2025-01-01",
+          pickup_time_window: "09:00-12:00",
+          pickup_notes: "請提前聯絡",
+          route_path: '["HUB_0","REG_1"]',
+        }),
+      });
+
+      expect(response.status).toBe(200);
+      const data = await response.json() as { success: boolean; package: any };
+      expect(data.success).toBe(true);
+      expect(data.package.size).toBe("medium");
+      expect(data.package.delivery_time).toBe("standard");
+      expect(data.package.tracking_number).toBeDefined();
+    });
+
     it("GET /api/packages should return package list", async () => {
       const response = await fetch(`${BASE_URL}/api/packages`);
       expect(response.status).toBe(200);
