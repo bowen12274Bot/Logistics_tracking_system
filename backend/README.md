@@ -107,6 +107,7 @@ curl http://localhost:8787/api/shipments/{id}
 
 | Method | Endpoint | 描述 |
 | :--- | :--- | :--- |
+| `POST` | `/api/packages` | Create package draft (T2) |
 | `GET` | `/api/packages` | 取得包裹列表 (可依 customer_id 篩選) |
 | `GET` | `/api/packages/:id/status` | 查詢包裹狀態與事件歷程 (T4) |
 | `POST` | `/api/packages/:id/events` | 建立貨態事件 (T3) |
@@ -122,6 +123,13 @@ curl http://localhost:8787/api/packages?customer_id=xxx
 **查詢包裹狀態 (T4)**
 ```bash
 curl http://localhost:8787/api/packages/{packageId}/status
+```
+
+**建立包裹 (T2)**
+```bash
+curl -X POST http://localhost:8787/api/packages \
+  -H "Content-Type: application/json" \
+  -d '{"sender": "Alice", "receiver": "Bob", "size": "medium", "delivery_time": "standard", "payment_type": "prepaid"}'
 ```
 
 **建立貨態事件 (T3)**

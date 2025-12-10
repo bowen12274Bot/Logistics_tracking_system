@@ -6,14 +6,12 @@
 
 ## 目錄
 
-- [1. 使用者認證模組 (Auth)](#1-使用者認證模組-auth)
-- [2. 客戶管理模組 (Customer)](#2-客戶管理模組-customer)
-- [3. 包裹管理模組 (Package)](#3-包裹管理模組-package)
-- [4. 貨態追蹤模組 (Tracking)](#4-貨態追蹤模組-tracking)
-- [5. 地圖與路線模組 (Map & Routing)](#5-地圖與路線模組-map--routing)
-- [6. 計費與帳單模組 (Billing)](#6-計費與帳單模組-billing)
-- [7. 員工操作模組 (Staff Operations)](#7-員工操作模組-staff-operations)
-- [8. 管理員模組 (Admin)](#8-管理員模組-admin)
+- [1. 使用者管理模組 (User Module)](#1-使用者管理模組-user-module)
+- [2. 審核合約模組 (Review)](#2-審核合約模組-review)
+- [3. 包裹管理模組 (Package Module)](#3-包裹管理模組-package-module)
+- [4. 地圖與路線模組 (Map & Routing)](#4-地圖與路線模組-map--routing)
+- [5. 金流模組 (Payment Module)](#5-金流模組-payment-module)
+- [6. 超級使用者管理模組 (Super User Management)](#6-超級使用者管理模組-super-user-management)
 
 ---
 
@@ -44,22 +42,24 @@ Authorization: Bearer <token>
 | 角色 | user_type | 說明 |
 |------|-----------|------|
 | 客戶 | `customer` | 一般寄件/收件客戶 |
-| 客服人員 | `customer_service` | 處理客戶問題、手動更新貨態 |
+| 客服人員 | `customer_service` | 處理客戶問題、手動更新貨態、回應合約申請 |
 | 倉儲人員 | `warehouse` | 入庫/出庫/分揀操作 |
 | 駕駛員 | `driver` | 取件/配送/貨態更新 |
 | 管理員 | `admin` | 系統管理、帳號管理 |
 
-### 客戶類型 (user_class)
+### 角色類型 (user_class)
 
 | 類型 | 說明 |
 |------|------|
-| `non_contract_customer` | 非合約客戶（現金/信用卡支付） |
-| `contract_customer` | 合約客戶（月結帳戶） |
-| `prepaid_customer` | 預付客戶（費用由商家/第三方支付） |
-
+| `non_contract_customer` | 非合約客戶 |
+| `contract_customer` | 合約客戶 |
+| `customer_service` | 客服人員 |
+| `warehouse` | 倉儲人員 |
+| `driver` | 駕駛員 |
+| `admin` | 管理員 |
 ---
 
-## 1. 使用者認證模組 (Auth)
+## 1. 使用者管理模組 (User Module)
 
 ### 1.1 客戶註冊
 
@@ -89,7 +89,7 @@ Authorization: Bearer <token>
 | `email` | string | ✅ | Email（唯一，用於登入） |
 | `password` | string | ✅ | 密碼 |
 | `phone_number` | string | ✅ | 電話號碼（可用於登入） |
-| `address` | string | ✅ | 地址（作為預設寄/收件地址） |
+| `address` | string | ✅ | 地址（作為預設寄/收件地址），輸入地圖座標上的絕對位置(x,y) |
 
 > ⚠️ **安全限制**：後端強制 `user_type = customer`、`user_class = non_contract_customer`。即使請求中包含這些欄位也會被忽略。
 
@@ -205,9 +205,7 @@ Authorization: Bearer <token>
 
 ---
 
-## 2. 客戶管理模組 (Customer)
-
-### 2.1 更新客戶資料
+### 1.4 更新客戶資料
 
 | 項目 | 說明 |
 |------|------|
@@ -227,25 +225,7 @@ Authorization: Bearer <token>
 }
 ```
 
-#### 輸入說明
-
-| 欄位 | 類型 | 必填 | 說明 |
-|------|------|------|------|
-| `user_name` | string | ❌ | 姓名 |
-| `phone_number` | string | ❌ | 電話號碼 |
-| `address` | string | ❌ | 預設地址 |
-| `billing_preference` | string | ❌ | 帳單偏好：`cod`(貨到付款)、`prepaid`(預付)；`monthly`(月結) 僅限合約客戶 |
-
-#### 錯誤回應
-
-| 狀態碼 | 說明 |
-|--------|------|
-| 401 | 未認證 |
-| 403 | 非合約客戶嘗試設定 `billing_preference = monthly` |
-
----
-
-### 2.2 申請成為合約客戶
+### 1.5 申請成為合約客戶
 
 | 項目 | 說明 |
 |------|------|
@@ -266,6 +246,16 @@ Authorization: Bearer <token>
   "notes": "string"
 }
 ```
+#### 輸入說明
+
+| 欄位 | 類型 | 必填 | 說明 |
+|------|------|------|------|
+| `company_name` | string | ✅ | 公司名稱 |
+| `tax_id` | string | ✅ | 統一編號 |
+| `contact_person` | string | ✅ | 聯絡人姓名 |
+| `contact_phone` | string | ✅ | 聯絡電話 |
+| `billing_address` | string | ✅ | 地址，輸入地圖座標上的絕對位置(x,y) |
+| `notes` | string | ❌ | 備註，如合作內容、特殊需求等 |
 
 #### 輸出格式 (Success Response - 200)
 
@@ -287,7 +277,134 @@ Authorization: Bearer <token>
 
 ---
 
-## 3. 包裹管理模組 (Package)
+#### 輸入說明
+
+| 欄位 | 類型 | 必填 | 說明 |
+|------|------|------|------|
+| `user_name` | string | ❌ | 姓名 |
+| `phone_number` | string | ❌ | 電話號碼 |
+| `address` | string | ❌ | 預設地址 |
+| `billing_preference` | string | ❌ | 帳單偏好：`cash`(現金支付)、`credit_card`(信用卡)、`bank_transfer`(網路銀行)、`monthly`(月結帳單) 僅限合約客戶、`third_party_payment`(第三方支付) |
+
+#### 錯誤回應
+
+| 狀態碼 | 說明 |
+|--------|------|
+| 401 | 未認證 |
+| 403 | 非合約客戶嘗試設定 `billing_preference = monthly` |
+
+---
+
+
+### 1.6 駕駛員 - 取得今日工作清單
+
+| 項目 | 說明 |
+|------|------|
+| **位置** | `GET /api/driver/tasks` |
+| **功能** | 取得駕駛員今日需取件/配送的包裹清單 |
+| **認證** | ✅ 需要 Token |
+| **權限** | `driver` |
+
+#### 輸入格式 (Query Parameters)
+
+| 參數 | 類型 | 必填 | 說明 |
+|------|------|------|------|
+| `date` | string | ❌ | 日期（預設今天） |
+| `type` | string | ❌ | `pickup`(取件)、`delivery`(配送)、`all` |
+
+#### 錯誤回應
+
+| 狀態碼 | 說明 |
+|--------|------|
+| 401 | 未認證 |
+| 403 | 非 driver 角色 |
+
+---
+
+### 1.7 駕駛員 - 更新配送狀態
+
+| 項目 | 說明 |
+|------|------|
+| **位置** | `POST /api/driver/packages/:packageId/status` |
+| **功能** | 駕駛員更新包裹狀態 |
+| **認證** | ✅ 需要 Token |
+| **權限** | `driver` |
+
+#### 輸入格式 (Request Body)
+
+```json
+{
+  "status": "picked_up | out_for_delivery | delivered | exception",
+  "signature": "base64_image",
+  "notes": "string",
+  "cod_amount": 500
+}
+```
+
+#### 錯誤回應
+
+| 狀態碼 | 說明 |
+|--------|------|
+| 400 | exception 狀態必須提供 notes |
+| 401 | 未認證 |
+| 403 | 非 driver 角色 |
+| 404 | 包裹不存在 |
+
+---
+
+### 1.8 倉儲人員 - 批次入庫/出庫
+
+| 項目 | 說明 |
+|------|------|
+| **位置** | `POST /api/warehouse/batch-operation` |
+| **功能** | 批次處理入庫/出庫/分揀 |
+| **認證** | ✅ 需要 Token |
+| **權限** | `warehouse` |
+
+#### 輸入格式 (Request Body)
+
+```json
+{
+  "operation": "warehouse_in | warehouse_out | sort",
+  "package_ids": ["uuid1", "uuid2", "uuid3"],
+  "destination": "TRUCK_001",
+  "notes": "string"
+}
+```
+
+## 2. 審核合約模組 (Review)
+
+### 2.1 審核合約申請
+
+| 項目 | 說明 |
+|------|------|
+| **位置** | `PUT /api/admin/contract-applications/:id` |
+| **功能** | 審核客戶的合約申請 |
+| **認證** | ✅ 需要 Token |
+| **權限** | `customer_service`、`admin` |
+
+#### 輸入格式 (Request Body)
+
+```json
+{
+  "status": "approved | rejected",
+  "notes": "string",
+  "credit_limit": 50000
+}
+```
+
+#### 錯誤回應
+
+| 狀態碼 | 說明 |
+|--------|------|
+| 400 | 無效的 status 值 |
+| 401 | 未認證 |
+| 403 | 非 customer_service 或 admin |
+| 404 | 申請不存在 |
+
+---
+
+## 3. 包裹管理模組 (Package Module)
 
 ### 3.1 建立包裹/寄件
 
@@ -312,7 +429,6 @@ Authorization: Bearer <token>
     "phone": "string",
     "address": "string"
   },
-  "package_type": "envelope | small_box | medium_box | large_box",
   "weight": 1.5,
   "dimensions": {
     "length": 30,
@@ -323,7 +439,7 @@ Authorization: Bearer <token>
   "content_description": "書籍",
   "service_level": "overnight | two_day | standard | economy",
   "special_handling": ["fragile", "dangerous", "international"],
-  "payment_type": "prepaid | cod | monthly"
+  "payment_type": "cash | credit_card | bank_transfer | monthly_billing | third_party_payment"
 }
 ```
 
@@ -333,14 +449,13 @@ Authorization: Bearer <token>
 |------|------|------|------|
 | `sender` | object | ✅ | 寄件人資訊（姓名、電話、地址） |
 | `receiver` | object | ✅ | 收件人資訊（姓名、電話、地址） |
-| `package_type` | string | ✅ | 包裹類型：`envelope`(平郵信封)、`small_box`、`medium_box`、`large_box` |
-| `weight` | number | ❌ | 重量（公斤），可選 |
-| `dimensions` | object | ❌ | 尺寸（長/寬/高，公分） |
-| `declared_value` | number | ❌ | 申報價值（元） |
+| `weight` | number | ❌ | 重量（公斤），若沒填由系統產生 |
+| `dimensions` | object | ❌ | 尺寸（長/寬/高，公分），若沒填由系統產生 |
+| `declared_value` | number | ❌ | 申報價值（元），若沒填由系統產生 |
 | `content_description` | string | ✅ | 內容物描述（依郵政法規必填） |
-| `service_level` | string | ✅ | 配送時效：`overnight`(隔夜達)、`two_day`、`standard`、`economy` |
+| `service_level` | string | ✅ | 配送時效：`overnight`(隔夜)、`two_day`(兩日)、`standard`(標準)、`economy`(經濟) |
 | `special_handling` | array | ❌ | 特殊處理標記：`fragile`(易碎)、`dangerous`(危險品)、`international`(國際) |
-| `payment_type` | string | ✅ | 付款方式：`prepaid`(預付)、`cod`(貨到付款)；`monthly`(月結) 僅限合約客戶 |
+| `payment_type` | string | ✅ | 付款方式：`cash`(現金支付)、`credit_card`(信用卡)、`bank_transfer`(網路銀行)、`monthly`(月結帳單) 僅限合約客戶、`third_party_payment`(第三方支付) |
 
 #### 輸出格式 (Success Response - 201)
 
@@ -350,6 +465,7 @@ Authorization: Bearer <token>
   "package": {
     "id": "uuid",
     "tracking_number": "TRK20251210001",
+    "package_type": "small_box",
     "status": "created",
     "sender": { ... },
     "receiver": { ... },
@@ -358,6 +474,7 @@ Authorization: Bearer <token>
   }
 }
 ```
+`tracking_number` 和 `package_type` 在建立包裹後產生。`created_at` 是建立訂單當下時間。
 
 #### 錯誤回應
 
@@ -383,8 +500,12 @@ Authorization: Bearer <token>
 {
   "sender_address": "string",
   "receiver_address": "string",
-  "package_type": "envelope | small_box | medium_box | large_box",
   "weight": 1.5,
+  "dimensions": {
+    "length": 30,
+    "width": 20,
+    "height": 10
+  },
   "service_level": "overnight | two_day | standard | economy",
   "special_handling": ["fragile"]
 }
@@ -408,7 +529,7 @@ Authorization: Bearer <token>
 
 ---
 
-### 3.3 查詢我的包裹列表
+### 3.3 客戶查詢包裹列表
 
 | 項目 | 說明 |
 |------|------|
@@ -497,9 +618,7 @@ Authorization: Bearer <token>
 
 ---
 
-## 4. 貨態追蹤模組 (Tracking)
-
-### 4.1 公開追蹤查詢
+### 3.5 公開追蹤查詢
 
 | 項目 | 說明 |
 |------|------|
@@ -554,7 +673,7 @@ Authorization: Bearer <token>
 
 ---
 
-### 4.2 建立貨態事件（內部 API）
+### 3.6 建立貨態事件（內部 API）
 
 | 項目 | 說明 |
 |------|------|
@@ -614,7 +733,7 @@ Authorization: Bearer <token>
 
 ---
 
-### 4.3 進階追蹤查詢（員工用）
+### 3.7 進階追蹤查詢（員工用）
 
 | 項目 | 說明 |
 |------|------|
@@ -644,9 +763,9 @@ Authorization: Bearer <token>
 
 ---
 
-## 5. 地圖與路線模組 (Map & Routing)
+## 4. 地圖與路線模組 (Map & Routing)
 
-### 5.1 取得地圖節點與邊
+### 4.1 取得地圖節點與邊
 
 | 項目 | 說明 |
 |------|------|
@@ -683,16 +802,17 @@ Authorization: Bearer <token>
 
 #### 節點類型
 
-| type | level | 說明 |
-|------|-------|------|
-| `hub` | 1 | 主要轉運中心 |
-| `regional` | 2 | 區域配送站 |
-| `store` | 3 | 超商取貨點 |
-| `home` | 4 | 住家/終點地址 |
+| type  | level | 說明                         |
+|-------|-------|------------------------------|
+| `HUB` | 1     | 轉運中心（第一層樞紐節點）   |
+| `REG` | 2     | 區域節點（第二層區域中心）   |
+| `LOC` | 3     | 中繼節點（第三層中繼據點）   |
+| `END` | 4     | 終端節點（住家／超商） |
+
 
 ---
 
-### 5.2 路線成本計算
+### 4.2 路線成本計算
 
 | 項目 | 說明 |
 |------|------|
@@ -730,7 +850,7 @@ Authorization: Bearer <token>
 
 ---
 
-### 5.3 更新地圖邊資料
+### 4.3 更新地圖邊資料
 
 | 項目 | 說明 |
 |------|------|
@@ -757,11 +877,11 @@ Authorization: Bearer <token>
 
 ---
 
-## 6. 計費與帳單模組 (Billing)
+## 5. 金流模組 (Payment Module)
 
 > 此模組主要服務合約客戶（月結），非合約客戶使用預付或貨到付款。
 
-### 6.1 查詢帳單列表
+### 5.1 查詢帳單列表
 
 | 項目 | 說明 |
 |------|------|
@@ -809,7 +929,7 @@ Authorization: Bearer <token>
 
 ---
 
-### 6.2 查詢帳單明細
+### 5.2 查詢帳單明細
 
 | 項目 | 說明 |
 |------|------|
@@ -853,7 +973,7 @@ Authorization: Bearer <token>
 
 ---
 
-### 6.3 付款
+### 5.3 付款
 
 | 項目 | 說明 |
 |------|------|
@@ -894,7 +1014,7 @@ Authorization: Bearer <token>
 
 ---
 
-### 6.4 查詢付款紀錄
+### 5.4 查詢付款紀錄
 
 | 項目 | 說明 |
 |------|------|
@@ -920,97 +1040,10 @@ Authorization: Bearer <token>
 
 ---
 
-## 7. 員工操作模組 (Staff Operations)
 
-### 7.1 駕駛員 - 取得今日工作清單
+## 6. 超級使用者管理模組 (Super User Management)
 
-| 項目 | 說明 |
-|------|------|
-| **位置** | `GET /api/driver/tasks` |
-| **功能** | 取得駕駛員今日需取件/配送的包裹清單 |
-| **認證** | ✅ 需要 Token |
-| **權限** | `driver` |
-
-#### 輸入格式 (Query Parameters)
-
-| 參數 | 類型 | 必填 | 說明 |
-|------|------|------|------|
-| `date` | string | ❌ | 日期（預設今天） |
-| `type` | string | ❌ | `pickup`(取件)、`delivery`(配送)、`all` |
-
-#### 錯誤回應
-
-| 狀態碼 | 說明 |
-|--------|------|
-| 401 | 未認證 |
-| 403 | 非 driver 角色 |
-
----
-
-### 7.2 駕駛員 - 更新配送狀態
-
-| 項目 | 說明 |
-|------|------|
-| **位置** | `POST /api/driver/packages/:packageId/status` |
-| **功能** | 駕駛員更新包裹狀態 |
-| **認證** | ✅ 需要 Token |
-| **權限** | `driver` |
-
-#### 輸入格式 (Request Body)
-
-```json
-{
-  "status": "picked_up | out_for_delivery | delivered | exception",
-  "signature": "base64_image",
-  "notes": "string",
-  "cod_amount": 500
-}
-```
-
-#### 錯誤回應
-
-| 狀態碼 | 說明 |
-|--------|------|
-| 400 | exception 狀態必須提供 notes |
-| 401 | 未認證 |
-| 403 | 非 driver 角色 |
-| 404 | 包裹不存在 |
-
----
-
-### 7.3 倉儲人員 - 批次入庫/出庫
-
-| 項目 | 說明 |
-|------|------|
-| **位置** | `POST /api/warehouse/batch-operation` |
-| **功能** | 批次處理入庫/出庫/分揀 |
-| **認證** | ✅ 需要 Token |
-| **權限** | `warehouse` |
-
-#### 輸入格式 (Request Body)
-
-```json
-{
-  "operation": "warehouse_in | warehouse_out | sort",
-  "package_ids": ["uuid1", "uuid2", "uuid3"],
-  "destination": "TRUCK_001",
-  "notes": "string"
-}
-```
-
-#### 錯誤回應
-
-| 狀態碼 | 說明 |
-|--------|------|
-| 400 | package_ids 為空、部分包裹不存在 |
-| 401 | 未認證 |
-| 403 | 非 warehouse 角色 |
-
----
-
-## 8. 管理員模組 (Admin)
-
-### 8.1 建立員工帳號
+### 6.1 建立員工帳號
 
 | 項目 | 說明 |
 |------|------|
@@ -1042,35 +1075,47 @@ Authorization: Bearer <token>
 
 ---
 
-### 8.2 審核合約申請
+### 6.2 處理系統異常
 
 | 項目 | 說明 |
 |------|------|
-| **位置** | `PUT /api/admin/contract-applications/:id` |
-| **功能** | 審核客戶的合約申請 |
-| **認證** | ✅ 需要 Token |
-| **權限** | `customer_service`、`admin` |
+| **位置** | `GET /api/admin/system/errors` |
+| **功能** | 管理員查詢系統異常／錯誤紀錄列表，用於偵錯與後續處理 |
+| **認證** | 需要 Token |
+| **權限** | `admin` |
 
-#### 輸入格式 (Request Body)
+#### 輸入欄位 (Query Parameters)
+
+| 參數        | 類型    | 必填 | 說明                                  |
+|-------------|---------|------|---------------------------------------|
+| `level`     | string  | 否   | 錯誤等級：`info` / `warning` / `error` / `critical` |
+| `date_from` | string  | 否   | 開始時間（ISO 8601）                 |
+| `date_to`   | string  | 否   | 結束時間（ISO 8601）                 |
+| `resolved`  | boolean | 否   | 是否已處理：`true` / `false`        |
+| `limit`     | integer | 否   | 每頁筆數 1–100，預設 20              |
+| `offset`    | integer | 否   | 位移量，用於分頁                      |
+
+#### 輸出欄位 (Success Response - 200)
 
 ```json
 {
-  "status": "approved | rejected",
-  "notes": "string",
-  "credit_limit": 50000
+  "success": true,
+  "errors": [
+    {
+      "id": "uuid",
+      "level": "error",
+      "code": "INTERNAL_ERROR",
+      "message": "string",
+      "details": "string",
+      "occurred_at": "2025-12-10T00:30:00Z",
+      "resolved": false
+    }
+  ],
+  "total": 10,
+  "limit": 20,
+  "offset": 0
 }
 ```
-
-#### 錯誤回應
-
-| 狀態碼 | 說明 |
-|--------|------|
-| 400 | 無效的 status 值 |
-| 401 | 未認證 |
-| 403 | 非 customer_service 或 admin |
-| 404 | 申請不存在 |
-
----
 
 ## 附錄：Package 狀態機
 
@@ -1089,3 +1134,4 @@ created → picked_up → in_transit → sorting → warehouse_in
 | 1.0 | 2025-12-10 | 初版 |
 | 2.0 | 2025-12-10 | 依需求文件完整重寫 |
 | 2.1 | 2025-12-10 | 修正：1) 所有 API 增加 403 錯誤處理 2) weight 改為選填 3) content_description 改為必填 4) limit 增加範圍限制 5) 簡化路線 API 6) 計費模組增加月結客戶說明 |
+| 3.0 | 2025-12-10 | 依照類別圖的模組重寫，將系統區重新分為6個模組。修改部分說明使其更符合目前的專案狀況。|

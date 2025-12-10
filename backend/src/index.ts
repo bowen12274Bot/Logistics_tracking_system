@@ -9,6 +9,7 @@ import { MapFetch } from "./endpoints/mapFetch";
 import { MapEdgeUpdate } from "./endpoints/mapUpdate";
 import { PackageEventCreate } from "./endpoints/packageEventCreate";
 import { PackageStatusQuery, PackageList } from "./endpoints/packageStatusQuery";
+import { PackageCreate } from "./endpoints/packageCreate";
 
 type Bindings = {
   DB: D1Database;
@@ -187,6 +188,7 @@ openapi.get("/api/map", MapFetch);
 openapi.put("/api/map/edges/:id", MapEdgeUpdate);
 
 // Package APIs (T3 & T4)
+openapi.post("/api/packages", PackageCreate);
 openapi.post("/api/packages/:packageId/events", PackageEventCreate);
 openapi.get("/api/packages/:packageId/status", PackageStatusQuery);
 openapi.get("/api/packages", PackageList);

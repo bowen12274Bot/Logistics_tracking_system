@@ -59,9 +59,41 @@ export class PackageStatusQuery extends OpenAPIRoute {
 			.bind(pkg.id)
 			.all();
 
+		let parsedPackage = pkg;
+		if (pkg.description_json) {
+			try {
+				const description = JSON.parse(pkg.description_json as string);
+				let specialHandling: any = description.special_handling ?? [];
+				try {
+					if ((pkg as any).special_handling) {
+						specialHandling = JSON.parse((pkg as any).special_handling as string);
+					}
+				} catch (err) {
+					// ignore parse error, fallback to description
+				}
+
+				parsedPackage = {
+					...pkg,
+					payment_method: pkg.payment_method ?? description.payment_method,
+					sender: (pkg as any).sender ?? (pkg as any).sender_name ?? description.sender,
+					receiver: (pkg as any).receiver ?? (pkg as any).receiver_name ?? description.receiver,
+					special_handling: specialHandling,
+					declared_value: (pkg as any).declared_value ?? description.declared_value,
+					delivery_time: pkg.delivery_time ?? description.delivery_time,
+					pickup_date: description.pickup_date,
+					pickup_time_window: description.pickup_time_window,
+					pickup_notes: description.pickup_notes,
+					route_path: pkg.route_path ?? description.route_path,
+					description_json: description,
+				};
+			} catch (err) {
+				parsedPackage = pkg;
+			}
+		}
+
 		return {
 			success: true,
-			package: pkg,
+			package: parsedPackage,
 			events: events.results,
 		};
 	}
@@ -109,10 +141,43 @@ export class PackageList extends OpenAPIRoute {
 		query += ` LIMIT ${limit}`;
 
 		const results = await c.env.DB.prepare(query).bind(...params).all();
+		const packages = (results.results ?? []).map((pkg) => {
+			if (pkg && pkg.description_json) {
+				try {
+					const description = JSON.parse(pkg.description_json as string);
+					let specialHandling: any = description.special_handling ?? [];
+					try {
+						if ((pkg as any).special_handling) {
+							specialHandling = JSON.parse((pkg as any).special_handling as string);
+						}
+					} catch (err) {
+						// ignore parse error
+					}
+					return {
+						...pkg,
+						payment_method: pkg.payment_method ?? description.payment_method,
+						sender: (pkg as any).sender ?? (pkg as any).sender_name ?? description.sender,
+						receiver: (pkg as any).receiver ?? (pkg as any).receiver_name ?? description.receiver,
+						special_handling: specialHandling,
+						declared_value:
+							(pkg as any).declared_value ?? description.declared_value,
+						delivery_time: pkg.delivery_time ?? description.delivery_time,
+						pickup_date: description.pickup_date,
+						pickup_time_window: description.pickup_time_window,
+						pickup_notes: description.pickup_notes,
+						route_path: pkg.route_path ?? description.route_path,
+						description_json: description,
+					};
+				} catch (err) {
+					return pkg;
+				}
+			}
+			return pkg;
+		});
 
 		return {
 			success: true,
-			packages: results.results,
+			packages,
 		};
 	}
 }

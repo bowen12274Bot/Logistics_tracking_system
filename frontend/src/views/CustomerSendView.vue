@@ -1,19 +1,11 @@
-﻿
 <script setup lang="ts">
 import { reactive, ref } from 'vue'
+import { api } from '../services/api'
 
-type Size = 'envelope' | 'small' | 'medium' | 'large'
 type DeliveryTime = 'overnight' | 'two_day' | 'standard' | 'economy'
 type PaymentMethod = 'cash' | 'credit_card' | 'online_bank' | 'monthly_billing' | 'third_party'
-
 type PaymentType = 'prepaid' | 'cod'
-
-const sizeLabel: Record<Size, string> = {
-  envelope: '文件',
-  small: '小型',
-  medium: '中型',
-  large: '大型',
-}
+type PickupType = '' | 'home' | 'store'
 
 const deliveryLabel: Record<DeliveryTime, string> = {
   overnight: '隔夜',
@@ -38,16 +30,79 @@ const paymentTypeLabel: Record<PaymentType, string> = {
 const form = reactive({
   sender: '',
   receiver: '',
-  size: 'medium' as Size,
+  pickupType: '' as PickupType,
+  weight: null as number | null,
+  length: null as number | null,
+  width: null as number | null,
+  height: null as number | null,
+  declaredValue: null as number | null,
   deliveryTime: 'standard' as DeliveryTime,
   paymentType: 'prepaid' as PaymentType,
   paymentMethod: 'credit_card' as PaymentMethod,
+  dangerousMaterials: false,
+  fragileItems: false,
+  internationalShipments: false,
+  pickupDate: '',
+  pickupTimeWindow: '09:00-12:00',
+  pickupNotes: '',
 })
 
 const confirmation = ref('')
+const errorMessage = ref('')
+const isSubmitting = ref(false)
 
-const submitPackage = () => {
-  confirmation.value = `草稿已建立：${sizeLabel[form.size]} / ${deliveryLabel[form.deliveryTime]}，付款：${paymentTypeLabel[form.paymentType]}（${paymentMethodLabel[form.paymentMethod]}）`
+const submitPackage = async () => {
+  confirmation.value = ''
+  errorMessage.value = ''
+
+  if (!form.pickupType) {
+    errorMessage.value = '請先選擇寄件方式（到府取件或超商寄件）。'
+    return
+  }
+  if (!form.weight || !form.length || !form.width || !form.height) {
+    errorMessage.value = '請填寫重量與長寬高（需為正數）。'
+    return
+  }
+  if (form.pickupType === 'home' && (!form.pickupDate || !form.pickupTimeWindow)) {
+    errorMessage.value = '到府取件需填寫取件日期與時段。'
+    return
+  }
+
+  isSubmitting.value = true
+  try {
+    const response = await api.createPackage({
+      sender: form.sender,
+      receiver: form.receiver,
+      weight: form.weight,
+      size: `${form.length}x${form.width}x${form.height} cm`,
+      delivery_time: form.deliveryTime,
+      payment_type: form.paymentType,
+      payment_method: form.paymentMethod,
+      declared_value: form.declaredValue ?? undefined,
+      dangerous_materials: form.dangerousMaterials,
+      fragile_items: form.fragileItems,
+      international_shipments: form.internationalShipments,
+      pickup_date: form.pickupType === 'home' ? form.pickupDate : undefined,
+      pickup_time_window: form.pickupType === 'home' ? form.pickupTimeWindow : undefined,
+      pickup_notes: form.pickupType === 'home' ? form.pickupNotes : undefined,
+      metadata: {
+        delivery_time_label: deliveryLabel[form.deliveryTime],
+        payment_type_label: paymentTypeLabel[form.paymentType],
+        payment_method_label: paymentMethodLabel[form.paymentMethod],
+        pickup_notes: form.pickupNotes,
+        pickup_type: form.pickupType,
+      },
+    })
+    const tracking = response.package.tracking_number ?? response.package.id
+    confirmation.value =
+      form.pickupType === 'home'
+        ? `託運單已建立：追蹤號 ${tracking}｜體積 ${form.length}x${form.width}x${form.height} cm / ${deliveryLabel[form.deliveryTime]}，重量 ${form.weight} kg，付款：${paymentTypeLabel[form.paymentType]}（${paymentMethodLabel[form.paymentMethod]}），到府收件時間：${form.pickupDate || '未填日期'} ${form.pickupTimeWindow}`
+        : `託運單已建立：追蹤號 ${tracking}｜體積 ${form.length}x${form.width}x${form.height} cm / ${deliveryLabel[form.deliveryTime]}，重量 ${form.weight} kg，付款：${paymentTypeLabel[form.paymentType]}（${paymentMethodLabel[form.paymentMethod]}），寄件方式：超商寄件`
+  } catch (err: any) {
+    errorMessage.value = err?.message || '建立寄件失敗，請稍後再試。'
+  } finally {
+    isSubmitting.value = false
+  }
 }
 </script>
 
@@ -55,15 +110,15 @@ const submitPackage = () => {
   <section class="page-shell">
     <header class="page-header">
       <p class="eyebrow">寄件</p>
-      <h1>建立託運單</h1>
-      <p class="lede">選擇服務級距、付款方式，填寫寄件/收件資訊以產生追蹤號。</p>
+      <h1>建立取件</h1>
+      <p class="lede">一次填好寄件/收件、尺寸重量、付款與取件方式，就能產生追蹤號。</p>
     </header>
 
     <div class="card">
       <form class="form-grid" @submit.prevent="submitPackage">
         <label class="form-field">
           <span>寄件人</span>
-          <input v-model="form.sender" required name="sender" type="text" placeholder="寄件人姓名或 ID" />
+          <input v-model="form.sender" required name="sender" type="text" placeholder="寄件人 user_id 或姓名" />
         </label>
 
         <label class="form-field">
@@ -72,14 +127,18 @@ const submitPackage = () => {
         </label>
 
         <label class="form-field">
-          <span>尺寸</span>
-          <select v-model="form.size" name="size">
-            <option value="envelope">文件</option>
-            <option value="small">小型</option>
-            <option value="medium">中型</option>
-            <option value="large">大型</option>
-          </select>
+          <span>重量 (kg)</span>
+          <input v-model.number="form.weight" min="1" required name="weight" type="number" step="1" placeholder="請輸入重量" />
         </label>
+
+        <div class="form-field">
+          <span>尺寸 (cm)</span>
+          <div class="inline" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px">
+            <input v-model.number="form.length" min="1" required name="length" type="number" placeholder="長" />
+            <input v-model.number="form.width" min="1" required name="width" type="number" placeholder="寬" />
+            <input v-model.number="form.height" min="1" required name="height" type="number" placeholder="高" />
+          </div>
+        </div>
 
         <label class="form-field">
           <span>配送時效</span>
@@ -106,13 +165,76 @@ const submitPackage = () => {
             <option value="credit_card">信用卡</option>
             <option value="online_bank">網銀</option>
             <option value="monthly_billing">月結</option>
-            <option value="third_party">第三方</option>
+            <option value="third_party">第三方支付</option>
           </select>
         </label>
 
-        <button class="primary-btn" type="submit">產生草稿</button>
+        <label class="form-field">
+          <span>申報價值 (元)</span>
+          <input
+            v-model.number="form.declaredValue"
+            name="declaredValue"
+            type="number"
+            min="0"
+            step="1"
+            placeholder="選填，保險/理賠依此為上限"
+          />
+        </label>
+
+        <div class="form-field">
+          <span>特殊標記選項</span>
+          <div class="hint" style="display: flex; flex-direction: column; gap: 4px">
+            <label><input v-model="form.dangerousMaterials" type="checkbox" /> 含危險品</label>
+            <label><input v-model="form.fragileItems" type="checkbox" /> 易碎品</label>
+            <label><input v-model="form.internationalShipments" type="checkbox" /> 國際件</label>
+          </div>
+        </div>
+
+        <label class="form-field">
+          <span>寄件方式</span>
+          <select v-model="form.pickupType" name="pickupType" required>
+            <option value="" disabled>請選擇</option>
+            <option value="home">預約到府取件</option>
+            <option value="store">超商寄件</option>
+          </select>
+        </label>
+        
+        <template v-if="form.pickupType === 'home'">
+          <label class="form-field">
+            <span>取件日期</span>
+            <input v-model="form.pickupDate" type="date" name="pickupDate" />
+          </label>
+
+          <label class="form-field">
+            <span>取件時段</span>
+            <select v-model="form.pickupTimeWindow" name="pickupTimeWindow">
+              <option value="09:00-12:00">09:00 - 12:00</option>
+              <option value="12:00-15:00">12:00 - 15:00</option>
+              <option value="15:00-18:00">15:00 - 18:00</option>
+              <option value="18:00-21:00">18:00 - 21:00</option>
+            </select>
+          </label>
+
+          <label class="form-field span-2">
+            <span>取件備註</span>
+            <textarea
+              v-model="form.pickupNotes"
+              rows="3"
+              name="pickupNotes"
+              placeholder="門禁、停車指引或易碎提醒"
+            ></textarea>
+          </label>
+        </template>
+
+        <button class="primary-btn" type="button" style="background: transparent; color: inherit; border: 1px solid currentColor">
+          查詢價格
+        </button>
+        <button class="primary-btn" type="submit" :disabled="isSubmitting">
+          {{ isSubmitting ? '建立中…' : '建立並排程' }}
+        </button>
       </form>
 
+      <p v-if="errorMessage" class="hint" style="color: #b00020">{{ errorMessage }}</p>
       <p v-if="confirmation" class="hint">{{ confirmation }}</p>
     </div>
   </section>
