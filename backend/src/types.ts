@@ -40,6 +40,7 @@ export const Package = z.object({
 	delivery_time: Str({ required: false }),
 	payment_type: Str({ required: false }),
 	payment_method: Str({ required: false }),
+	declared_value: z.number().int().optional(),
 	contents_description: Str({ required: false }),
 	description_json: z.any().optional(),
 	dangerous_materials: z.boolean().optional(),

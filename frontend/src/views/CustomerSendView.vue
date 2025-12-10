@@ -35,6 +35,7 @@ const form = reactive({
   length: null as number | null,
   width: null as number | null,
   height: null as number | null,
+  declaredValue: null as number | null,
   deliveryTime: 'standard' as DeliveryTime,
   paymentType: 'prepaid' as PaymentType,
   paymentMethod: 'credit_card' as PaymentMethod,
@@ -69,6 +70,7 @@ const submitPackage = async () => {
       delivery_time: form.deliveryTime,
       payment_type: form.paymentType,
       payment_method: form.paymentMethod,
+      declared_value: form.declaredValue ?? undefined,
       dangerous_materials: form.dangerousMaterials,
       fragile_items: form.fragileItems,
       international_shipments: form.internationalShipments,
@@ -153,6 +155,18 @@ const submitPackage = async () => {
             <option value="monthly_billing">月結</option>
             <option value="third_party">第三方支付</option>
           </select>
+        </label>
+
+        <label class="form-field">
+          <span>申報價值 (元)</span>
+          <input
+            v-model.number="form.declaredValue"
+            name="declaredValue"
+            type="number"
+            min="0"
+            step="1"
+            placeholder="選填，保險/理賠依此為上限"
+          />
         </label>
 
         <div class="form-field">

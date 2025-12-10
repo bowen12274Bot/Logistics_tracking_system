@@ -26,6 +26,7 @@ export class PackageCreate extends OpenAPIRoute {
 								required: false,
 								description: "付款方式（信用卡、月結等）",
 							}),
+							declared_value: z.coerce.number().int().optional(),
 							contents_description: Str({
 								required: false,
 								description: "貨物描述",
@@ -78,6 +79,7 @@ export class PackageCreate extends OpenAPIRoute {
 			delivery_time,
 			payment_type,
 			payment_method,
+			declared_value,
 			contents_description,
 			dangerous_materials,
 			fragile_items,
@@ -132,6 +134,7 @@ export class PackageCreate extends OpenAPIRoute {
 			payment_method,
 			delivery_time,
 			payment_type,
+			declared_value,
 			pickup_date,
 			pickup_time_window,
 			pickup_notes,
@@ -141,18 +144,21 @@ export class PackageCreate extends OpenAPIRoute {
 
 		await c.env.DB.prepare(
 			`INSERT INTO packages (
-        id, customer_id, sender_id, receiver_id, weight, size, delivery_time, payment_type, final_billing_date,
+        id, customer_id, sender_name, receiver_name, weight, size, delivery_time, payment_type, declared_value, final_billing_date,
         dangerous_materials, fragile_items, international_shipments, tracking_number,
         contents_description, route_path, description_json
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 		)
 			.bind(
 				packageId,
 				resolvedCustomerId,
+				sender ?? null,
+				receiver ?? null,
 				weight ?? null,
 				size,
 				delivery_time,
 				payment_type,
+				declared_value ?? null,
 				createdAt,
 				dangerous_materials ?? false,
 				fragile_items ?? false,
@@ -176,6 +182,7 @@ export class PackageCreate extends OpenAPIRoute {
 				delivery_time,
 				payment_type,
 				payment_method: payment_method ?? null,
+				declared_value: declared_value ?? null,
 				tracking_number: trackingNumber,
 				contents_description: contents_description ?? null,
 				description_json: descriptionJson,

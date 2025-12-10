@@ -68,6 +68,7 @@ export class PackageStatusQuery extends OpenAPIRoute {
 					payment_method: pkg.payment_method ?? description.payment_method,
 					sender: (pkg as any).sender ?? (pkg as any).sender_name ?? description.sender,
 					receiver: (pkg as any).receiver ?? (pkg as any).receiver_name ?? description.receiver,
+					declared_value: (pkg as any).declared_value ?? description.declared_value,
 					delivery_time: pkg.delivery_time ?? description.delivery_time,
 					pickup_date: description.pickup_date,
 					pickup_time_window: description.pickup_time_window,
@@ -139,6 +140,8 @@ export class PackageList extends OpenAPIRoute {
 						payment_method: pkg.payment_method ?? description.payment_method,
 						sender: (pkg as any).sender ?? (pkg as any).sender_name ?? description.sender,
 						receiver: (pkg as any).receiver ?? (pkg as any).receiver_name ?? description.receiver,
+						declared_value:
+							(pkg as any).declared_value ?? description.declared_value,
 						delivery_time: pkg.delivery_time ?? description.delivery_time,
 						pickup_date: description.pickup_date,
 						pickup_time_window: description.pickup_time_window,

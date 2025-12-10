@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS packages (
   size TEXT,                        -- 包裹尺寸(cm)，長×寬×高
   delivery_time TEXT,               -- 配送時效，[隔夜,兩日,標準,經濟]
   payment_type TEXT,                -- 支付方式，[現金,信用卡,網路銀行,月結帳單,第三方支付]
+  declared_value INTEGER,           -- 申報價值
   final_billing_date TEXT,          -- 最終費用成立時間(寄件者建立當下)
   dangerous_materials BOOLEAN,      -- 是否是危險物品
   fragile_items BOOLEAN,            -- 是否是易碎物品

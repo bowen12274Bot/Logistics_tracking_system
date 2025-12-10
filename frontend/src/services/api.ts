@@ -36,6 +36,7 @@ export type CreatePackagePayload = {
   delivery_time: string;
   payment_type: string;
   payment_method?: string;
+  declared_value?: number;
   contents_description?: string;
   dangerous_materials?: boolean;
   fragile_items?: boolean;
@@ -58,6 +59,7 @@ export type PackageRecord = {
   delivery_time?: string | null;
   payment_type?: string | null;
   payment_method?: string | null;
+  declared_value?: number | null;
   contents_description?: string | null;
   dangerous_materials?: boolean | null;
   fragile_items?: boolean | null;
