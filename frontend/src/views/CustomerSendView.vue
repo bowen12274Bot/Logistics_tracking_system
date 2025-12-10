@@ -1,12 +1,11 @@
-﻿
 <script setup lang="ts">
 import { reactive, ref } from 'vue'
 import { api } from '../services/api'
 
 type DeliveryTime = 'overnight' | 'two_day' | 'standard' | 'economy'
 type PaymentMethod = 'cash' | 'credit_card' | 'online_bank' | 'monthly_billing' | 'third_party'
-
 type PaymentType = 'prepaid' | 'cod'
+type PickupType = '' | 'home' | 'store'
 
 const deliveryLabel: Record<DeliveryTime, string> = {
   overnight: '隔夜',
@@ -31,6 +30,7 @@ const paymentTypeLabel: Record<PaymentType, string> = {
 const form = reactive({
   sender: '',
   receiver: '',
+  pickupType: '' as PickupType,
   weight: null as number | null,
   length: null as number | null,
   width: null as number | null,
@@ -55,8 +55,16 @@ const submitPackage = async () => {
   confirmation.value = ''
   errorMessage.value = ''
 
+  if (!form.pickupType) {
+    errorMessage.value = '請先選擇寄件方式（到府取件或超商寄件）。'
+    return
+  }
   if (!form.weight || !form.length || !form.width || !form.height) {
     errorMessage.value = '請填寫重量與長寬高（需為正數）。'
+    return
+  }
+  if (form.pickupType === 'home' && (!form.pickupDate || !form.pickupTimeWindow)) {
+    errorMessage.value = '到府取件需填寫取件日期與時段。'
     return
   }
 
@@ -74,18 +82,22 @@ const submitPackage = async () => {
       dangerous_materials: form.dangerousMaterials,
       fragile_items: form.fragileItems,
       international_shipments: form.internationalShipments,
-      pickup_date: form.pickupDate,
-      pickup_time_window: form.pickupTimeWindow,
-      pickup_notes: form.pickupNotes,
+      pickup_date: form.pickupType === 'home' ? form.pickupDate : undefined,
+      pickup_time_window: form.pickupType === 'home' ? form.pickupTimeWindow : undefined,
+      pickup_notes: form.pickupType === 'home' ? form.pickupNotes : undefined,
       metadata: {
         delivery_time_label: deliveryLabel[form.deliveryTime],
         payment_type_label: paymentTypeLabel[form.paymentType],
         payment_method_label: paymentMethodLabel[form.paymentMethod],
         pickup_notes: form.pickupNotes,
+        pickup_type: form.pickupType,
       },
     })
     const tracking = response.package.tracking_number ?? response.package.id
-    confirmation.value = `託運單已建立：追蹤號 ${tracking}｜體積 ${form.length}x${form.width}x${form.height} cm / ${deliveryLabel[form.deliveryTime]}，重量 ${form.weight} kg，付款：${paymentTypeLabel[form.paymentType]}（${paymentMethodLabel[form.paymentMethod]}），到府收件時間：${form.pickupDate || '未填日期'} ${form.pickupTimeWindow}`
+    confirmation.value =
+      form.pickupType === 'home'
+        ? `託運單已建立：追蹤號 ${tracking}｜體積 ${form.length}x${form.width}x${form.height} cm / ${deliveryLabel[form.deliveryTime]}，重量 ${form.weight} kg，付款：${paymentTypeLabel[form.paymentType]}（${paymentMethodLabel[form.paymentMethod]}），到府收件時間：${form.pickupDate || '未填日期'} ${form.pickupTimeWindow}`
+        : `託運單已建立：追蹤號 ${tracking}｜體積 ${form.length}x${form.width}x${form.height} cm / ${deliveryLabel[form.deliveryTime]}，重量 ${form.weight} kg，付款：${paymentTypeLabel[form.paymentType]}（${paymentMethodLabel[form.paymentMethod]}），寄件方式：超商寄件`
   } catch (err: any) {
     errorMessage.value = err?.message || '建立寄件失敗，請稍後再試。'
   } finally {
@@ -99,7 +111,7 @@ const submitPackage = async () => {
     <header class="page-header">
       <p class="eyebrow">寄件</p>
       <h1>建立取件</h1>
-      <p class="lede">一次填好寄件/收件、尺寸重量、付款與到府取件時間，就能產生追蹤號。</p>
+      <p class="lede">一次填好寄件/收件、尺寸重量、付款與取件方式，就能產生追蹤號。</p>
     </header>
 
     <div class="card">
@@ -179,29 +191,40 @@ const submitPackage = async () => {
         </div>
 
         <label class="form-field">
-          <span>取件日期</span>
-          <input v-model="form.pickupDate" type="date" name="pickupDate" />
-        </label>
-
-        <label class="form-field">
-          <span>取件時段</span>
-          <select v-model="form.pickupTimeWindow" name="pickupTimeWindow">
-            <option value="09:00-12:00">09:00 - 12:00</option>
-            <option value="12:00-15:00">12:00 - 15:00</option>
-            <option value="15:00-18:00">15:00 - 18:00</option>
-            <option value="18:00-21:00">18:00 - 21:00</option>
+          <span>寄件方式</span>
+          <select v-model="form.pickupType" name="pickupType" required>
+            <option value="" disabled>請選擇</option>
+            <option value="home">預約到府取件</option>
+            <option value="store">超商寄件</option>
           </select>
         </label>
+        
+        <template v-if="form.pickupType === 'home'">
+          <label class="form-field">
+            <span>取件日期</span>
+            <input v-model="form.pickupDate" type="date" name="pickupDate" />
+          </label>
 
-        <label class="form-field span-2">
-          <span>取件備註</span>
-          <textarea
-            v-model="form.pickupNotes"
-            rows="3"
-            name="pickupNotes"
-            placeholder="門禁、停車指引或易碎提醒"
-          ></textarea>
-        </label>
+          <label class="form-field">
+            <span>取件時段</span>
+            <select v-model="form.pickupTimeWindow" name="pickupTimeWindow">
+              <option value="09:00-12:00">09:00 - 12:00</option>
+              <option value="12:00-15:00">12:00 - 15:00</option>
+              <option value="15:00-18:00">15:00 - 18:00</option>
+              <option value="18:00-21:00">18:00 - 21:00</option>
+            </select>
+          </label>
+
+          <label class="form-field span-2">
+            <span>取件備註</span>
+            <textarea
+              v-model="form.pickupNotes"
+              rows="3"
+              name="pickupNotes"
+              placeholder="門禁、停車指引或易碎提醒"
+            ></textarea>
+          </label>
+        </template>
 
         <button class="primary-btn" type="button" style="background: transparent; color: inherit; border: 1px solid currentColor">
           查詢價格
