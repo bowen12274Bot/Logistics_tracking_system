@@ -11,6 +11,7 @@ import EmployeeCustomerServiceView from '../views/EmployeeCustomerServiceView.vu
 import EmployeeDriverView from '../views/EmployeeDriverView.vue'
 import EmployeeWarehouseView from '../views/EmployeeWarehouseView.vue'
 import AdminView from '../views/AdminView.vue'
+import CustomerProfileView from '../views/CustomerProfileView.vue'
 import { useAuthStore } from '../stores/auth'
 
 const router = createRouter({
@@ -22,6 +23,12 @@ const router = createRouter({
       path: '/customer',
       name: 'customer-dashboard',
       component: CustomerDashboard,
+      meta: { roles: ['contract_customer', 'non_contract_customer'] },
+    },
+    {
+      path: '/customer/profile',
+      name: 'customer-profile',
+      component: CustomerProfileView,
       meta: { roles: ['contract_customer', 'non_contract_customer'] },
     },
     {

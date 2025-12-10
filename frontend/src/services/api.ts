@@ -23,9 +23,34 @@ export type User = {
     | 'driver'
     | 'warehouse_staff'
     | 'admin';
+  billing_preference?:
+    | 'cash'
+    | 'credit_card'
+    | 'bank_transfer'
+    | 'monthly'
+    | 'third_party_payment'
+    | null;
 };
 
 export type AuthResponse = { user: User; token: string };
+
+export type UpdateCustomerPayload = {
+  user_id: string;
+  user_name?: string;
+  phone_number?: string;
+  address?: string;
+  billing_preference?:
+    | 'cash'
+    | 'credit_card'
+    | 'bank_transfer'
+    | 'monthly'
+    | 'third_party_payment';
+};
+
+export type UpdateCustomerResponse = {
+  success: boolean;
+  user: User;
+};
 
 export type CreatePackagePayload = {
   customer_id?: string;
@@ -100,6 +125,11 @@ export const api = {
   createPackage: (payload: CreatePackagePayload) =>
     request<{ success: boolean; package: PackageRecord }>('/api/packages', {
       method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  updateCustomerMe: (payload: UpdateCustomerPayload) =>
+    request<UpdateCustomerResponse>('/api/customers/me', {
+      method: 'PUT',
       body: JSON.stringify(payload),
     }),
 };

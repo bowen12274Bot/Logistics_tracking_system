@@ -24,6 +24,7 @@ type UserRecord = {
   password_hash: string;
   user_type: string;
   user_class: string;
+  billing_preference: string | null;
 };
 
 const sha256Hex = async (input: string) => {
@@ -41,6 +42,7 @@ const publicUser = (user: UserRecord) => ({
   email: user.email,
   user_type: user.user_type,
   user_class: user.user_class,
+  billing_preference: user.billing_preference,
 });
 
 // Start a Hono app
@@ -56,7 +58,7 @@ app.use(
   "/*",
   cors({
     origin: "*",
-    allowMethods: ["GET", "POST", "DELETE", "OPTIONS"],
+    allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowHeaders: ["*"],
   }),
 );
@@ -82,6 +84,7 @@ app.post("/api/auth/register", async (c) => {
     password?: string;
     user_type?: string;
     user_class?: string;
+    billing_preference?: string;
   }>();
 
   if (!body.email || !body.password || !body.user_name) {
@@ -90,12 +93,13 @@ app.post("/api/auth/register", async (c) => {
 
   const userType = body.user_type ?? "customer";
   const userClass = body.user_class ?? "non_contract_customer";
+  const billingPreference = body.billing_preference ?? null;
   const passwordHash = await sha256Hex(body.password);
   const id = crypto.randomUUID();
 
   try {
     await c.env.DB.prepare(
-      "INSERT INTO users (id, user_name, phone_number, address, email, password_hash, user_type, user_class) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO users (id, user_name, phone_number, address, email, password_hash, user_type, user_class, billing_preference) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
       .bind(
         id,
@@ -106,6 +110,7 @@ app.post("/api/auth/register", async (c) => {
         passwordHash,
         userType,
         userClass,
+        billingPreference,
       )
       .run();
   } catch (err: any) {
@@ -125,6 +130,7 @@ app.post("/api/auth/register", async (c) => {
       password_hash: passwordHash,
       user_type: userType,
       user_class: userClass,
+      billing_preference: billingPreference,
     }),
     token: crypto.randomUUID(),
   });
@@ -148,6 +154,65 @@ app.post("/api/auth/login", async (c) => {
   }
 
   return c.json({ user: publicUser(user), token: crypto.randomUUID() });
+});
+
+// Update current customer profile (name/phone/address/billing preference)
+app.put("/api/customers/me", async (c) => {
+  const body = await c.req.json<{
+    user_id?: string;
+    user_name?: string;
+    phone_number?: string;
+    address?: string;
+    billing_preference?: string;
+  }>();
+
+  if (!body.user_id) {
+    return c.json({ error: "user_id is required" }, 400);
+  }
+
+  const fields: string[] = [];
+  const values: any[] = [];
+
+  if (body.user_name !== undefined) {
+    fields.push("user_name = ?");
+    values.push(body.user_name);
+  }
+  if (body.phone_number !== undefined) {
+    fields.push("phone_number = ?");
+    values.push(body.phone_number);
+  }
+  if (body.address !== undefined) {
+    fields.push("address = ?");
+    values.push(body.address);
+  }
+  if (body.billing_preference !== undefined) {
+    fields.push("billing_preference = ?");
+    values.push(body.billing_preference);
+  }
+
+  if (fields.length === 0) {
+    return c.json({ error: "No fields to update" }, 400);
+  }
+
+  values.push(body.user_id);
+  const sql = `UPDATE users SET ${fields.join(", ")} WHERE id = ?`;
+
+  const result = await c.env.DB.prepare(sql).bind(...values).run();
+  if (!result.meta || !("changes" in result.meta) || result.meta.changes === 0) {
+    return c.json({ error: "User not found" }, 404);
+  }
+
+  const updated = await c.env.DB.prepare(
+    "SELECT * FROM users WHERE id = ?",
+  )
+    .bind(body.user_id)
+    .first<UserRecord>();
+
+  if (!updated) {
+    return c.json({ error: "User not found" }, 404);
+  }
+
+  return c.json({ success: true, user: publicUser(updated) });
 });
 
 // 🆕 新增物流資料

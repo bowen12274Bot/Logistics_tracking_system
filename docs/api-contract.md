@@ -221,7 +221,7 @@ Authorization: Bearer <token>
   "user_name": "string",
   "phone_number": "string",
   "address": "string",
-  "billing_preference": "monthly | cod | prepaid"
+  "billing_preference": "cash | credit_card | bank_transfer | monthly | third_party_payment |"
 }
 ```
 
