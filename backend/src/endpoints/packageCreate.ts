@@ -27,13 +27,13 @@ export class PackageCreate extends OpenAPIRoute {
 								description: "付款方式（信用卡、月結等）",
 							}),
 							declared_value: z.coerce.number().int().optional(),
+							dangerous_materials: z.boolean().default(false),
+							fragile_items: z.boolean().default(false),
+							international_shipments: z.boolean().default(false),
 							contents_description: Str({
 								required: false,
 								description: "貨物描述",
 							}),
-							dangerous_materials: z.boolean().default(false),
-							fragile_items: z.boolean().default(false),
-							international_shipments: z.boolean().default(false),
 							pickup_date: Str({ required: false, description: "取件日期" }),
 							pickup_time_window: Str({
 								required: false,
@@ -135,6 +135,11 @@ export class PackageCreate extends OpenAPIRoute {
 			delivery_time,
 			payment_type,
 			declared_value,
+			special_handling: {
+				dangerous_materials,
+				fragile_items,
+				international_shipments,
+			},
 			pickup_date,
 			pickup_time_window,
 			pickup_notes,
@@ -142,12 +147,18 @@ export class PackageCreate extends OpenAPIRoute {
 			metadata: metadata ?? {},
 		};
 
+		const specialHandlingList = [
+			dangerous_materials ? "dangerous_materials" : null,
+			fragile_items ? "fragile_items" : null,
+			international_shipments ? "international_shipments" : null,
+		].filter(Boolean);
+
 		await c.env.DB.prepare(
 			`INSERT INTO packages (
         id, customer_id, sender_name, receiver_name, weight, size, delivery_time, payment_type, declared_value, final_billing_date,
-        dangerous_materials, fragile_items, international_shipments, tracking_number,
+        special_handling, tracking_number,
         contents_description, route_path, description_json
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 		)
 			.bind(
 				packageId,
@@ -160,9 +171,7 @@ export class PackageCreate extends OpenAPIRoute {
 				payment_type,
 				declared_value ?? null,
 				createdAt,
-				dangerous_materials ?? false,
-				fragile_items ?? false,
-				international_shipments ?? false,
+				JSON.stringify(specialHandlingList),
 				trackingNumber,
 				contents_description ?? null,
 				route_path ?? null,
@@ -186,9 +195,7 @@ export class PackageCreate extends OpenAPIRoute {
 				tracking_number: trackingNumber,
 				contents_description: contents_description ?? null,
 				description_json: descriptionJson,
-				dangerous_materials: dangerous_materials ?? false,
-				fragile_items: fragile_items ?? false,
-				international_shipments: international_shipments ?? false,
+				special_handling: specialHandlingList,
 				final_billing_date: createdAt,
 				route_path: route_path ?? null,
 				pickup_date,

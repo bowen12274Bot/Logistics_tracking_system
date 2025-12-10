@@ -63,11 +63,21 @@ export class PackageStatusQuery extends OpenAPIRoute {
 		if (pkg.description_json) {
 			try {
 				const description = JSON.parse(pkg.description_json as string);
+				let specialHandling: any = description.special_handling ?? [];
+				try {
+					if ((pkg as any).special_handling) {
+						specialHandling = JSON.parse((pkg as any).special_handling as string);
+					}
+				} catch (err) {
+					// ignore parse error, fallback to description
+				}
+
 				parsedPackage = {
 					...pkg,
 					payment_method: pkg.payment_method ?? description.payment_method,
 					sender: (pkg as any).sender ?? (pkg as any).sender_name ?? description.sender,
 					receiver: (pkg as any).receiver ?? (pkg as any).receiver_name ?? description.receiver,
+					special_handling: specialHandling,
 					declared_value: (pkg as any).declared_value ?? description.declared_value,
 					delivery_time: pkg.delivery_time ?? description.delivery_time,
 					pickup_date: description.pickup_date,
@@ -135,11 +145,20 @@ export class PackageList extends OpenAPIRoute {
 			if (pkg && pkg.description_json) {
 				try {
 					const description = JSON.parse(pkg.description_json as string);
+					let specialHandling: any = description.special_handling ?? [];
+					try {
+						if ((pkg as any).special_handling) {
+							specialHandling = JSON.parse((pkg as any).special_handling as string);
+						}
+					} catch (err) {
+						// ignore parse error
+					}
 					return {
 						...pkg,
 						payment_method: pkg.payment_method ?? description.payment_method,
 						sender: (pkg as any).sender ?? (pkg as any).sender_name ?? description.sender,
 						receiver: (pkg as any).receiver ?? (pkg as any).receiver_name ?? description.receiver,
+						special_handling: specialHandling,
 						declared_value:
 							(pkg as any).declared_value ?? description.declared_value,
 						delivery_time: pkg.delivery_time ?? description.delivery_time,
