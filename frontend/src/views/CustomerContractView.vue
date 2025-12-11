@@ -110,7 +110,7 @@ onMounted(() => {
   <section class="page-shell">
     <header class="page-header">
       <p class="eyebrow">合約</p>
-      <h1>申請成為合約客戶</h1>
+      <h1>合約申請</h1>
       <p class="lede">
         填寫公司基本資料並送出申請，客服會審核後開通月結付款資格。
       </p>

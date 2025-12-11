@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue'
 import { api } from '../services/api'
+import { usePackageStore } from '../stores/packages'
 
 type DeliveryTime = 'overnight' | 'two_day' | 'standard' | 'economy'
 type PaymentMethod = 'cash' | 'credit_card' | 'online_bank' | 'monthly_billing' | 'third_party'
@@ -50,6 +51,7 @@ const form = reactive({
 const confirmation = ref('')
 const errorMessage = ref('')
 const isSubmitting = ref(false)
+const packageStore = usePackageStore()
 
 const submitPackage = async () => {
   confirmation.value = ''
@@ -93,6 +95,9 @@ const submitPackage = async () => {
         pickup_type: form.pickupType,
       },
     })
+    if (response.package.payment_type !== 'cod') {
+      packageStore.addUnpaidPackage(response.package)
+    }
     const tracking = response.package.tracking_number ?? response.package.id
     confirmation.value =
       form.pickupType === 'home'
