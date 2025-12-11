@@ -1,6 +1,6 @@
 ﻿
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, reactive, ref, watch, onMounted } from 'vue'
 import { RouterLink } from 'vue-router'
 import { usePackageStore, type PaymentMethod, type StoredPackage } from '../stores/packages'
 import { useAuthStore } from '../stores/auth'
@@ -28,6 +28,12 @@ const recordFilters = reactive({
   keyword: '',
 })
 const activeTab = ref<'list' | 'records'>('list')
+const isLoading = computed(() => packageStore.isLoading)
+const loadError = computed(() => packageStore.error)
+
+onMounted(() => {
+  packageStore.fetchUnpaid(auth.user?.id)
+})
 
 const resolveMethod = (method?: string | null): PaymentMethod => {
   const candidate = (method ?? '') as PaymentMethod
@@ -85,10 +91,51 @@ const savePaymentChoiceFor = (pkg: StoredPackage) => {
 
 const methodOptions: PaymentMethod[] = ['cash', 'credit_card', 'online_bank', 'monthly_billing', 'third_party']
 
-const formatCreatedAt = (value?: string) => {
+const formatCreatedAt = (value?: string | number | Date) => {
   if (!value) return '剛建立'
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? '剛建立' : date.toLocaleString()
+  let date: Date
+  if (typeof value === 'string') {
+    const normalized = value.includes('T') ? value : value.replace(' ', 'T')
+    date = new Date(normalized)
+  } else if (typeof value === 'number') {
+    date = new Date(value)
+  } else {
+    date = value
+  }
+  if (Number.isNaN(date.getTime())) {
+    return typeof value === 'string' ? value : '剛建立'
+  }
+  return date.toLocaleString()
+}
+
+const resolveCreatedAt = (pkg: StoredPackage) => {
+  const raw =
+    (pkg as any).created_at ??
+    (pkg as any).createdAt ??
+    (pkg as any).created_on ??
+    (pkg as any).created ??
+    (pkg as any).timestamp ??
+    (pkg.description_json as any)?.metadata?.created_at ??
+    (pkg.description_json as any)?.created_at ??
+    pkg.pickup_date ??
+    decodeTrackingTimestamp(pkg.tracking_number) ??
+    ''
+  return raw
+}
+
+const decodeTrackingTimestamp = (tracking?: string) => {
+  if (!tracking) return ''
+  const parts = tracking.split('-')
+  if (parts.length < 2) return ''
+  const base36 = parts[1]
+  if (!base36) return ''
+  try {
+    const ms = parseInt(base36, 36)
+    if (!Number.isFinite(ms)) return ''
+    return new Date(ms).toISOString()
+  } catch {
+    return ''
+  }
 }
 
 const confirmPay = (pkg: StoredPackage) => {
@@ -144,12 +191,18 @@ const allowedMethodsFor = (pkg: StoredPackage) =>
     </div>
 
     <div v-if="activeTab === 'list'" class="card">
-        <div class="legend">
-          <p class="eyebrow">付款清單</p>
-          <p class="hint">列出需要你付款的貨件，顯示編號與建立時間；點擊後選擇付款方式。</p>
-        </div>
+      <div class="legend">
+        <p class="eyebrow">付款清單</p>
+        <p class="hint">列出需要你付款的貨件，顯示編號與建立時間；點擊後選擇付款方式。</p>
+      </div>
 
-      <div v-if="!myUnpaidPackages.length" class="empty-state">
+      <div v-if="isLoading" class="empty-state">
+        <p>讀取中，請稍候...</p>
+      </div>
+      <div v-else-if="loadError" class="empty-state">
+        <p>{{ loadError }}</p>
+      </div>
+      <div v-else-if="!myUnpaidPackages.length" class="empty-state">
         <p>目前沒有等待付款的包裹。</p>
         <RouterLink to="/customer/send" class="primary-btn ghost-btn">建立新包裹</RouterLink>
       </div>
@@ -159,7 +212,7 @@ const allowedMethodsFor = (pkg: StoredPackage) =>
           <button type="button" class="row-btn" @click="togglePackage(pkg)">
             <span class="tracking">{{ billTypeLabel(pkg) }} | {{ pkg.tracking_number || pkg.id }}</span>
             <span class="pill">{{ paymentLabel[resolveMethod(pkg.payment_method)] }}</span>
-            <span class="meta">建立：{{ formatCreatedAt(pkg.createdAt) }}</span>
+            <span class="meta">建立：{{ formatCreatedAt(resolveCreatedAt(pkg)) }}</span>
           </button>
           <div v-if="expandedIds.has(pkg.id)" class="package-detail">
             <p class="meta">

@@ -175,12 +175,10 @@ onMounted(() => {
           ></textarea>
         </label>
 
-        <div class="form-field span-2" style="display: flex; gap: 0.75rem; align-items: center">
-          <button class="secondary-btn" type="button" @click="fillTestData">填入測試資料</button>
-          <button class="primary-btn" type="submit" :disabled="isSubmitting">
-            {{ isSubmitting ? '送出中…' : '送出申請' }}
-          </button>
-        </div>
+        <button class="secondary-btn" type="button" @click="fillTestData">填入測試資料</button>
+        <button class="primary-btn" type="submit" :disabled="isSubmitting">
+          {{ isSubmitting ? '送出中…' : '送出申請' }}
+        </button>
       </form>
 
       <!-- 審核中：保留原本申請狀態說明 -->

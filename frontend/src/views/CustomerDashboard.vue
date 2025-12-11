@@ -1,6 +1,6 @@
 ﻿
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { RouterLink } from 'vue-router'
 import { usePackageStore } from '../stores/packages'
 import { useAuthStore } from '../stores/auth'
@@ -32,6 +32,10 @@ const quickLinks = computed<Link[]>(() =>
     link.to === '/customer/payment' ? { ...link, featured: hasUnpaid.value } : link,
   ),
 )
+
+onMounted(() => {
+  packageStore.fetchUnpaid(auth.user?.id)
+})
 </script>
 
 <template>

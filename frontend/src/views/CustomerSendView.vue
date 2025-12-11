@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue'
 import { api } from '../services/api'
-import { usePackageStore } from '../stores/packages'
+import { useAuthStore } from '../stores/auth'
 
 type DeliveryTime = 'overnight' | 'two_day' | 'standard' | 'economy'
 type PaymentMethod = 'cash' | 'credit_card' | 'online_bank' | 'monthly_billing' | 'third_party'
@@ -51,7 +51,7 @@ const form = reactive({
 const confirmation = ref('')
 const errorMessage = ref('')
 const isSubmitting = ref(false)
-const packageStore = usePackageStore()
+const auth = useAuthStore()
 
 const submitPackage = async () => {
   confirmation.value = ''
@@ -73,6 +73,7 @@ const submitPackage = async () => {
   isSubmitting.value = true
   try {
     const response = await api.createPackage({
+      customer_id: auth.user?.id,
       sender: form.sender,
       receiver: form.receiver,
       weight: form.weight,
@@ -88,6 +89,7 @@ const submitPackage = async () => {
       pickup_time_window: form.pickupType === 'home' ? form.pickupTimeWindow : undefined,
       pickup_notes: form.pickupType === 'home' ? form.pickupNotes : undefined,
       metadata: {
+        created_at: new Date().toISOString(),
         delivery_time_label: deliveryLabel[form.deliveryTime],
         payment_type_label: paymentTypeLabel[form.paymentType],
         payment_method_label: paymentMethodLabel[form.paymentMethod],
@@ -95,9 +97,6 @@ const submitPackage = async () => {
         pickup_type: form.pickupType,
       },
     })
-    if (response.package.payment_type !== 'cod') {
-      packageStore.addUnpaidPackage(response.package)
-    }
     const tracking = response.package.tracking_number ?? response.package.id
     confirmation.value =
       form.pickupType === 'home'

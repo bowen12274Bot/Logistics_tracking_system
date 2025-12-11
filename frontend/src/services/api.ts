@@ -114,10 +114,17 @@ export type PackageRecord = {
   description_json?: Record<string, unknown>;
 };
 
-const baseUrl = import.meta.env.VITE_API_BASE ?? "http://localhost:8787";
+export type PackageListResponse = {
+  success: boolean;
+  packages: PackageRecord[];
+};
+
+const baseUrl = (import.meta.env.VITE_API_BASE ?? "http://localhost:8787").replace(/\/+$/, "");
 
 async function request<T>(path: string, options: RequestInit): Promise<T> {
-  const res = await fetch(`${baseUrl}${path}`, {
+  const normalizedPath =
+    baseUrl.endsWith("/api") && path.startsWith("/api") ? path.replace(/^\/api/, "") : path;
+  const res = await fetch(`${baseUrl}${normalizedPath}`, {
     headers: { "Content-Type": "application/json", ...(options.headers ?? {}) },
     ...options,
   });
@@ -162,6 +169,13 @@ export const api = {
   getContractApplicationStatus: (customerId: string) =>
     request<ContractApplicationStatus>(
       `/api/customers/contract-application/status?customer_id=${encodeURIComponent(customerId)}`,
+      {
+        method: "GET",
+      },
+    ),
+  getPackages: (customerId?: string) =>
+    request<PackageListResponse>(
+      customerId ? `/api/packages?customer_id=${encodeURIComponent(customerId)}` : "/api/packages",
       {
         method: "GET",
       },
