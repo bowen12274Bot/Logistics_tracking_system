@@ -225,6 +225,24 @@ Authorization: Bearer <token>
 }
 ```
 
+#### 輸入說明
+
+| 欄位 | 類型 | 必填 | 說明 |
+|------|------|------|------|
+| `user_name` | string | ❌ | 姓名 |
+| `phone_number` | string | ❌ | 電話號碼 |
+| `address` | string | ❌ | 預設地址 |
+| `billing_preference` | string | ❌ | 帳單偏好：`cash`(現金支付)、`credit_card`(信用卡)、`bank_transfer`(網路銀行)、`monthly`(月結帳單) 僅限合約客戶、`third_party_payment`(第三方支付) |
+
+#### 錯誤回應
+
+| 狀態碼 | 說明 |
+|--------|------|
+| 401 | 未認證 |
+| 403 | 非合約客戶嘗試設定 `billing_preference = monthly` |
+
+---
+
 ### 1.5 申請成為合約客戶
 
 | 項目 | 說明 |
@@ -276,25 +294,6 @@ Authorization: Bearer <token>
 | 403 | 已是合約客戶、已有待審核申請、或非客戶角色 |
 
 ---
-
-#### 輸入說明
-
-| 欄位 | 類型 | 必填 | 說明 |
-|------|------|------|------|
-| `user_name` | string | ❌ | 姓名 |
-| `phone_number` | string | ❌ | 電話號碼 |
-| `address` | string | ❌ | 預設地址 |
-| `billing_preference` | string | ❌ | 帳單偏好：`cash`(現金支付)、`credit_card`(信用卡)、`bank_transfer`(網路銀行)、`monthly`(月結帳單) 僅限合約客戶、`third_party_payment`(第三方支付) |
-
-#### 錯誤回應
-
-| 狀態碼 | 說明 |
-|--------|------|
-| 401 | 未認證 |
-| 403 | 非合約客戶嘗試設定 `billing_preference = monthly` |
-
----
-
 
 ### 1.6 駕駛員 - 取得今日工作清單
 
@@ -1135,3 +1134,4 @@ created → picked_up → in_transit → sorting → warehouse_in
 | 2.0 | 2025-12-10 | 依需求文件完整重寫 |
 | 2.1 | 2025-12-10 | 修正：1) 所有 API 增加 403 錯誤處理 2) weight 改為選填 3) content_description 改為必填 4) limit 增加範圍限制 5) 簡化路線 API 6) 計費模組增加月結客戶說明 |
 | 3.0 | 2025-12-10 | 依照類別圖的模組重寫，將系統區重新分為6個模組。修改部分說明使其更符合目前的專案狀況。|
+| 3.1 | 2025-12-12 | 修改順序錯誤。|

@@ -63,6 +63,7 @@ const handleRegister = async () => {
 
 const testAccounts = [
   { email: 'cust@example.com', password: 'cust123', role: '合約客戶' },
+  { email: 'noncontract@example.com', password: 'custnc123', role: '非合約客戶' },
   { email: 'driver@example.com', password: 'driver123', role: '司機' },
   { email: 'warehouse@example.com', password: 'warehouse123', role: '倉儲' },
   { email: 'cs@example.com', password: 'cs123', role: '客服' },

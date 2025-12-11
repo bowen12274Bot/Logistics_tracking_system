@@ -15,20 +15,20 @@ export type User = {
   phone_number?: string | null;
   address?: string | null;
   email: string;
-  user_type: 'customer' | 'employee';
+  user_type: "customer" | "employee";
   user_class:
-    | 'contract_customer'
-    | 'non_contract_customer'
-    | 'customer_service'
-    | 'driver'
-    | 'warehouse_staff'
-    | 'admin';
+    | "contract_customer"
+    | "non_contract_customer"
+    | "customer_service"
+    | "driver"
+    | "warehouse_staff"
+    | "admin";
   billing_preference?:
-    | 'cash'
-    | 'credit_card'
-    | 'bank_transfer'
-    | 'monthly'
-    | 'third_party_payment'
+    | "cash"
+    | "credit_card"
+    | "bank_transfer"
+    | "monthly"
+    | "third_party_payment"
     | null;
 };
 
@@ -40,16 +40,33 @@ export type UpdateCustomerPayload = {
   phone_number?: string;
   address?: string;
   billing_preference?:
-    | 'cash'
-    | 'credit_card'
-    | 'bank_transfer'
-    | 'monthly'
-    | 'third_party_payment';
+    | "cash"
+    | "credit_card"
+    | "bank_transfer"
+    | "monthly"
+    | "third_party_payment";
 };
 
 export type UpdateCustomerResponse = {
   success: boolean;
   user: User;
+};
+
+export type ContractApplicationPayload = {
+  customer_id: string;
+  company_name: string;
+  tax_id: string;
+  contact_person: string;
+  contact_phone: string;
+  billing_address: string;
+  notes?: string;
+};
+
+export type ContractApplicationStatus = {
+  success: boolean;
+  has_application: boolean;
+  application_id?: string;
+  status?: string;
 };
 
 export type CreatePackagePayload = {
@@ -97,11 +114,11 @@ export type PackageRecord = {
   description_json?: Record<string, unknown>;
 };
 
-const baseUrl = import.meta.env.VITE_API_BASE ?? 'http://localhost:8787';
+const baseUrl = import.meta.env.VITE_API_BASE ?? "http://localhost:8787";
 
 async function request<T>(path: string, options: RequestInit): Promise<T> {
   const res = await fetch(`${baseUrl}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...(options.headers ?? {}) },
+    headers: { "Content-Type": "application/json", ...(options.headers ?? {}) },
     ...options,
   });
   if (!res.ok) {
@@ -113,23 +130,40 @@ async function request<T>(path: string, options: RequestInit): Promise<T> {
 
 export const api = {
   login: (payload: LoginPayload) =>
-    request<AuthResponse>('/api/auth/login', {
-      method: 'POST',
+    request<AuthResponse>("/api/auth/login", {
+      method: "POST",
       body: JSON.stringify(payload),
     }),
   register: (payload: RegisterPayload) =>
-    request<AuthResponse>('/api/auth/register', {
-      method: 'POST',
+    request<AuthResponse>("/api/auth/register", {
+      method: "POST",
       body: JSON.stringify(payload),
     }),
   createPackage: (payload: CreatePackagePayload) =>
-    request<{ success: boolean; package: PackageRecord }>('/api/packages', {
-      method: 'POST',
+    request<{ success: boolean; package: PackageRecord }>("/api/packages", {
+      method: "POST",
       body: JSON.stringify(payload),
     }),
   updateCustomerMe: (payload: UpdateCustomerPayload) =>
-    request<UpdateCustomerResponse>('/api/customers/me', {
-      method: 'PUT',
+    request<UpdateCustomerResponse>("/api/customers/me", {
+      method: "PUT",
       body: JSON.stringify(payload),
     }),
+  applyForContract: (payload: ContractApplicationPayload) =>
+    request<{
+      success: boolean;
+      application_id: string;
+      status: string;
+      message: string;
+    }>("/api/customers/contract-application", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  getContractApplicationStatus: (customerId: string) =>
+    request<ContractApplicationStatus>(
+      `/api/customers/contract-application/status?customer_id=${encodeURIComponent(customerId)}`,
+      {
+        method: "GET",
+      },
+    ),
 };

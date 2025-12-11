@@ -10,6 +10,8 @@ import { MapEdgeUpdate } from "./endpoints/mapUpdate";
 import { PackageEventCreate } from "./endpoints/packageEventCreate";
 import { PackageStatusQuery, PackageList } from "./endpoints/packageStatusQuery";
 import { PackageCreate } from "./endpoints/packageCreate";
+import { ContractApplicationCreate } from "./endpoints/contractApplicationCreate";
+import { ContractApplicationStatus } from "./endpoints/contractApplicationStatus";
 
 type Bindings = {
   DB: D1Database;
@@ -257,6 +259,10 @@ openapi.post("/api/packages", PackageCreate);
 openapi.post("/api/packages/:packageId/events", PackageEventCreate);
 openapi.get("/api/packages/:packageId/status", PackageStatusQuery);
 openapi.get("/api/packages", PackageList);
+
+// Contract application (T5 1.5)
+openapi.post("/api/customers/contract-application", ContractApplicationCreate);
+openapi.get("/api/customers/contract-application/status", ContractApplicationStatus);
 
 // Export the Hono app
 export default app;
