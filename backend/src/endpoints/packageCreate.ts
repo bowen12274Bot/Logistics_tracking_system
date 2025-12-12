@@ -18,10 +18,10 @@ export class PackageCreate extends OpenAPIRoute {
 							}),
 							sender: Str({ required: false, description: "寄件人姓名" }),
 							receiver: Str({ required: false, description: "收件人姓名" }),
-							weight: z.coerce.number().int(),
-							size: Str({ description: "尺寸/重量級距" }),
-							delivery_time: Str({ description: "配送時效或服務級距" }),
-							payment_type: Str({ description: "付款類型（預付/到付）" }),
+							weight: z.coerce.number().int().optional(),
+							size: Str({ required: false, description: "尺寸/重量級距" }),
+							delivery_time: Str({ required: false, description: "配送時效或服務級距" }),
+							payment_type: Str({ required: false, description: "付款類型（預付/到付）" }),
 							payment_method: Str({
 								required: false,
 								description: "付款方式（信用卡、月結等）",
@@ -153,31 +153,36 @@ export class PackageCreate extends OpenAPIRoute {
 			international_shipments ? "international_shipments" : null,
 		].filter(Boolean);
 
-		await c.env.DB.prepare(
-			`INSERT INTO packages (
-        id, customer_id, sender_name, receiver_name, weight, size, delivery_time, payment_type, declared_value, final_billing_date,
-        special_handling, tracking_number,
-        contents_description, route_path, description_json
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-		)
-			.bind(
-				packageId,
-				resolvedCustomerId,
-				sender ?? null,
-				receiver ?? null,
-				weight ?? null,
-				size,
-				delivery_time,
-				payment_type,
-				declared_value ?? null,
-				createdAt,
-				JSON.stringify(specialHandlingList),
-				trackingNumber,
-				contents_description ?? null,
-				route_path ?? null,
-				JSON.stringify(descriptionJson)
+		try {
+			await c.env.DB.prepare(
+				`INSERT INTO packages (
+			id, customer_id, weight, size, service_type, payment_type, final_billing_date,
+			dangerous_materials, fragile_items, international_shipments,
+			tracking_number, contents_description, description_json,
+			status, created_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 			)
-			.run();
+				.bind(
+					packageId,
+					resolvedCustomerId,
+					weight ?? null,
+					size ?? null,
+					delivery_time ?? null, // maps to service_type
+					payment_type ?? null,
+					createdAt,
+					dangerous_materials ?? false,
+					fragile_items ?? false,
+					international_shipments ?? false,
+					trackingNumber,
+					contents_description ?? null,
+					JSON.stringify(descriptionJson),
+					"created", // status
+					createdAt,
+				)
+				.run();
+		} catch (err: any) {
+			return c.json({ success: false, error: "Failed to create package", detail: String(err) }, 500);
+		}
 
 		return {
 			success: true,

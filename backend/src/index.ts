@@ -7,9 +7,23 @@ import { TaskFetch } from "./endpoints/taskFetch";
 import { TaskList } from "./endpoints/taskList";
 import { MapFetch } from "./endpoints/mapFetch";
 import { MapEdgeUpdate } from "./endpoints/mapUpdate";
+import { MapRoute } from "./endpoints/mapRoute";
 import { PackageEventCreate } from "./endpoints/packageEventCreate";
 import { PackageStatusQuery, PackageList } from "./endpoints/packageStatusQuery";
 import { PackageCreate } from "./endpoints/packageCreate";
+import { PackageEstimate } from "./endpoints/packageEstimate";
+import { AuthMe } from "./endpoints/authMe";
+import { CustomerUpdate } from "./endpoints/customerUpdate";
+import { ContractApplication } from "./endpoints/contractApplication";
+import { TrackingPublic } from "./endpoints/trackingPublic";
+import { TrackingSearch } from "./endpoints/trackingSearch";
+import { DriverTaskList, DriverUpdateStatus } from "./endpoints/driverTasks";
+import { WarehouseBatchOperation } from "./endpoints/warehouseOperations";
+import { BillingBillList, BillingBillDetail } from "./endpoints/billingBills";
+import { BillingPaymentCreate, BillingPaymentList } from "./endpoints/billingPayments";
+import { AdminUserCreate } from "./endpoints/adminUsers";
+import { AdminContractList, AdminContractReview } from "./endpoints/adminContracts";
+import { AdminSystemErrors } from "./endpoints/adminErrors";
 
 type Bindings = {
   DB: D1Database;
@@ -88,8 +102,9 @@ app.post("/api/auth/register", async (c) => {
     return c.json({ error: "email, password, user_name 為必填" }, 400);
   }
 
-  const userType = body.user_type ?? "customer";
-  const userClass = body.user_class ?? "non_contract_customer";
+  // 安全性：註冊 API 只能建立客戶帳號，忽略傳入的 user_type
+  const userType = "customer";
+  const userClass = "non_contract_customer";
   const passwordHash = await sha256Hex(body.password);
   const id = crypto.randomUUID();
 
@@ -115,6 +130,13 @@ app.post("/api/auth/register", async (c) => {
     return c.json({ error: "註冊失敗", detail: String(err) }, 500);
   }
 
+  const token = crypto.randomUUID();
+  
+  // 儲存 token 到資料庫
+  await c.env.DB.prepare(
+    "INSERT INTO tokens (id, user_id) VALUES (?, ?)"
+  ).bind(token, id).run();
+
   return c.json({
     user: publicUser({
       id,
@@ -126,7 +148,7 @@ app.post("/api/auth/register", async (c) => {
       user_type: userType,
       user_class: userClass,
     }),
-    token: crypto.randomUUID(),
+    token,
   });
 });
 
@@ -147,7 +169,14 @@ app.post("/api/auth/login", async (c) => {
     return c.json({ error: "帳號或密碼錯誤" }, 401);
   }
 
-  return c.json({ user: publicUser(user), token: crypto.randomUUID() });
+  const token = crypto.randomUUID();
+  
+  // 儲存 token 到資料庫
+  await c.env.DB.prepare(
+    "INSERT INTO tokens (id, user_id) VALUES (?, ?)"
+  ).bind(token, user.id).run();
+
+  return c.json({ user: publicUser(user), token });
 });
 
 // 🆕 新增物流資料
@@ -186,12 +215,42 @@ openapi.delete("/api/tasks/:taskSlug", TaskDelete);
 // Map APIs
 openapi.get("/api/map", MapFetch);
 openapi.put("/api/map/edges/:id", MapEdgeUpdate);
+openapi.get("/api/map/route", MapRoute);
 
 // Package APIs (T3 & T4)
 openapi.post("/api/packages", PackageCreate);
+openapi.post("/api/packages/estimate", PackageEstimate);
 openapi.post("/api/packages/:packageId/events", PackageEventCreate);
 openapi.get("/api/packages/:packageId/status", PackageStatusQuery);
 openapi.get("/api/packages", PackageList);
+
+// Auth APIs
+openapi.get("/api/auth/me", AuthMe);
+
+// Customer APIs
+openapi.put("/api/customers/me", CustomerUpdate);
+openapi.post("/api/customers/contract-application", ContractApplication);
+
+// Tracking APIs
+openapi.get("/api/tracking/search", TrackingSearch);
+openapi.get("/api/tracking/:trackingNumber", TrackingPublic);
+
+// Staff APIs
+openapi.get("/api/driver/tasks", DriverTaskList);
+openapi.post("/api/driver/packages/:packageId/status", DriverUpdateStatus);
+openapi.post("/api/warehouse/batch-operation", WarehouseBatchOperation);
+
+// Billing APIs
+openapi.get("/api/billing/bills", BillingBillList);
+openapi.get("/api/billing/bills/:billId", BillingBillDetail);
+openapi.post("/api/billing/payments", BillingPaymentCreate);
+openapi.get("/api/billing/payments", BillingPaymentList);
+
+// Admin APIs
+openapi.post("/api/admin/users", AdminUserCreate);
+openapi.get("/api/admin/contract-applications", AdminContractList);
+openapi.put("/api/admin/contract-applications/:id", AdminContractReview);
+openapi.get("/api/admin/system/errors", AdminSystemErrors);
 
 // Export the Hono app
 export default app;
