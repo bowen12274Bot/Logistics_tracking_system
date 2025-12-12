@@ -15,7 +15,8 @@ export const Task = z.object({
 export const Node = z.object({
 	id: Str({ example: "HUB_0" }),
 	name: Str({ example: "HUB_0" }),
-	level: z.number().int().min(1).max(4),
+	level: z.number().int().min(1).max(3),
+	subtype: z.enum(["home", "store"]).optional(),
 	x: z.number().int(),
 	y: z.number().int(),
 });

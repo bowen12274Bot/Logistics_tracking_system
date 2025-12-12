@@ -10,7 +10,7 @@ MAP_SIZE = 10000
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 OUTPUT_SQL_FILE = str(PROJECT_ROOT / "backend" / "migrations" / "0007_virtual_map_seed.sql")
 
-# 設定各層級
+# 設定各層級 (3 層: HUB -> REG -> END)
 CONFIG = {
     1: {
         "count": 4,
@@ -29,20 +29,15 @@ CONFIG = {
         "spacing": 1500,
     },
     3: {
-        "count": 30,
-        "name": "LOC",
-        "speed_factor": 2.0,
-        "parent_dist_min": 800,
-        "parent_dist_max": 1500,
-        "spacing": 600,
-    },
-    4: {
         "count": 300,
         "name": "END",
         "speed_factor": 5.0,
         "parent_dist_min": 200,
         "parent_dist_max": 600,
         "spacing": 100,
+        # Level 3 (END) can be different endpoint types.
+        # Keys are subtype labels, values are relative weights.
+        "subtypes": {"home": 0.7, "store": 0.3},
     },
 }
 # =========================================
@@ -51,13 +46,24 @@ random.seed(SEED)
 
 
 class Node:
-    def __init__(self, uid, level, parent_id, x, y):
+    def __init__(self, uid, level, parent_id, x, y, subtype=None):
         self.id = str(uid)
         self.level = level
         self.parent_id = str(parent_id) if parent_id is not None else None
         self.x = x
         self.y = y
-        self.name = f"{CONFIG[level]['name']}_{uid}"
+        self.subtype = subtype
+        if level == 3 and subtype:
+            self.name = f"{CONFIG[level]['name']}_{subtype.upper()}_{uid}"
+        else:
+            self.name = f"{CONFIG[level]['name']}_{uid}"
+
+
+def pick_end_subtype():
+    subtypes = CONFIG[3].get("subtypes") or {"home": 1.0}
+    labels = list(subtypes.keys())
+    weights = list(subtypes.values())
+    return random.choices(labels, weights=weights, k=1)[0]
 
 
 def distance_sq(x1, y1, x2, y2):
@@ -77,7 +83,7 @@ def is_valid_position(x, y, existing_nodes, min_spacing):
 def generate_data():
     nodes = []
     edges = []
-    nodes_by_level = {1: [], 2: [], 3: [], 4: []}
+    nodes_by_level = {1: [], 2: [], 3: []}
     node_counter = 0
 
     print("正在生成節點...")
@@ -94,8 +100,8 @@ def generate_data():
             node_counter += 1
         attempts += 1
 
-    # Level 2-4 Generation
-    for lvl in [2, 3, 4]:
+    # Level 2-3 Generation (REG, END)
+    for lvl in [2, 3]:
         target_count = CONFIG[lvl]["count"]
         parent_candidates = nodes_by_level[lvl - 1]
         failures = 0
@@ -111,7 +117,8 @@ def generate_data():
             new_y = int(parent.y + dist_range * math.sin(angle))
 
             if is_valid_position(new_x, new_y, nodes, CONFIG[lvl]["spacing"]):
-                node = Node(node_counter, lvl, parent.id, new_x, new_y)
+                subtype = pick_end_subtype() if lvl == 3 else None
+                node = Node(node_counter, lvl, parent.id, new_x, new_y, subtype=subtype)
                 nodes.append(node)
                 nodes_by_level[lvl].append(node)
                 node_counter += 1
@@ -159,7 +166,8 @@ def generate_data():
             )
 
     print("正在生成橫向連接...")
-    for lvl in [2, 3]:
+    # Only REG nodes have lateral connections in 3-layer map.
+    for lvl in [2]:
         curr_nodes = nodes_by_level[lvl]
         try_limit = len(curr_nodes) * 2
         for _ in range(try_limit):
@@ -205,7 +213,7 @@ def generate_sql_file(nodes, edges):
         f.write("DROP TABLE IF EXISTS nodes;\n\n")
 
         f.write(
-            "CREATE TABLE nodes (id TEXT PRIMARY KEY, name TEXT, level INTEGER, x INTEGER, y INTEGER);\n"
+            "CREATE TABLE nodes (id TEXT PRIMARY KEY, name TEXT, level INTEGER, subtype TEXT, x INTEGER, y INTEGER);\n"
         )
         f.write(
             "CREATE TABLE edges (id INTEGER PRIMARY KEY AUTOINCREMENT, source TEXT, target TEXT, distance REAL, road_multiple INTEGER, cost INTEGER, FOREIGN KEY(source) REFERENCES nodes(id), FOREIGN KEY(target) REFERENCES nodes(id));\n"
@@ -216,8 +224,9 @@ def generate_sql_file(nodes, edges):
         f.write("-- Seed Nodes\n")
         for n in nodes:
             # 使用 SQL 轉義防止錯誤 (雖然這裡ID都是數字)
+            subtype_val = f"'{n.subtype}'" if n.subtype is not None else "NULL"
             f.write(
-                f"INSERT INTO nodes (id, name, level, x, y) VALUES ('{n.id}', '{n.name}', {n.level}, {n.x}, {n.y});\n"
+                f"INSERT INTO nodes (id, name, level, subtype, x, y) VALUES ('{n.id}', '{n.name}', {n.level}, {subtype_val}, {n.x}, {n.y});\n"
             )
 
         # 3. 寫入 Edges 數據 (雙向寫入)

@@ -271,13 +271,14 @@ CREATE TABLE monthly_billing_items (
 
 ### 2.7 `nodes` - 地圖節點表
 
-虛擬地圖的節點（轉運中心/區域中心/中繼站/終端站）。
+虛擬地圖的節點（轉運中心/區域中心/終端站）。
 
 ```sql
 CREATE TABLE nodes (
   id TEXT PRIMARY KEY,
   name TEXT,
   level INTEGER,
+  subtype TEXT,
   x INTEGER,
   y INTEGER
 );
@@ -287,7 +288,8 @@ CREATE TABLE nodes (
 |------|------|------|
 | `id` | TEXT | 節點 ID |
 | `name` | TEXT | 節點名稱 |
-| `level` | INTEGER | 層級：1=HUB, 2=REG, 3=LOC, 4=END |
+| `level` | INTEGER | 層級：1=HUB, 2=REG, 3=END |
+| `subtype` | TEXT | 終端節點類型（僅 END 使用：`home` 住家、`store` 超商） |
 | `x` | INTEGER | X 座標 |
 | `y` | INTEGER | Y 座標 |
 

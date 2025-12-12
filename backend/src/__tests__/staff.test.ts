@@ -60,7 +60,7 @@ describe("員工操作 (Staff)", () => {
           body: JSON.stringify({
             operation: "warehouse_in",
             package_ids: ["pkg1", "pkg2"],
-            location_id: "LOC_1",
+            location_id: "REG_1",
           }),
         }
       );
@@ -78,7 +78,7 @@ describe("員工操作 (Staff)", () => {
           body: JSON.stringify({
             operation: "warehouse_in",
             package_ids: [],
-            location_id: "LOC_1",
+            location_id: "REG_1",
           }),
         }
       );
