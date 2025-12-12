@@ -12,6 +12,8 @@ import EmployeeDriverView from '../views/EmployeeDriverView.vue'
 import EmployeeWarehouseView from '../views/EmployeeWarehouseView.vue'
 import AdminView from '../views/AdminView.vue'
 import CustomerProfileView from '../views/CustomerProfileView.vue'
+import VirtualMapView from '../views/VirtualMapView.vue'
+import ShippingEstimateView from '../views/ShippingEstimateView.vue'
 import { useAuthStore } from '../stores/auth'
 
 const router = createRouter({
@@ -19,6 +21,8 @@ const router = createRouter({
   routes: [
     { path: '/', name: 'home', component: HomeView },
     { path: '/login', name: 'login', component: LoginView },
+    { path: '/map', name: 'virtual-map', component: VirtualMapView },
+    { path: '/shipping/estimate', name: 'shipping-estimate', component: ShippingEstimateView },
     {
       path: '/customer',
       name: 'customer-dashboard',
