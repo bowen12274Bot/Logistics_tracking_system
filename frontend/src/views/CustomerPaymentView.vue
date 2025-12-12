@@ -1,19 +1,21 @@
 ﻿
 <script setup lang="ts">
-import { computed, reactive, ref, watch, onMounted } from 'vue'
-import { RouterLink } from 'vue-router'
+import { computed, reactive, ref, watch, onMounted, nextTick } from 'vue'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { usePackageStore, type PaymentMethod, type StoredPackage } from '../stores/packages'
 import { useAuthStore } from '../stores/auth'
 
 const packageStore = usePackageStore()
 const auth = useAuthStore()
+const route = useRoute()
+const router = useRouter()
 
 const paymentLabel: Record<PaymentMethod, string> = {
-  cash: '現金',
+  cash: '現金支付',
   credit_card: '信用卡',
-  online_bank: '網銀',
-  monthly_billing: '月結',
-  third_party: '第三方',
+  online_bank: '網路銀行',
+  monthly_billing: '月結訂單',
+  third_party: '第三方支付',
 }
 
 const unpaidPackages = computed<StoredPackage[]>(() => packageStore.unpaidPackages)
@@ -30,6 +32,14 @@ const recordFilters = reactive({
 const activeTab = ref<'list' | 'records'>('list')
 const isLoading = computed(() => packageStore.isLoading)
 const loadError = computed(() => packageStore.error)
+const hasAutoFocused = ref(false)
+const highlightedPackageId = ref('')
+const focusNotice = ref('')
+
+const focusedPackageId = computed(() => {
+  const raw = route.query.package_id
+  return typeof raw === 'string' ? raw : ''
+})
 
 onMounted(() => {
   packageStore.fetchUnpaid(auth.user?.id)
@@ -66,6 +76,45 @@ const togglePackage = (pkg: StoredPackage) => {
   }
   expandedIds.value = next
 }
+
+const focusPackage = async (packageId: string) => {
+  if (!packageId) return
+  const target = myUnpaidPackages.value.find((pkg) => pkg.id === packageId)
+  if (!target) return
+
+  activeTab.value = 'list'
+  if (!expandedIds.value.has(packageId)) {
+    togglePackage(target)
+  } else {
+    ensureChoice(target.id, target.payment_method)
+  }
+
+  await nextTick()
+  document.getElementById(`pkg-${packageId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  highlightedPackageId.value = packageId
+  focusNotice.value = '已定位到剛建立的待付費用，可直接確認付款。'
+  window.setTimeout(() => {
+    if (highlightedPackageId.value === packageId) highlightedPackageId.value = ''
+    if (focusNotice.value) focusNotice.value = ''
+  }, 3500)
+}
+
+watch(
+  () => [focusedPackageId.value, myUnpaidPackages.value.length, activeTab.value],
+  async () => {
+    if (hasAutoFocused.value) return
+    if (!focusedPackageId.value) return
+    if (myUnpaidPackages.value.length === 0) return
+
+    await focusPackage(focusedPackageId.value)
+    hasAutoFocused.value = true
+
+    const nextQuery = { ...route.query }
+    delete (nextQuery as any).package_id
+    await router.replace({ query: nextQuery })
+  },
+  { immediate: true },
+)
 
 const savePaymentChoice = () => {
   // kept for backward compatibility if needed
@@ -196,6 +245,8 @@ const allowedMethodsFor = (pkg: StoredPackage) =>
         <p class="hint">列出需要你付款的貨件，顯示編號與建立時間；點擊後選擇付款方式。</p>
       </div>
 
+      <p v-if="focusNotice" class="hint" style="margin-bottom: 10px">{{ focusNotice }}</p>
+
       <div v-if="isLoading" class="empty-state">
         <p>讀取中，請稍候...</p>
       </div>
@@ -208,7 +259,13 @@ const allowedMethodsFor = (pkg: StoredPackage) =>
       </div>
 
       <ul v-else class="package-list">
-        <li v-for="pkg in myUnpaidPackages" :key="pkg.id" class="package-row" :class="{ active: expandedIds.has(pkg.id) }">
+        <li
+          v-for="pkg in myUnpaidPackages"
+          :id="`pkg-${pkg.id}`"
+          :key="pkg.id"
+          class="package-row"
+          :class="{ active: expandedIds.has(pkg.id), highlight: pkg.id === highlightedPackageId }"
+        >
           <button type="button" class="row-btn" @click="togglePackage(pkg)">
             <span class="tracking">{{ billTypeLabel(pkg) }} | {{ pkg.tracking_number || pkg.id }}</span>
             <span class="pill">{{ paymentLabel[resolveMethod(pkg.payment_method)] }}</span>
@@ -216,7 +273,7 @@ const allowedMethodsFor = (pkg: StoredPackage) =>
           </button>
           <div v-if="expandedIds.has(pkg.id)" class="package-detail">
             <p class="meta">
-              寄：{{ pkg.sender || '未填寫' }} · 收：{{ pkg.receiver || '未填寫' }} · 重量 {{ pkg.weight ?? '--' }} kg ·
+              寄件者：{{ pkg.sender || '未填寫' }} · 收件者：{{ pkg.receiver || '未填寫' }} · 重量 {{ pkg.weight ?? '--' }} kg ·
               配送 {{ pkg.delivery_time || '未選擇' }}
             </p>
             <p class="meta">目前付款方式：{{ paymentLabel[resolveMethod(pkg.payment_method)] }}</p>
@@ -229,7 +286,7 @@ const allowedMethodsFor = (pkg: StoredPackage) =>
                 </select>
             </label>
             <div class="actions">
-              <button class="primary-btn" type="button" @click="savePaymentChoiceFor(pkg)">記錄付款方式</button>
+              <button class="primary-btn" type="button" @click="savePaymentChoiceFor(pkg)">更新付款方式</button>
               <button class="ghost-btn" type="button" @click="confirmPay(pkg)">確認付款</button>
             </div>
             <p v-if="feedbacks[pkg.id]" class="hint">{{ feedbacks[pkg.id] }}</p>
@@ -322,6 +379,11 @@ const allowedMethodsFor = (pkg: StoredPackage) =>
 
 .package-row.active {
   border-color: var(--accent);
+}
+
+.package-row.highlight {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(165, 122, 99, 0.25);
 }
 
 .row-btn {

@@ -14,6 +14,7 @@ import { PackageCreate } from "./endpoints/packageCreate";
 import { PackageEstimate } from "./endpoints/packageEstimate";
 import { AuthMe } from "./endpoints/authMe";
 import { CustomerUpdate } from "./endpoints/customerUpdate";
+import { CustomerExists } from "./endpoints/customerExists";
 import { ContractApplicationCreate } from "./endpoints/contractApplicationCreate";
 import { ContractApplicationStatus } from "./endpoints/contractApplicationStatus";
 import { TrackingPublic } from "./endpoints/trackingPublic";
@@ -240,6 +241,7 @@ openapi.get("/api/auth/me", AuthMe);
 
 // Customer APIs
 openapi.put("/api/customers/me", CustomerUpdate);
+openapi.get("/api/customers/exists", CustomerExists);
 
 // Tracking APIs
 openapi.get("/api/tracking/search", TrackingSearch);

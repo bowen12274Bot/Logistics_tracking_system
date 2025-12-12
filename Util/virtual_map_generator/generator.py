@@ -46,17 +46,14 @@ random.seed(SEED)
 
 
 class Node:
-    def __init__(self, uid, level, parent_id, x, y, subtype=None):
-        self.id = str(uid)
+    def __init__(self, node_id, level, parent_id, x, y, subtype=None):
+        self.id = str(node_id)
         self.level = level
         self.parent_id = str(parent_id) if parent_id is not None else None
         self.x = x
         self.y = y
         self.subtype = subtype
-        if level == 3 and subtype:
-            self.name = f"{CONFIG[level]['name']}_{subtype.upper()}_{uid}"
-        else:
-            self.name = f"{CONFIG[level]['name']}_{uid}"
+        self.name = self.id
 
 
 def pick_end_subtype():
@@ -84,7 +81,9 @@ def generate_data():
     nodes = []
     edges = []
     nodes_by_level = {1: [], 2: [], 3: []}
-    node_counter = 0
+    hub_counter = 0
+    reg_counter = 0
+    end_counters = {"home": 0, "store": 0}
 
     print("正在生成節點...")
 
@@ -94,10 +93,11 @@ def generate_data():
         x = random.randint(0, MAP_SIZE)
         y = random.randint(0, MAP_SIZE)
         if is_valid_position(x, y, nodes, CONFIG[1]["spacing"]):
-            node = Node(node_counter, 1, None, x, y)
+            node_id = f"HUB_{hub_counter}"
+            node = Node(node_id, 1, None, x, y)
             nodes.append(node)
             nodes_by_level[1].append(node)
-            node_counter += 1
+            hub_counter += 1
         attempts += 1
 
     # Level 2-3 Generation (REG, END)
@@ -118,10 +118,17 @@ def generate_data():
 
             if is_valid_position(new_x, new_y, nodes, CONFIG[lvl]["spacing"]):
                 subtype = pick_end_subtype() if lvl == 3 else None
-                node = Node(node_counter, lvl, parent.id, new_x, new_y, subtype=subtype)
+                if lvl == 2:
+                    node_id = f"REG_{reg_counter}"
+                    reg_counter += 1
+                else:
+                    end_index = end_counters[subtype]
+                    node_id = f"END_{subtype.upper()}_{end_index}"
+                    end_counters[subtype] += 1
+
+                node = Node(node_id, lvl, parent.id, new_x, new_y, subtype=subtype)
                 nodes.append(node)
                 nodes_by_level[lvl].append(node)
-                node_counter += 1
                 current_count += 1
 
                 # Create Edge Logic

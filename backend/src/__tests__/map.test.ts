@@ -64,7 +64,7 @@ describe("地圖路線 (Map)", () => {
     let validNodes: { source: string; target: string };
 
     it("MAP-ROUTE-002: 缺少 from 參數", async () => {
-      const { status } = await apiRequest<any>("/api/map/route?to=END_1");
+      const { status } = await apiRequest<any>("/api/map/route?to=END_HOME_0");
       expect(status).toBe(400);
     });
 
@@ -75,7 +75,7 @@ describe("地圖路線 (Map)", () => {
 
     it("MAP-ROUTE-004: 無效的起點節點", async () => {
       const { status, data } = await apiRequest<any>(
-        "/api/map/route?from=INVALID&to=END_1"
+        "/api/map/route?from=INVALID&to=END_HOME_0"
       );
       expect(status).toBe(404);
     });

@@ -73,6 +73,12 @@ export type CreatePackagePayload = {
   customer_id?: string;
   sender?: string;
   receiver?: string;
+  sender_name?: string;
+  sender_phone?: string;
+  sender_address?: string;
+  receiver_name?: string;
+  receiver_phone?: string;
+  receiver_address?: string;
   weight: number;
   size: string;
   delivery_time: string;
@@ -96,6 +102,12 @@ export type PackageRecord = {
   customer_id?: string | null;
   sender?: string | null;
   receiver?: string | null;
+  sender_name?: string | null;
+  sender_phone?: string | null;
+  sender_address?: string | null;
+  receiver_name?: string | null;
+  receiver_phone?: string | null;
+  receiver_address?: string | null;
   weight?: number | null;
   size?: string | null;
   delivery_time?: string | null;
@@ -145,11 +157,32 @@ export type MapResponse = {
 
 const baseUrl = (import.meta.env.VITE_API_BASE ?? "http://localhost:8787").replace(/\/+$/, "");
 
+const AUTH_STORAGE_KEY = "logisim-auth";
+
+function getStoredToken(): string | null {
+  try {
+    const raw = localStorage.getItem(AUTH_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return typeof parsed?.token === "string" ? parsed.token : null;
+  } catch {
+    return null;
+  }
+}
+
 async function request<T>(path: string, options: RequestInit): Promise<T> {
   const normalizedPath =
     baseUrl.endsWith("/api") && path.startsWith("/api") ? path.replace(/^\/api/, "") : path;
+  const token = getStoredToken();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(options.headers as Record<string, string> | undefined),
+  };
+  if (token && !headers.Authorization) {
+    headers.Authorization = `Bearer ${token}`;
+  }
   const res = await fetch(`${baseUrl}${normalizedPath}`, {
-    headers: { "Content-Type": "application/json", ...(options.headers ?? {}) },
+    headers,
     ...options,
   });
   if (!res.ok) {
@@ -164,6 +197,19 @@ export const api = {
     request<MapResponse>("/api/map", {
       method: "GET",
     }),
+  getMe: () =>
+    request<{ success: boolean; user: User }>("/api/auth/me", {
+      method: "GET",
+    }),
+  customerExists: (query: { phone?: string; name?: string }) => {
+    const params = new URLSearchParams();
+    if (query.phone) params.set("phone", query.phone);
+    if (query.name) params.set("name", query.name);
+    return request<{ success: boolean; exists: boolean; user_id?: string }>(
+      `/api/customers/exists?${params.toString()}`,
+      { method: "GET" },
+    );
+  },
   login: (payload: LoginPayload) =>
     request<AuthResponse>("/api/auth/login", {
       method: "POST",

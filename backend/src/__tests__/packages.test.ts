@@ -101,6 +101,32 @@ describe("包裹管理 (Package)", () => {
       expect(status).toBe(200);
       expect(data.success).toBe(true);
     });
+
+    it("PKG-CREATE-020: payment_method should follow billing_preference by default", async () => {
+      const user = await createTestUser({ billing_preference: "bank_transfer" });
+      const meResult = await authenticatedRequest<{ user: { id: string } }>(
+        "/api/auth/me",
+        user.token
+      );
+      const newCustomerId = meResult.data.user.id;
+
+      const { status, data } = await authenticatedRequest<any>("/api/packages", user.token, {
+        method: "POST",
+        body: JSON.stringify({
+          customer_id: newCustomerId,
+          sender: "Sender",
+          receiver: "Receiver",
+          weight: 5,
+          size: "medium",
+          delivery_time: "standard",
+          payment_type: "prepaid",
+        }),
+      });
+
+      expect(status).toBe(200);
+      expect(data.success).toBe(true);
+      expect(data.package.payment_method).toBe("online_bank");
+    });
   });
 
   // ========== POST /api/packages/estimate ==========
