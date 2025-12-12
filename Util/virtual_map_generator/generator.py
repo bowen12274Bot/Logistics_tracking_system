@@ -13,28 +13,28 @@ OUTPUT_SQL_FILE = str(PROJECT_ROOT / "backend" / "migrations" / "0007_virtual_ma
 # 設定各層級 (3 層: HUB -> REG -> END)
 CONFIG = {
     1: {
-        "count": 4,
+        "count": 6,
         "name": "HUB",
         "speed_factor": 0.5,
         "parent_dist_min": 0,
         "parent_dist_max": 0,
-        "spacing": 4000,
+        "spacing": 2000,
     },
     2: {
-        "count": 12,
+        "count": 27,
         "name": "REG",
         "speed_factor": 1.0,
-        "parent_dist_min": 1500,
-        "parent_dist_max": 2500,
+        "parent_dist_min": 800,
+        "parent_dist_max": 2000,
         "spacing": 1500,
     },
     3: {
-        "count": 300,
+        "count": 100,
         "name": "END",
         "speed_factor": 5.0,
         "parent_dist_min": 200,
         "parent_dist_max": 600,
-        "spacing": 100,
+        "spacing": 300,
         # Level 3 (END) can be different endpoint types.
         # Keys are subtype labels, values are relative weights.
         "subtypes": {"home": 0.7, "store": 0.3},

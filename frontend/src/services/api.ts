@@ -119,6 +119,30 @@ export type PackageListResponse = {
   packages: PackageRecord[];
 };
 
+export type MapNode = {
+  id: string;
+  name: string;
+  level: number;
+  subtype?: "home" | "store" | null;
+  x: number;
+  y: number;
+};
+
+export type MapEdge = {
+  id: number;
+  source: string;
+  target: string;
+  distance: number;
+  road_multiple: number;
+  cost: number;
+};
+
+export type MapResponse = {
+  success: boolean;
+  nodes: MapNode[];
+  edges: MapEdge[];
+};
+
 const baseUrl = (import.meta.env.VITE_API_BASE ?? "http://localhost:8787").replace(/\/+$/, "");
 
 async function request<T>(path: string, options: RequestInit): Promise<T> {
@@ -136,6 +160,10 @@ async function request<T>(path: string, options: RequestInit): Promise<T> {
 }
 
 export const api = {
+  getMap: () =>
+    request<MapResponse>("/api/map", {
+      method: "GET",
+    }),
   login: (payload: LoginPayload) =>
     request<AuthResponse>("/api/auth/login", {
       method: "POST",
