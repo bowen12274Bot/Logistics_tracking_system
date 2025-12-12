@@ -138,6 +138,7 @@ export async function createTestUser(overrides = {}) {
 | AUTH-REG-010 | 驗證 user_class 固定為 "non_contract_customer" | 安全 | 即使傳入其他值也固定 |
 | AUTH-REG-011 | 驗證回傳不包含 password_hash | 安全 | user 物件無密碼資訊 |
 | AUTH-REG-012 | email 格式驗證 | 負向 | 400, 無效 email 格式 |
+| AUTH-REG-013 | address 格式驗證 | 負向 | 400, 必須符合 (x,y) 格式 |
 
 #### POST /api/auth/login - 使用者登入
 
@@ -213,6 +214,9 @@ export async function createTestUser(overrides = {}) {
 | PKG-CREATE-017 | 無 token | 權限 | 401 |
 | PKG-CREATE-018 | weight 可選填（不填也可建立） | 正向 | 201 |
 | PKG-CREATE-019 | 非 customer 角色嘗試建立 | 權限 | 403 |
+| PKG-CREATE-020 | 驗證 sender/receiver address 格式 | 負向 | 400, 必須符合 (x,y) 格式 |
+| PKG-CREATE-021 | 驗證 declared_value 儲存正確 | 正向 | 201, 雖然 UML 未定義但系統需支援 |
+| PKG-CREATE-022 | 驗證 content_description 儲存正確 | 正向 | 201, 雖然 UML 未定義但系統需支援 |
 
 #### POST /api/packages/estimate - 運費試算
 
@@ -283,6 +287,8 @@ export async function createTestUser(overrides = {}) {
 | TRACK-EVT-009 | 無 token | 權限 | 401 |
 | TRACK-EVT-010 | 驗證自動產生時間戳記 | 正向 | timestamp 正確 |
 | TRACK-EVT-011 | 驗證包裹狀態同步更新 | 正向 | package.status 更新 |
+| TRACK-EVT-012 | 驗證 location 合法性 | 負向 | 400, location 必須存在於 Map Node 或 Truck ID |
+| TRACK-EVT-013 | 驗證支援所有 API 定義的 status | 正向 | 所有列舉的 status 均可寫入 |
 
 #### GET /api/tracking/search - 進階搜尋
 

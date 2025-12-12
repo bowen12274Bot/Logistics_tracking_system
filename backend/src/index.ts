@@ -7,11 +7,24 @@ import { TaskFetch } from "./endpoints/taskFetch";
 import { TaskList } from "./endpoints/taskList";
 import { MapFetch } from "./endpoints/mapFetch";
 import { MapEdgeUpdate } from "./endpoints/mapUpdate";
+import { MapRoute } from "./endpoints/mapRoute";
 import { PackageEventCreate } from "./endpoints/packageEventCreate";
 import { PackageStatusQuery, PackageList } from "./endpoints/packageStatusQuery";
 import { PackageCreate } from "./endpoints/packageCreate";
+import { PackageEstimate } from "./endpoints/packageEstimate";
+import { AuthMe } from "./endpoints/authMe";
+import { CustomerUpdate } from "./endpoints/customerUpdate";
 import { ContractApplicationCreate } from "./endpoints/contractApplicationCreate";
 import { ContractApplicationStatus } from "./endpoints/contractApplicationStatus";
+import { TrackingPublic } from "./endpoints/trackingPublic";
+import { TrackingSearch } from "./endpoints/trackingSearch";
+import { DriverTaskList, DriverUpdateStatus } from "./endpoints/driverTasks";
+import { WarehouseBatchOperation } from "./endpoints/warehouseOperations";
+import { BillingBillList, BillingBillDetail } from "./endpoints/billingBills";
+import { BillingPaymentCreate, BillingPaymentList } from "./endpoints/billingPayments";
+import { AdminUserCreate } from "./endpoints/adminUsers";
+import { AdminContractList, AdminContractReview } from "./endpoints/adminContracts";
+import { AdminSystemErrors } from "./endpoints/adminErrors";
 
 type Bindings = {
   DB: D1Database;
@@ -55,7 +68,7 @@ const openapi = fromHono(app, {
   docs_url: "/",
 });
 
-// CORS for local dev (前端 http://localhost:5173 或 Pages 預覽)
+// CORS for local dev (?ç«¯ http://localhost:5173 ??Pages ?è¦½)
 app.use(
   "/*",
   cors({
@@ -76,7 +89,7 @@ app.get("/api/hello", (c) => {
   );
 });
 
-// 註冊新使用者（主要為客戶）
+// è¨»å??°ä½¿?¨è€…ï?ä¸»è??ºå®¢?¶ï?
 app.post("/api/auth/register", async (c) => {
   const body = await c.req.json<{
     user_name?: string;
@@ -90,11 +103,12 @@ app.post("/api/auth/register", async (c) => {
   }>();
 
   if (!body.email || !body.password || !body.user_name) {
-    return c.json({ error: "email, password, user_name 為必填" }, 400);
+    return c.json({ error: "email, password, and user_name are required" }, 400);
   }
 
-  const userType = body.user_type ?? "customer";
-  const userClass = body.user_class ?? "non_contract_customer";
+  // 安全起見：register 只建立 customer 帳號，忽略 user_type/user_class
+  const userType = "customer";
+  const userClass = "non_contract_customer";
   const billingPreference = body.billing_preference ?? null;
   const passwordHash = await sha256Hex(body.password);
   const id = crypto.randomUUID();
@@ -117,10 +131,17 @@ app.post("/api/auth/register", async (c) => {
       .run();
   } catch (err: any) {
     if (String(err).includes("UNIQUE")) {
-      return c.json({ error: "Email 已被使用" }, 409);
+      return c.json({ error: "Email 宸茶浣跨敤" }, 409);
     }
-    return c.json({ error: "註冊失敗", detail: String(err) }, 500);
+    return c.json({ error: "瑷诲?澶辨?", detail: String(err) }, 500);
   }
+
+  const token = crypto.randomUUID();
+  
+  // ?插? token ?拌??欏韩
+  await c.env.DB.prepare(
+    "INSERT INTO tokens (id, user_id) VALUES (?, ?)"
+  ).bind(token, id).run();
 
   return c.json({
     user: publicUser({
@@ -134,15 +155,15 @@ app.post("/api/auth/register", async (c) => {
       user_class: userClass,
       billing_preference: billingPreference,
     }),
-    token: crypto.randomUUID(),
+    token,
   });
 });
 
-// 登入：支援 email 或 phone_number 為 identifier
+// ?诲叆锛氭敮??email ??phone_number ??identifier
 app.post("/api/auth/login", async (c) => {
   const body = await c.req.json<{ identifier?: string; password?: string }>();
   if (!body.identifier || !body.password) {
-    return c.json({ error: "identifier 與 password 必填" }, 400);
+    return c.json({ error: "identifier and password are required" }, 400);
   }
   const passwordHash = await sha256Hex(body.password);
   const user = await c.env.DB.prepare(
@@ -152,72 +173,20 @@ app.post("/api/auth/login", async (c) => {
     .first<UserRecord>();
 
   if (!user || user.password_hash !== passwordHash) {
-    return c.json({ error: "帳號或密碼錯誤" }, 401);
+    return c.json({ error: "Invalid credentials" }, 401);
   }
 
-  return c.json({ user: publicUser(user), token: crypto.randomUUID() });
+  const token = crypto.randomUUID();
+  
+  // ?插? token ?拌??欏韩
+  await c.env.DB.prepare(
+    "INSERT INTO tokens (id, user_id) VALUES (?, ?)"
+  ).bind(token, user.id).run();
+
+  return c.json({ user: publicUser(user), token });
 });
 
-// Update current customer profile (name/phone/address/billing preference)
-app.put("/api/customers/me", async (c) => {
-  const body = await c.req.json<{
-    user_id?: string;
-    user_name?: string;
-    phone_number?: string;
-    address?: string;
-    billing_preference?: string;
-  }>();
-
-  if (!body.user_id) {
-    return c.json({ error: "user_id is required" }, 400);
-  }
-
-  const fields: string[] = [];
-  const values: any[] = [];
-
-  if (body.user_name !== undefined) {
-    fields.push("user_name = ?");
-    values.push(body.user_name);
-  }
-  if (body.phone_number !== undefined) {
-    fields.push("phone_number = ?");
-    values.push(body.phone_number);
-  }
-  if (body.address !== undefined) {
-    fields.push("address = ?");
-    values.push(body.address);
-  }
-  if (body.billing_preference !== undefined) {
-    fields.push("billing_preference = ?");
-    values.push(body.billing_preference);
-  }
-
-  if (fields.length === 0) {
-    return c.json({ error: "No fields to update" }, 400);
-  }
-
-  values.push(body.user_id);
-  const sql = `UPDATE users SET ${fields.join(", ")} WHERE id = ?`;
-
-  const result = await c.env.DB.prepare(sql).bind(...values).run();
-  if (!result.meta || !("changes" in result.meta) || result.meta.changes === 0) {
-    return c.json({ error: "User not found" }, 404);
-  }
-
-  const updated = await c.env.DB.prepare(
-    "SELECT * FROM users WHERE id = ?",
-  )
-    .bind(body.user_id)
-    .first<UserRecord>();
-
-  if (!updated) {
-    return c.json({ error: "User not found" }, 404);
-  }
-
-  return c.json({ success: true, user: publicUser(updated) });
-});
-
-// 🆕 新增物流資料
+// ?? ?°ĺ??©ć?čł‡ć?
 app.post("/api/shipments", async (c) => {
   const data = await c.req.json();
   const id = data.id ?? crypto.randomUUID();
@@ -231,7 +200,7 @@ app.post("/api/shipments", async (c) => {
   return c.json({ id, message: "Shipment created" });
 });
 
-// 🔍 查詢物流資料
+// ?? ?Ąč©˘?©ć?čł‡ć?
 app.get("/api/shipments/:id", async (c) => {
   const id = c.req.param("id");
   const result = await c.env.DB.prepare(
@@ -253,9 +222,11 @@ openapi.delete("/api/tasks/:taskSlug", TaskDelete);
 // Map APIs
 openapi.get("/api/map", MapFetch);
 openapi.put("/api/map/edges/:id", MapEdgeUpdate);
+openapi.get("/api/map/route", MapRoute);
 
 // Package APIs (T3 & T4)
 openapi.post("/api/packages", PackageCreate);
+openapi.post("/api/packages/estimate", PackageEstimate);
 openapi.post("/api/packages/:packageId/events", PackageEventCreate);
 openapi.get("/api/packages/:packageId/status", PackageStatusQuery);
 openapi.get("/api/packages", PackageList);
@@ -263,6 +234,33 @@ openapi.get("/api/packages", PackageList);
 // Contract application (T5 1.5)
 openapi.post("/api/customers/contract-application", ContractApplicationCreate);
 openapi.get("/api/customers/contract-application/status", ContractApplicationStatus);
+
+// Auth APIs
+openapi.get("/api/auth/me", AuthMe);
+
+// Customer APIs
+openapi.put("/api/customers/me", CustomerUpdate);
+
+// Tracking APIs
+openapi.get("/api/tracking/search", TrackingSearch);
+openapi.get("/api/tracking/:trackingNumber", TrackingPublic);
+
+// Staff APIs
+openapi.get("/api/driver/tasks", DriverTaskList);
+openapi.post("/api/driver/packages/:packageId/status", DriverUpdateStatus);
+openapi.post("/api/warehouse/batch-operation", WarehouseBatchOperation);
+
+// Billing APIs
+openapi.get("/api/billing/bills", BillingBillList);
+openapi.get("/api/billing/bills/:billId", BillingBillDetail);
+openapi.post("/api/billing/payments", BillingPaymentCreate);
+openapi.get("/api/billing/payments", BillingPaymentList);
+
+// Admin APIs
+openapi.post("/api/admin/users", AdminUserCreate);
+openapi.get("/api/admin/contract-applications", AdminContractList);
+openapi.put("/api/admin/contract-applications/:id", AdminContractReview);
+openapi.get("/api/admin/system/errors", AdminSystemErrors);
 
 // Export the Hono app
 export default app;

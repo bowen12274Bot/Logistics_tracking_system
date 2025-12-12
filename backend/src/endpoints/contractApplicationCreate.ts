@@ -2,28 +2,25 @@ import { OpenAPIRoute, Str } from "chanfana";
 import { z } from "zod";
 import type { AppContext } from "../types";
 
+// POST /api/customers/contract-application - 客戶申請合約客戶
 export class ContractApplicationCreate extends OpenAPIRoute {
 	schema = {
 		tags: ["Customers"],
 		summary: "提交合約客戶申請",
-		description:
-			"將非合約客戶的申請資料寫入 contract_applications 資料表，供客服與管理員後續審核使用。",
+		security: [{ bearerAuth: [] }],
 		request: {
 			body: {
 				content: {
 					"application/json": {
 						schema: z.object({
-							customer_id: Str({
-								description: "客戶 ID（前端以目前登入使用者的 ID 帶入）",
-							}),
 							company_name: Str({ description: "公司名稱 / 抬頭" }),
 							tax_id: Str({ description: "統一編號" }),
 							contact_person: Str({ description: "聯絡人姓名" }),
 							contact_phone: Str({ description: "聯絡人電話" }),
-							billing_address: Str({ description: "開立發票用地址" }),
+							billing_address: Str({ description: "發票/帳單地址" }),
 							notes: Str({
 								required: false,
-								description: "備註或特殊需求（選填）",
+								description: "備註/特殊需求",
 							}),
 						}),
 					},
@@ -32,7 +29,7 @@ export class ContractApplicationCreate extends OpenAPIRoute {
 		},
 		responses: {
 			"200": {
-				description: "申請建立成功",
+				description: "申請成功",
 				content: {
 					"application/json": {
 						schema: z.object({
@@ -44,19 +41,31 @@ export class ContractApplicationCreate extends OpenAPIRoute {
 					},
 				},
 			},
-			"400": {
-				description: "輸入資料有誤或客戶不存在",
-			},
-			"403": {
-				description: "已是合約客戶，或已有待審或已核准的申請",
-			},
+			"400": { description: "輸入資料不完整" },
+			"401": { description: "未授權" },
+			"403": { description: "已是合約客戶或已有申請" },
 		},
 	};
 
 	async handle(c: AppContext) {
+		const authHeader = c.req.header("Authorization");
+		if (!authHeader || !authHeader.startsWith("Bearer ")) {
+			return c.json({ success: false, error: "Token missing" }, 401);
+		}
+
+		const token = authHeader.replace("Bearer ", "");
+		const tokenRecord = await c.env.DB.prepare(
+			"SELECT user_id FROM tokens WHERE id = ?",
+		)
+			.bind(token)
+			.first<{ user_id: string }>();
+
+		if (!tokenRecord) {
+			return c.json({ success: false, error: "Invalid token" }, 401);
+		}
+
 		const data = await this.getValidatedData<typeof this.schema>();
 		const {
-			customer_id,
 			company_name,
 			tax_id,
 			contact_person,
@@ -65,6 +74,8 @@ export class ContractApplicationCreate extends OpenAPIRoute {
 			notes,
 		} = data.body;
 
+		const customer_id = tokenRecord.user_id;
+
 		const customer = await c.env.DB.prepare(
 			"SELECT id, user_class, user_type FROM users WHERE id = ?",
 		)
@@ -72,7 +83,11 @@ export class ContractApplicationCreate extends OpenAPIRoute {
 			.first<{ id: string; user_class: string; user_type: string }>();
 
 		if (!customer) {
-			return c.json({ success: false, error: "Customer not found" }, 404);
+			return c.json({ success: false, error: "Customer not found" }, 401);
+		}
+
+		if (customer.user_type !== "customer") {
+			return c.json({ success: false, error: "Only customers can apply" }, 403);
 		}
 
 		if (customer.user_class === "contract_customer") {
@@ -123,8 +138,7 @@ export class ContractApplicationCreate extends OpenAPIRoute {
 			success: true,
 			application_id: id,
 			status: "pending",
-			message: "合約申請已送出，客服將盡快審核。",
+			message: "申請已送出，請等待審核",
 		});
 	}
 }
-
