@@ -24,11 +24,16 @@
 | `payments` | 單次付款紀錄 | `0003_payments.sql` |
 | `monthly_billing` | 月結帳單主檔 | `0004_monthly_billing.sql`, `0012_monthly_billing_add_columns.sql` |
 | `monthly_billing_items` | 月結帳單項目 | `0005_monthly_billing_items.sql` |
-| `nodes` | 虛擬地圖節點 | `0006_virtual_map.sql` |
-| `edges` | 虛擬地圖邊/道路 | `0006_virtual_map.sql` |
-| `contract_applications` | 合約客戶申請/審核 | `0007_contract_applications.sql`, `0011_contract_applications_add_columns.sql` |
+| `nodes` | 虛擬地圖節點 | `0006_virtual_map_schema.sql`, `0007_virtual_map_seed.sql` |
+| `edges` | 虛擬地圖邊/道路 | `0006_virtual_map_schema.sql`, `0007_virtual_map_seed.sql` |
+| `contract_applications` | 合約客戶申請/審核 | `0008_contract_applications.sql`, `0011_contract_applications_add_columns.sql` |
 | `tokens` | 認證 Token | `0010_tokens.sql` |
 | `system_errors` | 系統錯誤紀錄 | `0013_system_errors.sql` |
+
+**虛擬地圖 migrations 說明**
+
+- `0006_virtual_map_schema.sql`：建立 `nodes`、`edges` 兩張表與索引。
+- `0007_virtual_map_seed.sql`：由地圖產生器輸出的 seed/reseed 資料，會先清空 `nodes`、`edges` 再重新插入地圖。
 
 ---
 
@@ -452,4 +457,3 @@ erDiagram
 |------|------|------|
 | 1.0 | 2025-12-11 | 初版：建立核心 Schema（users/packages/events/payments/月結/地圖） |
 | 1.1 | 2025-12-11 | 補齊 API contract：新增 packages 補欄位、tokens、合約申請審核欄位、月結帳單狀態欄位、system_errors |
-

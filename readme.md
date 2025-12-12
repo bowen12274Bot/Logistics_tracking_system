@@ -37,7 +37,8 @@ Logistics_tracking_system/
 │  │      0003_payments.sql              # 支付紀錄
 │  │      0004_monthly_billing.sql       # 月結帳單
 │  │      0005_monthly_billing_items.sql # 帳單細項
-│  │      0006_virtual_map.sql           # 虛擬地圖數據 (Nodes/Edges)
+│  │      0006_virtual_map_schema.sql    # 虛擬地圖 Schema (Nodes/Edges tables)
+│  │      0007_virtual_map_seed.sql      # 虛擬地圖 seed data
 │  │
 │  └─src/
 │      │  index.ts      # [入口] App 初始化, Auth, CORS
@@ -154,7 +155,7 @@ Logistics_tracking_system/
 
 ### 資料庫 Schema
 
-地圖數據儲存於 `nodes` 與 `edges` 資料表中 (參見 `backend/migrations/0006_virtual_map.sql`)：
+地圖數據儲存於 `nodes` 與 `edges` 資料表中 (參見 `backend/migrations/0006_virtual_map_schema.sql`、`backend/migrations/0007_virtual_map_seed.sql`)：
 
 -   **nodes**: 節點資訊
     -   `id` (TEXT): 節點唯一識別碼
@@ -168,4 +169,3 @@ Logistics_tracking_system/
     -   `distance` (REAL): 兩點間距離
     -   `road_multiple` (INTEGER): 道路權重係數 (通常取決於兩端點中較低級別者的速度係數)
     -   `cost` (INTEGER): 運輸成本 (`distance * road_multiple`)
-

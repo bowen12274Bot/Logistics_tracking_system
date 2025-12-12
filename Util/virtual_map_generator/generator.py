@@ -1,10 +1,14 @@
 import random
 import math
+from pathlib import Path
+import argparse
 
 # ================= 設定區 =================
 SEED = 2025
 MAP_SIZE = 10000
-OUTPUT_SQL_FILE = "init_map.sql"
+# Default output SQL file (can be overridden by CLI --out).
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+OUTPUT_SQL_FILE = str(PROJECT_ROOT / "backend" / "migrations" / "0007_virtual_map_seed.sql")
 
 # 設定各層級
 CONFIG = {
@@ -192,7 +196,9 @@ def generate_data():
 def generate_sql_file(nodes, edges):
     print(f"正在寫入 SQL 檔案: {OUTPUT_SQL_FILE} ...")
 
-    with open(OUTPUT_SQL_FILE, "w", encoding="utf-8") as f:
+    out_path = Path(OUTPUT_SQL_FILE)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with out_path.open("w", encoding="utf-8") as f:
         # 1. 寫入 Schema
         f.write("-- Auto-generated Map Migration File\n")
         f.write("DROP TABLE IF EXISTS edges;\n")
@@ -230,5 +236,14 @@ def generate_sql_file(nodes, edges):
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Generate virtual map SQL seed file.")
+    parser.add_argument(
+        "--out",
+        help="Output SQL file path.",
+        default=OUTPUT_SQL_FILE,
+    )
+    args = parser.parse_args()
+    OUTPUT_SQL_FILE = args.out
+
     nodes, edges = generate_data()
     generate_sql_file(nodes, edges)
