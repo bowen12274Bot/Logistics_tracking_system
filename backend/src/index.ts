@@ -69,7 +69,7 @@ const openapi = fromHono(app, {
   docs_url: "/",
 });
 
-// CORS for local dev (?ç«¯ http://localhost:5173 ??Pages ?è¦½)
+// CORS for local dev (??癟竄簪 http://localhost:5173 ??Pages ??癡礎翻)
 app.use(
   "/*",
   cors({
@@ -90,7 +90,7 @@ app.get("/api/hello", (c) => {
   );
 });
 
-// è¨»å??°ä½¿?¨è€…ï?ä¸»è??ºå®¢?¶ï?
+// 癡穡罈疇??簞瓣翻聶?穡癡?砂污?瓣繡罈癡??繙疇簧瞽?繞簿?
 app.post("/api/auth/register", async (c) => {
   const body = await c.req.json<{
     user_name?: string;
@@ -107,7 +107,16 @@ app.post("/api/auth/register", async (c) => {
     return c.json({ error: "email, password, and user_name are required" }, 400);
   }
 
-  // 安全起見：register 只建立 customer 帳號，忽略 user_type/user_class
+  const email = body.email.trim().toLowerCase();
+  const userName = body.user_name.trim();
+  const phoneNumber = body.phone_number?.trim() || null;
+  const address = body.address?.trim() || null;
+
+  if (!email || !body.password || !userName) {
+    return c.json({ error: "email, password, and user_name are required" }, 400);
+  }
+
+  // 摰韏瑁?嚗egister ?芸遣蝡?customer 撣唾?嚗蕭??user_type/user_class
   const userType = "customer";
   const userClass = "non_contract_customer";
   const billingPreference = body.billing_preference ?? null;
@@ -115,15 +124,22 @@ app.post("/api/auth/register", async (c) => {
   const id = crypto.randomUUID();
 
   try {
+    const existing = await c.env.DB.prepare("SELECT 1 FROM users WHERE lower(email) = ? LIMIT 1")
+      .bind(email)
+      .first();
+    if (existing) {
+      return c.json({ error: "Email already exists" }, 409);
+    }
+
     await c.env.DB.prepare(
       "INSERT INTO users (id, user_name, phone_number, address, email, password_hash, user_type, user_class, billing_preference) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
       .bind(
         id,
-        body.user_name,
-        body.phone_number ?? null,
-        body.address ?? null,
-        body.email,
+        userName,
+        phoneNumber,
+        address,
+        email,
         passwordHash,
         userType,
         userClass,
@@ -132,25 +148,27 @@ app.post("/api/auth/register", async (c) => {
       .run();
   } catch (err: any) {
     if (String(err).includes("UNIQUE")) {
-      return c.json({ error: "Email 宸茶浣跨敤" }, 409);
+      return c.json({ error: "Email 摰貉?行童頝冽" }, 409);
     }
-    return c.json({ error: "瑷诲?澶辨?", detail: String(err) }, 500);
+    return c.json({ error: "?瑁租?瞉嗉儘?", detail: String(err) }, 500);
   }
 
   const token = crypto.randomUUID();
-  
-  // ?插? token ?拌??欏韩
-  await c.env.DB.prepare(
-    "INSERT INTO tokens (id, user_id) VALUES (?, ?)"
-  ).bind(token, id).run();
+
+  // ??? token ????甈
+  try {
+    await c.env.DB.prepare("INSERT INTO tokens (id, user_id) VALUES (?, ?)").bind(token, id).run();
+  } catch (err: any) {
+    return c.json({ error: "Auth token storage failed", detail: String(err) }, 500);
+  }
 
   return c.json({
     user: publicUser({
       id,
-      user_name: body.user_name,
-      phone_number: body.phone_number ?? null,
-      address: body.address ?? null,
-      email: body.email,
+      user_name: userName,
+      phone_number: phoneNumber,
+      address,
+      email,
       password_hash: passwordHash,
       user_type: userType,
       user_class: userClass,
@@ -160,17 +178,17 @@ app.post("/api/auth/register", async (c) => {
   });
 });
 
-// ?诲叆锛氭敮??email ??phone_number ??identifier
+// ?霂脣??鬼???email ??phone_number ??identifier
 app.post("/api/auth/login", async (c) => {
   const body = await c.req.json<{ identifier?: string; password?: string }>();
   if (!body.identifier || !body.password) {
     return c.json({ error: "identifier and password are required" }, 400);
   }
+
+  const identifier = body.identifier.trim();
   const passwordHash = await sha256Hex(body.password);
-  const user = await c.env.DB.prepare(
-    "SELECT * FROM users WHERE email = ? OR phone_number = ?",
-  )
-    .bind(body.identifier, body.identifier)
+  const user = await c.env.DB.prepare("SELECT * FROM users WHERE lower(email) = ? OR phone_number = ?")
+    .bind(identifier.toLowerCase(), identifier)
     .first<UserRecord>();
 
   if (!user || user.password_hash !== passwordHash) {
@@ -178,16 +196,18 @@ app.post("/api/auth/login", async (c) => {
   }
 
   const token = crypto.randomUUID();
-  
-  // ?插? token ?拌??欏韩
-  await c.env.DB.prepare(
-    "INSERT INTO tokens (id, user_id) VALUES (?, ?)"
-  ).bind(token, user.id).run();
+
+  // ??? token ????甈
+  try {
+    await c.env.DB.prepare("INSERT INTO tokens (id, user_id) VALUES (?, ?)").bind(token, user.id).run();
+  } catch (err: any) {
+    return c.json({ error: "Auth token storage failed", detail: String(err) }, 500);
+  }
 
   return c.json({ user: publicUser(user), token });
 });
 
-// ?? ?°ĺ??©ć?čł‡ć?
+// ?? ?簞贍??穢?????＿?
 app.post("/api/shipments", async (c) => {
   const data = await c.req.json();
   const id = data.id ?? crypto.randomUUID();
@@ -201,14 +221,10 @@ app.post("/api/shipments", async (c) => {
   return c.json({ id, message: "Shipment created" });
 });
 
-// ?? ?Ąč©˘?©ć?čł‡ć?
+// ?? ???穢??穢?????＿?
 app.get("/api/shipments/:id", async (c) => {
   const id = c.req.param("id");
-  const result = await c.env.DB.prepare(
-    "SELECT * FROM shipments WHERE id = ?",
-  )
-    .bind(id)
-    .first();
+  const result = await c.env.DB.prepare("SELECT * FROM shipments WHERE id = ?").bind(id).first();
 
   if (!result) return c.json({ error: "Not found" }, 404);
   return c.json(result);
