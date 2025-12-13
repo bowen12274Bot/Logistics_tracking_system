@@ -155,7 +155,11 @@ export type MapResponse = {
   edges: MapEdge[];
 };
 
-const baseUrl = (import.meta.env.VITE_API_BASE ?? "http://localhost:8787").replace(/\/+$/, "");
+// API base URL:
+// - Dev: 預設打本機 wrangler dev (http://localhost:8787)
+// - Prod: 建議用 VITE_API_BASE 指到 Cloudflare Worker；沒設定時 fallback 同網域 (Pages/自架反向代理)
+const fallbackBaseUrl = import.meta.env.DEV ? "http://localhost:8787" : window.location.origin;
+const baseUrl = (import.meta.env.VITE_API_BASE ?? fallbackBaseUrl).replace(/\/+$/, "");
 
 const AUTH_STORAGE_KEY = "logisim-auth";
 
