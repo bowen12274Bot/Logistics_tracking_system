@@ -138,6 +138,6 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          projectName: logistics_tracking_system
+          projectName: logistics-tracking-system
           directory: ./frontend/dist
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
