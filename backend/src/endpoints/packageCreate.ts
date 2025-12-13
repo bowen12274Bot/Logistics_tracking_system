@@ -269,7 +269,26 @@ export class PackageCreate extends OpenAPIRoute {
 					createdAt,
 				)
 				.run();
+
+			const initialEventId = crypto.randomUUID();
+			await c.env.DB.prepare(
+				"INSERT INTO package_events (id, package_id, delivery_status, delivery_details, events_at, location) VALUES (?, ?, ?, ?, ?, ?)"
+			)
+				.bind(
+					initialEventId,
+					packageId,
+					"created",
+					"託運單已建立，等待司機取件",
+					createdAt,
+					normalizedSenderAddress || null
+				)
+				.run();
 		} catch (err: any) {
+			try {
+				await c.env.DB.prepare("DELETE FROM packages WHERE id = ?").bind(packageId).run();
+			} catch {
+				// ignore rollback failure
+			}
 			return c.json({ success: false, error: "Failed to create package", detail: String(err) }, 500);
 		}
 

@@ -52,6 +52,38 @@ describe("包裹管理 (Package)", () => {
       expect(data.package.tracking_number).toBeDefined();
     });
 
+    it("PKG-CREATE-002: 建立包裹後會自動寫入一筆 created 事件", async () => {
+      const { status: createStatus, data: created } = await authenticatedRequest<any>(
+        "/api/packages",
+        customerToken,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            customer_id: customerId,
+            sender: "Sender",
+            receiver: "Receiver",
+            size: "small",
+            delivery_time: "standard",
+            payment_type: "prepaid",
+          }),
+        }
+      );
+
+      expect(createStatus).toBe(200);
+      expect(created.success).toBe(true);
+      expect(created.package?.id).toBeDefined();
+
+      const { status: queryStatus, data: statusData } = await apiRequest<any>(
+        `/api/packages/${created.package.id}/status`
+      );
+
+      expect(queryStatus).toBe(200);
+      expect(statusData.success).toBe(true);
+      expect(Array.isArray(statusData.events)).toBe(true);
+      expect(statusData.events.length).toBeGreaterThan(0);
+      expect(statusData.events[0].delivery_status).toBe("created");
+    });
+
     it("PKG-CREATE-012: 驗證 tracking_number 格式", async () => {
       const { status, data } = await authenticatedRequest<any>(
         "/api/packages",
