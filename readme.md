@@ -1,5 +1,6 @@
 # 物流追蹤系統 (Logistics Tracking System)
 
+![CI/CD](https://github.com/bowen12274Bot/Logistics_tracking_system/workflows/CI%2FCD/badge.svg)
 ![Backend Tests](https://img.shields.io/badge/backend%20tests-95%20passed-brightgreen)
 ![Frontend](https://img.shields.io/badge/frontend-Vue%203-42b883)
 ![Backend](https://img.shields.io/badge/backend-Cloudflare%20Workers-f38020)
@@ -17,6 +18,7 @@
 | [測試計畫](docs/vitest-plan.md) | Vitest 測試案例規劃 |
 | [開發環境設定](docs/getting-started.md) | 詳細的開發環境設定指南 |
 | [測試指南](docs/testing-guide.md) | 測試執行與報告說明 |
+| [CI/CD 設定指南](docs/ci-cd-guide.md) | GitHub Actions 與 Cloudflare 部署設定 |
 | [貢獻指南](docs/contributing.md) | 協作規範與 PR 流程 |
 
 ---
