@@ -49,5 +49,11 @@ export const useAuthStore = defineStore('auth', {
       this.persist(res)
       return res.user
     },
+    setUser(user: User) {
+      this.user = user
+      if (this.token) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({ user, token: this.token }))
+      }
+    },
   },
 })

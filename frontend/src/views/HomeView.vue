@@ -10,9 +10,9 @@ const highlights = [
 ]
 
 const roles = [
-  { title: '客戶', to: '/customer', detail: '排程取件、寄件、追蹤、付款。' },
+  { title: '客戶', to: '/customer', detail: '排程寄件、追蹤、付款、合約申請。' },
   { title: '司機', to: '/employee/driver', detail: '區內路線，紀錄事件與貨到付款。' },
-  { title: '倉儲', to: '/employee/warehouse', detail: '站/中心掃描與分揀事件。' },
+  { title: '倉儲', to: '/employee/warehouse', detail: '配送站/配送中心掃描與分揀事件。' },
   { title: '管理員', to: '/admin', detail: '設定服務規則、價格、虛擬地圖。' },
 ]
 </script>
@@ -21,19 +21,15 @@ const roles = [
   <section class="page-shell page-hero">
     <div class="hero-grid">
       <div class="hero-copy">
-        <p class="eyebrow">物流模擬</p>
-        <h1>模擬取件、轉運、計費與配送</h1>
+        <p class="eyebrow">物流模擬系統</p>
+        <h1>模擬建立寄件、轉運、配送</h1>
         <p class="lede">
-          以虛擬四環地圖，為客戶與員工打造的角色式物流實驗室。
+          以虛擬地圖，模擬真實世界的貨物流動。
         </p>
         <div class="hero-actions">
-          <RouterLink to="/login" class="primary-btn">開啟控制台</RouterLink>
+          <RouterLink to="/map" class="primary-btn">虛擬地圖</RouterLink>
           <RouterLink to="/customer/track" class="ghost-btn">追蹤包裹</RouterLink>
-        </div>
-        <div class="mini-stats">
-          <div><strong>4</strong><span>環</span></div>
-          <div><strong>區域</strong><span>車隊不跨區</span></div>
-          <div><strong>帳務</strong><span>預付 / 貨到付款 / 月結</span></div>
+          <RouterLink to="/shipping/estimate" class="ghost-btn">計算運費</RouterLink>
         </div>
       </div>
 
