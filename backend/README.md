@@ -2,174 +2,231 @@
 
 此目錄包含物流追蹤系統的後端程式碼，使用 Cloudflare Workers + Hono 建構。
 
-## 🚀 快速開始
+---
 
-### 安裝依賴
-```bash
+## 🚀 快速開始 (Quick Start)
+
+### 安裝依賴 (Install Dependencies)
+
+```powershell
 npm install
 ```
 
-### 啟動開發伺服器
-```bash
+### 產生型別定義 (Generate Types)
+
+```powershell
+wrangler types
+```
+
+### 初始化資料庫 (Initialize Database)
+
+```powershell
+# 套用資料庫遷移 (Migrations) 到本地模擬器
+npx wrangler d1 migrations apply DB --local
+```
+
+### 啟動開發伺服器 (Start Development Server)
+
+```powershell
 npm run dev
 # 或
 wrangler dev
 ```
+
 啟動後，Swagger UI 文件位於: http://localhost:8787/
 
-### 初始化資料庫
-```bash
-# 建立 Type 定義
-wrangler types
+---
 
-# 套用資料庫遷移 (本地)
-npx wrangler d1 migrations apply DB --local
-```
+## 📡 API 列表 (API Endpoints)
+
+所有 API 均以 `/api` 開頭。詳細規格請參考 [API 契約文件](../docs/api-contract.md)。
+
+### 🔐 認證模組 (Auth Module)
+
+| Method | Endpoint | 描述 | 認證 |
+|--------|----------|------|------|
+| `POST` | `/api/auth/register` | 客戶註冊 | ❌ |
+| `POST` | `/api/auth/login` | 使用者登入 | ❌ |
+| `GET` | `/api/auth/me` | 取得當前使用者資訊 | ✅ |
 
 ---
 
-## 📡 API 列表
+### 👤 客戶模組 (Customer Module)
 
-所有 API 均以 `/api` 開頭。
-
-### 🔐 認證 (Auth)
-
-| Method | Endpoint | 描述 |
-| :--- | :--- | :--- |
-| `POST` | `/api/auth/register` | 註冊新使用者 |
-| `POST` | `/api/auth/login` | 使用者登入 |
-
-#### 使用範例
-
-**註冊**
-```bash
-curl -X POST http://localhost:8787/api/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{"user_name": "John", "email": "john@example.com", "password": "secret123"}'
-```
-
-**登入**
-```bash
-curl -X POST http://localhost:8787/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"identifier": "john@example.com", "password": "secret123"}'
-```
+| Method | Endpoint | 描述 | 認證 |
+|--------|----------|------|------|
+| `PUT` | `/api/customers/me` | 更新客戶資料 | ✅ |
+| `POST` | `/api/customers/contract-application` | 申請成為合約客戶 | ✅ |
 
 ---
 
-### 🗺️ 虛擬地圖 (Virtual Map)
+### 📦 包裹模組 (Package Module)
 
-| Method | Endpoint | 描述 |
-| :--- | :--- | :--- |
-| `GET` | `/api/map` | 取得完整地圖資訊 (Nodes + Edges) |
-| `PUT` | `/api/map/edges/:id` | 更新特定路徑的權重 (Cost/Road Multiple) |
-
-#### 使用範例
-
-**取得地圖**
-```bash
-curl http://localhost:8787/api/map
-```
-
-**更新路徑成本**
-```bash
-curl -X PUT http://localhost:8787/api/map/edges/1 \
-  -H "Content-Type: application/json" \
-  -d '{"cost": 500, "road_multiple": 2}'
-```
+| Method | Endpoint | 描述 | 認證 |
+|--------|----------|------|------|
+| `POST` | `/api/packages` | 建立包裹/寄件 | ✅ |
+| `POST` | `/api/packages/estimate` | 運費試算 | ❌ |
+| `GET` | `/api/packages` | 查詢包裹列表 | ✅ |
+| `GET` | `/api/packages/:id/status` | 查詢包裹狀態與事件歷程 | ✅ |
+| `POST` | `/api/packages/:id/events` | 建立貨態事件 | ✅ |
 
 ---
 
-### 📦 物流 (Shipments)
+### 📍 追蹤模組 (Tracking Module)
 
-| Method | Endpoint | 描述 |
-| :--- | :--- | :--- |
-| `POST` | `/api/shipments` | 建立新物流單 |
-| `GET` | `/api/shipments/:id` | 查詢物流單 |
-
-#### 使用範例
-
-**建立物流單**
-```bash
-curl -X POST http://localhost:8787/api/shipments \
-  -H "Content-Type: application/json" \
-  -d '{"sender": "Alice", "receiver": "Bob"}'
-```
-
-**查詢物流單**
-```bash
-curl http://localhost:8787/api/shipments/{id}
-```
+| Method | Endpoint | 描述 | 認證 |
+|--------|----------|------|------|
+| `GET` | `/api/tracking/:trackingNumber` | 公開追蹤查詢 | ❌ |
+| `GET` | `/api/tracking/search` | 進階追蹤搜尋（員工用） | ✅ |
 
 ---
 
-### 📦 包裹追蹤 (Packages) - T3 & T4
+### 🗺️ 地圖模組 (Map Module)
 
-| Method | Endpoint | 描述 |
-| :--- | :--- | :--- |
-| `POST` | `/api/packages` | Create package draft (T2) |
-| `GET` | `/api/packages` | 取得包裹列表 (可依 customer_id 篩選) |
-| `GET` | `/api/packages/:id/status` | 查詢包裹狀態與事件歷程 (T4) |
-| `POST` | `/api/packages/:id/events` | 建立貨態事件 (T3) |
-
-#### 使用範例
-
-**查詢包裹列表**
-```bash
-curl http://localhost:8787/api/packages
-curl http://localhost:8787/api/packages?customer_id=xxx
-```
-
-**查詢包裹狀態 (T4)**
-```bash
-curl http://localhost:8787/api/packages/{packageId}/status
-```
-
-**建立包裹 (T2)**
-```bash
-curl -X POST http://localhost:8787/api/packages \
-  -H "Content-Type: application/json" \
-  -d '{"sender": "Alice", "receiver": "Bob", "size": "medium", "delivery_time": "standard", "payment_type": "prepaid"}'
-```
-
-**建立貨態事件 (T3)**
-```bash
-curl -X POST http://localhost:8787/api/packages/{packageId}/events \
-  -H "Content-Type: application/json" \
-  -d '{"delivery_status": "收件", "location": "HUB_0"}'
-```
+| Method | Endpoint | 描述 | 認證 |
+|--------|----------|------|------|
+| `GET` | `/api/map` | 取得地圖節點與邊 | ❌ |
+| `GET` | `/api/map/route` | 路線成本計算 | ❌ |
+| `PUT` | `/api/map/edges/:id` | 更新地圖邊資料 | ✅ (admin) |
 
 ---
 
-### 📋 任務 (Tasks) - 範例
+### 💰 計費模組 (Billing Module)
 
-| Method | Endpoint | 描述 |
-| :--- | :--- | :--- |
-| `GET` | `/api/tasks` | 取得任務列表 |
-| `POST` | `/api/tasks` | 建立新任務 |
-| `GET` | `/api/tasks/:slug` | 取得特定任務 |
-| `DELETE` | `/api/tasks/:slug` | 刪除任務 |
+| Method | Endpoint | 描述 | 認證 |
+|--------|----------|------|------|
+| `GET` | `/api/billing/bills` | 查詢帳單列表 | ✅ |
+| `GET` | `/api/billing/bills/:billId` | 查詢帳單明細 | ✅ |
+| `POST` | `/api/billing/payments` | 付款 | ✅ |
+| `GET` | `/api/billing/payments` | 查詢付款紀錄 | ✅ |
 
 ---
 
-## 🧪 測試
+### 🚗 駕駛員模組 (Driver Module)
 
-本專案使用 **Vitest** 搭配 `@cloudflare/vitest-pool-workers` 進行單元測試。
+| Method | Endpoint | 描述 | 認證 |
+|--------|----------|------|------|
+| `GET` | `/api/driver/tasks` | 取得今日工作清單 | ✅ (driver) |
+| `POST` | `/api/driver/packages/:packageId/status` | 更新配送狀態 | ✅ (driver) |
 
-### 執行測試
-```bash
+---
+
+### 🏭 倉儲模組 (Warehouse Module)
+
+| Method | Endpoint | 描述 | 認證 |
+|--------|----------|------|------|
+| `POST` | `/api/warehouse/batch-operation` | 批次入庫/出庫 | ✅ (warehouse) |
+
+---
+
+### ⚙️ 管理員模組 (Admin Module)
+
+| Method | Endpoint | 描述 | 認證 |
+|--------|----------|------|------|
+| `POST` | `/api/admin/users` | 建立員工帳號 | ✅ (admin) |
+| `GET` | `/api/admin/contract-applications` | 查詢合約申請列表 | ✅ (admin/cs) |
+| `PUT` | `/api/admin/contract-applications/:id` | 審核合約申請 | ✅ (admin/cs) |
+| `GET` | `/api/admin/system/errors` | 查詢系統錯誤紀錄 | ✅ (admin) |
+
+---
+
+## 🧪 測試 (Testing)
+
+本專案使用 **Vitest** 搭配 `@cloudflare/vitest-pool-workers` 進行單元測試與整合測試。
+
+### 執行測試 (Run Tests)
+
+```powershell
 npm test
 ```
 
-### 測試覆蓋範圍
-- ✅ Hello API (`/api/hello`)
-- ✅ 認證 API (Register, Login)
-- ✅ 地圖 API (Fetch, Update Edge)
-- ✅ 包裹追蹤 API (T3, T4)
-- ⏭️ 物流 API (Skipped - 資料表尚未建立)
-- ✅ 任務 API (List)
+### 測試檔案結構 (Test File Structure)
 
-### 測試檔案位置
 ```
-backend/src/index.test.ts
+backend/src/
+├── index.test.ts           # 主要整合測試
+└── __tests__/
+    ├── helpers.ts          # 測試輔助函式 (Test Helpers)
+    ├── auth.test.ts        # 認證模組測試
+    ├── packages.test.ts    # 包裹模組測試
+    ├── tracking.test.ts    # 追蹤模組測試
+    ├── map.test.ts         # 地圖模組測試
+    ├── billing.test.ts     # 計費模組測試
+    ├── admin.test.ts       # 管理員模組測試
+    ├── customer.test.ts    # 客戶模組測試
+    └── staff.test.ts       # 員工模組測試
 ```
+
+### 測試覆蓋範圍 (Test Coverage)
+
+| 模組 | 狀態 | 說明 |
+|------|------|------|
+| 認證 API (Auth) | ✅ Passed | Register, Login, Me |
+| 包裹 API (Package) | ✅ Passed | Create, List, Status, Events |
+| 追蹤 API (Tracking) | ✅ Passed | Public, Search |
+| 地圖 API (Map) | ✅ Passed | Fetch, Route, Update Edge |
+| 計費 API (Billing) | ✅ Passed | Bills, Payments |
+| 管理員 API (Admin) | ✅ Passed | Users, Contracts, Errors |
+| 客戶 API (Customer) | ✅ Passed | Update, Contract Application |
+| 員工 API (Staff) | ✅ Passed | Driver Tasks, Warehouse Ops |
+
+### 執行特定測試 (Run Specific Tests)
+
+```powershell
+# 執行特定檔案
+npm test -- src/__tests__/auth.test.ts
+
+# 執行符合模式的測試
+npm test -- --grep "AUTH-REG"
+
+# 監看模式 (Watch Mode)
+npm test -- --watch
+```
+
+---
+
+## 📁 資料庫遷移 (Database Migrations)
+
+遷移檔案位於 `migrations/` 目錄：
+
+| 檔案 | 說明 |
+|------|------|
+| `0000_users.sql` | 使用者表 (users) |
+| `0001_packages.sql` | 包裹表 (packages) |
+| `0002_package_events.sql` | 物流事件表 (package_events) |
+| `0003_payments.sql` | 付款表 (payments) |
+| `0004_monthly_billing.sql` | 月結帳單表 (monthly_billing) |
+| `0005_monthly_billing_items.sql` | 帳單明細表 |
+| `0006_virtual_map.sql` | 虛擬地圖 (nodes/edges) |
+| `0007_packages_add_columns.sql` | packages 新增欄位 |
+| `0008_users_add_columns.sql` | users 新增欄位 |
+| `0009_tokens.sql` | 認證 Token 表 |
+| `0010_contract_applications.sql` | 合約申請表 |
+| `0011_monthly_billing_add_columns.sql` | monthly_billing 新增欄位 |
+| `0012_system_errors.sql` | 系統錯誤表 |
+
+### 套用遷移 (Apply Migrations)
+
+```powershell
+# 本地開發
+npx wrangler d1 migrations apply DB --local
+
+# 正式環境
+npx wrangler d1 migrations apply DB --remote
+```
+
+### 使用 Python 腳本 (Optional)
+
+```powershell
+# 使用 micromamba 虛擬環境
+micromamba activate SE_class
+python apply_migrations.py
+```
+
+---
+
+## 📚 相關文件 (Related Documentation)
+
+- [API 契約文件](../docs/api-contract.md) - 完整 API 規格
+- [資料庫結構](../docs/database-schema.md) - 表格與欄位定義
+- [測試計畫](../docs/vitest-plan.md) - 測試案例規劃
