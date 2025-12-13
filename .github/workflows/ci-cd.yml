@@ -38,14 +38,14 @@ jobs:
       
       - name: 🚀 啟動後端開發服務器
         working-directory: ./backend
-        run: npm run dev
-          
-      - name: 等待十秒
-        run: sleep 10
+        run: |
+          npm run dev &
+          echo "Waiting for server to start..."
+          sleep 10
       
       - name: 🧪 執行後端測試
         working-directory: ./backend
-        run: npm test --run
+        run: npm test -- --run
 
   # ========================================
   # 前端測試 (Frontend Tests)
