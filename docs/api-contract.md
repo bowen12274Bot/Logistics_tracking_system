@@ -12,6 +12,7 @@
 - [4. 地圖與路線模組 (Map & Routing)](#4-地圖與路線模組-map--routing)
 - [5. 金流模組 (Payment Module)](#5-金流模組-payment-module)
 - [6. 超級使用者管理模組 (Super User Management)](#6-超級使用者管理模組-super-user-management)
+- [7. 異常與任務模組（規劃中） (Exceptions & Tasks)](#7-異常與任務模組規劃中-exceptions--tasks)
 
 ---
 
@@ -39,13 +40,14 @@ Authorization: Bearer <token>
 
 ### 使用者角色
 
-| 角色 | user_type | 說明 |
-|------|-----------|------|
-| 客戶 | `customer` | 一般寄件/收件客戶 |
-| 客服人員 | `customer_service` | 處理客戶問題、手動更新貨態、回應合約申請 |
-| 倉儲人員 | `warehouse` | 入庫/出庫/分揀操作 |
-| 駕駛員 | `driver` | 取件/配送/貨態更新 |
-| 管理員 | `admin` | 系統管理、帳號管理 |
+| 角色 | user_type | user_class | 說明 |
+|------|-----------|------------|------|
+| 客戶（非合約） | `customer` | `non_contract_customer` | 一般寄件/收件客戶 |
+| 客戶（合約/月結） | `customer` | `contract_customer` | 月結客戶 |
+| 客服人員 | `employee` | `customer_service` | 處理異常池、協助查詢/更正貨態、回應合約申請 |
+| 倉儲人員 | `employee` | `warehouse_staff` | 入站/分揀/轉運作業、改路徑、異常申報 |
+| 駕駛員 | `employee` | `driver` | 取件/配送、貨態更新、到付收款、異常申報 |
+| 管理員 | `employee` | `admin` | 系統管理、帳號管理 |
 
 ### 角色類型 (user_class)
 
@@ -54,7 +56,7 @@ Authorization: Bearer <token>
 | `non_contract_customer` | 非合約客戶 |
 | `contract_customer` | 合約客戶 |
 | `customer_service` | 客服人員 |
-| `warehouse` | 倉儲人員 |
+| `warehouse_staff` | 倉儲人員 |
 | `driver` | 駕駛員 |
 | `admin` | 管理員 |
 ---
@@ -358,7 +360,7 @@ Authorization: Bearer <token>
 | **位置** | `POST /api/warehouse/batch-operation` |
 | **功能** | 批次處理入庫/出庫/分揀 |
 | **認證** | ✅ 需要 Token |
-| **權限** | `warehouse` |
+| **權限** | `warehouse_staff` |
 
 #### 輸入格式 (Request Body)
 
@@ -679,7 +681,7 @@ Authorization: Bearer <token>
 | **位置** | `POST /api/packages/:packageId/events` |
 | **功能** | 新增包裹追蹤事件（供員工/系統使用） |
 | **認證** | ✅ 需要 Token |
-| **權限** | `driver`、`warehouse`、`customer_service`、`admin` |
+| **權限** | `driver`、`warehouse_staff`、`customer_service`、`admin` |
 
 #### 輸入格式
 
@@ -739,7 +741,7 @@ Authorization: Bearer <token>
 | **位置** | `GET /api/tracking/search` |
 | **功能** | 多條件搜尋包裹（員工用） |
 | **認證** | ✅ 需要 Token |
-| **權限** | `customer_service`、`warehouse`、`admin` |
+| **權限** | `customer_service`、`warehouse_staff`、`admin` |
 
 #### 輸入格式 (Query Parameters)
 
@@ -1059,7 +1061,7 @@ Authorization: Bearer <token>
   "email": "string",
   "password": "string",
   "phone_number": "string",
-  "user_type": "customer_service | warehouse | driver | admin"
+  "user_class": "customer_service | warehouse_staff | driver | admin"
 }
 ```
 
@@ -1116,12 +1118,90 @@ Authorization: Bearer <token>
 }
 ```
 
+## 7. 異常與任務模組（規劃中） (Exceptions & Tasks)
+
+> 本章節為配合 `todoList.md` 新增的「異常池 / 司機任務 / 司機車輛移動 / 倉儲改路徑」需求，先整理規劃中的 API 介面；落地後再補齊完整 request/response schema。
+
+### 7.1 異常池（客服）
+
+| 項目 | 說明 |
+|------|------|
+| **位置** | `GET /api/cs/exceptions` |
+| **功能** | 異常池列表（未處理/已處理） |
+| **認證** | ✅ 需要 Token |
+| **權限** | `customer_service` |
+
+| 項目 | 說明 |
+|------|------|
+| **位置** | `POST /api/cs/exceptions/:exceptionId/handle` |
+| **功能** | 將異常標示已處理並填寫處理報告 |
+| **認證** | ✅ 需要 Token |
+| **權限** | `customer_service` |
+
+### 7.2 異常申報（司機/倉儲）
+
+| 項目 | 說明 |
+|------|------|
+| **位置** | `POST /api/driver/packages/:packageId/exception` |
+| **功能** | 司機異常申報：建立異常紀錄並將包裹狀態更新為 `exception`（同時寫入事件） |
+| **認證** | ✅ 需要 Token |
+| **權限** | `driver` |
+
+| 項目 | 說明 |
+|------|------|
+| **位置** | `POST /api/warehouse/packages/:packageId/exception` |
+| **功能** | 倉儲異常申報：建立異常紀錄並將包裹狀態更新為 `exception`（同時寫入事件） |
+| **認證** | ✅ 需要 Token |
+| **權限** | `warehouse_staff` |
+
+### 7.3 司機任務與車輛移動
+
+| 項目 | 說明 |
+|------|------|
+| **位置** | `POST /api/driver/tasks/:taskId/accept` |
+| **功能** | 司機接受/開始任務（任務狀態推進） |
+| **認證** | ✅ 需要 Token |
+| **權限** | `driver` |
+
+| 項目 | 說明 |
+|------|------|
+| **位置** | `POST /api/driver/tasks/:taskId/complete` |
+| **功能** | 司機完成任務：推進包裹貨態、到付可回報實收，包裹上車時所在地可更新為貨車編號 |
+| **認證** | ✅ 需要 Token |
+| **權限** | `driver` |
+
+| 項目 | 說明 |
+|------|------|
+| **位置** | `GET /api/driver/vehicle` |
+| **功能** | 取得司機車輛狀態（home/current/vehicle_code） |
+| **認證** | ✅ 需要 Token |
+| **權限** | `driver` |
+
+| 項目 | 說明 |
+|------|------|
+| **位置** | `POST /api/driver/vehicle/move` |
+| **功能** | 司機在地圖上移動到相鄰節點（後端檢查 `edges` 相鄰） |
+| **認證** | ✅ 需要 Token |
+| **權限** | `driver` |
+
+### 7.4 倉儲改路徑
+
+| 項目 | 說明 |
+|------|------|
+| **位置** | `PATCH /api/warehouse/packages/:packageId/route` |
+| **功能** | 以系統計算路徑為建議，允許倉儲員修改包裹後續配送路徑（更新 `packages.route_path`） |
+| **認證** | ✅ 需要 Token |
+| **權限** | `warehouse_staff` |
+
+---
+
 ## 附錄：Package 狀態機
 
 ```
 created → picked_up → in_transit → sorting → warehouse_in 
     → warehouse_out → out_for_delivery → delivered
                                       ↘ exception
+（規劃中：分揀轉運處理/待貨車轉運 等轉運狀態會再擴充）
 ```
 
 ---
@@ -1135,4 +1215,3 @@ created → picked_up → in_transit → sorting → warehouse_in
 | 2.1 | 2025-12-10 | 修正：1) 所有 API 增加 403 錯誤處理 2) weight 改為選填 3) content_description 改為必填 4) limit 增加範圍限制 5) 簡化路線 API 6) 計費模組增加月結客戶說明 |
 | 3.0 | 2025-12-10 | 依照類別圖的模組重寫，將系統區重新分為6個模組。修改部分說明使其更符合目前的專案狀況。|
 | 3.1 | 2025-12-13 | 文件整理：更新 README、新增開發指南與測試指南 |
-
