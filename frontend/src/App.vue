@@ -67,6 +67,9 @@ const roleNav = computed(() => {
 <style scoped>
 .app-shell {
   width: 100%;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 
 .topbar {
@@ -133,10 +136,15 @@ const roleNav = computed(() => {
   padding: 10px 16px;
   border-radius: 999px;
   font-weight: 700;
+  background: rgba(244, 182, 194, 0.4);
+  border-color: rgba(244, 182, 194, 0.55);
+  color: #3f2620;
 }
 
 .content {
   padding: 28px 0 72px;
+  background: #fff8f2;
+  flex: 1;
 }
 
 .content-inner {

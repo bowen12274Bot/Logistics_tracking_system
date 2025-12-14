@@ -2,6 +2,7 @@
 import { reactive, ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
+import type { User } from '../services/api'
 
 type Mode = 'login' | 'register'
 type TestAccount = { email: string; password: string; role: string }
@@ -31,13 +32,29 @@ const switchMode = (next: Mode) => {
   statusMessage.value = ''
 }
 
+const getDefaultRouteForUser = (user: User | null | undefined) => {
+  const role = user?.user_class
+  if (!role) return '/'
+
+  if (role === 'contract_customer' || role === 'non_contract_customer') return '/customer'
+
+  const map: Record<string, string> = {
+    driver: '/employee/driver',
+    warehouse_staff: '/employee/warehouse',
+    customer_service: '/employee/customer-service',
+    admin: '/admin',
+  }
+
+  return map[role] ?? '/'
+}
+
 const handleLogin = async () => {
   loading.value = true
   statusMessage.value = ''
   try {
-    await auth.login({ ...loginForm })
-    const redirect = (route.query.redirect as string) ?? '/customer'
-    router.push(redirect)
+    const loggedInUser = await auth.login({ ...loginForm })
+    const redirect = route.query.redirect as string | undefined
+    router.push(redirect ?? getDefaultRouteForUser(loggedInUser))
   } catch (err: any) {
     statusMessage.value = err.message || '登入失敗'
   } finally {
