@@ -2,6 +2,7 @@
 import { RouterLink, RouterView } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { useAuthStore } from './stores/auth'
+import { computed } from 'vue'
 
 const auth = useAuthStore()
 const { user, isLoggedIn } = storeToRefs(auth)
@@ -9,6 +10,24 @@ const { user, isLoggedIn } = storeToRefs(auth)
 const logout = () => {
   auth.logout()
 }
+
+const roleNav = computed(() => {
+  const role = user.value?.user_class
+  if (!role) return null
+
+  if (role === 'contract_customer' || role === 'non_contract_customer') {
+    return { to: '/customer', label: '客戶' }
+  }
+
+  const map: Record<string, { to: string; label: string }> = {
+    driver: { to: '/employee/driver', label: '司機' },
+    warehouse_staff: { to: '/employee/warehouse', label: '倉儲' },
+    customer_service: { to: '/employee/customer-service', label: '客服' },
+    admin: { to: '/admin', label: '管理' },
+  }
+
+  return map[role] ?? null
+})
 </script>
 
 <template>
@@ -21,17 +40,15 @@ const logout = () => {
 
       <nav class="nav-links">
         <RouterLink to="/">總覽</RouterLink>
-        <RouterLink to="/login">登入</RouterLink>
-        <RouterLink to="/customer">客戶</RouterLink>
-        <RouterLink to="/employee/driver">司機</RouterLink>
-        <RouterLink to="/admin">管理</RouterLink>
+        <RouterLink v-if="!isLoggedIn" to="/login">登入</RouterLink>
+        <button v-else class="nav-btn" type="button" @click="logout">登出</button>
+        <RouterLink v-if="isLoggedIn && roleNav" :to="roleNav.to">{{ roleNav.label }}</RouterLink>
       </nav>
 
       <div class="topbar-actions">
         <div v-if="isLoggedIn" class="user-chip">
           <span class="user-name">{{ user?.user_name }}</span>
           <span class="user-role">{{ user?.user_class }}</span>
-          <button class="ghost-btn small-btn" type="button" @click="logout">登出</button>
         </div>
         <RouterLink v-else to="/login" class="primary-btn small-btn">開啟控制台</RouterLink>
       </div>
@@ -95,6 +112,23 @@ const logout = () => {
   padding: 6px 10px;
   border-radius: 10px;
   transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.nav-links .nav-btn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: #7b5344;
+  padding: 6px 10px;
+  border-radius: 10px;
+  font: inherit;
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.nav-links .nav-btn:hover {
+  background: rgba(255, 255, 255, 0.35);
+  color: #3f2620;
 }
 
 .nav-links a.router-link-active {
