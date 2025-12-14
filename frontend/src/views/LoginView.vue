@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { reactive, ref, watch, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import type { User } from '../services/api'
@@ -14,6 +14,26 @@ const route = useRoute()
 const statusMessage = ref('')
 const loading = ref(false)
 
+const syncModeFromRoute = () => {
+  const q = (route.query.mode as string | undefined) ?? ''
+  if (route.path === '/register' || q === 'register') mode.value = 'register'
+  else mode.value = 'login'
+}
+
+onMounted(syncModeFromRoute)
+watch(() => [route.path, route.query.mode], syncModeFromRoute)
+
+const switchMode = (next: Mode) => {
+  mode.value = next
+  statusMessage.value = ''
+  const redirect = route.query.redirect as string | undefined
+  if (next === 'register') {
+    router.replace({ path: '/register', query: redirect ? { redirect } : undefined })
+  } else {
+    router.replace({ path: '/login', query: redirect ? { redirect } : undefined })
+  }
+}
+
 const loginForm = reactive({
   identifier: '',
   password: '',
@@ -27,9 +47,21 @@ const registerForm = reactive({
   address: '',
 })
 
-const switchMode = (next: Mode) => {
-  mode.value = next
-  statusMessage.value = ''
+const quickAccounts = [
+  { email: 'customer@example.com', password: 'customer123', role: '客戶' },
+  { email: 'driver@example.com', password: 'driver123', role: '司機' },
+  { email: 'warehouse@example.com', password: 'warehouse123', role: '倉儲' },
+  { email: 'cs@example.com', password: 'cs123', role: '客服' },
+  { email: 'admin@example.com', password: 'admin123', role: '管理員' },
+]
+
+const roleHomeByCurrentUser = () => {
+  const r = auth.user?.user_class
+  if (r === 'admin') return '/admin'
+  if (r === 'customer_service') return '/employee/customer-service'
+  if (r === 'warehouse_staff') return '/employee/warehouse'
+  if (r === 'driver') return '/employee/driver'
+  return '/customer'
 }
 
 const getDefaultRouteForUser = (user: User | null | undefined) => {
@@ -49,31 +81,46 @@ const getDefaultRouteForUser = (user: User | null | undefined) => {
 }
 
 const handleLogin = async () => {
-  loading.value = true
   statusMessage.value = ''
+  loading.value = true
+
+  // ✅ 強制清掉舊登入狀態（避免 admin 殘留）
+  auth.logout()
+
   try {
     const loggedInUser = await auth.login({ ...loginForm })
     const redirect = route.query.redirect as string | undefined
     router.push(redirect ?? getDefaultRouteForUser(loggedInUser))
   } catch (err: any) {
-    statusMessage.value = err.message || '登入失敗'
+    statusMessage.value = err?.message ?? '帳號或密碼錯誤'
   } finally {
     loading.value = false
   }
 }
 
 const handleRegister = async () => {
-  loading.value = true
   statusMessage.value = ''
+  loading.value = true
+
+  // ✅ 強制清掉舊登入狀態
+  auth.logout()
+
   try {
     await auth.register({
-      ...registerForm,
+      user_name: registerForm.user_name,
+      email: registerForm.email,
+      password: registerForm.password,
+      phone_number: registerForm.phone_number || undefined,
+      address: registerForm.address || undefined,
       user_type: 'customer',
       user_class: 'non_contract_customer',
     })
-    router.push('/customer')
+
+    // ✅ 註冊完成後：若有 redirect 就回去，沒有就去客戶首頁
+    const redirect = (route.query.redirect as string) ?? '/customer'
+    await router.push(redirect)
   } catch (err: any) {
-    statusMessage.value = err.message || '註冊失敗'
+    statusMessage.value = err?.message ?? '註冊失敗，請稍後再試'
   } finally {
     loading.value = false
   }

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { RouterLink, RouterView } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { useAuthStore } from './stores/auth'
@@ -115,7 +116,6 @@ const roleNav = computed(() => {
 
 .nav-links {
   display: flex;
-  gap: 14px;
   align-items: center;
   font-size: 14px;
   justify-self: center;
@@ -176,7 +176,38 @@ const roleNav = computed(() => {
 
 .user-role {
   font-size: 12px;
-  opacity: 0.8;
+  opacity: 0.7;
+}
+
+.primary-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+  padding: 10px 14px;
+  text-decoration: none;
+  color: #2f2a24;
+  background: rgba(255, 182, 193, 0.55);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  transition: transform 0.15s ease;
+}
+
+.primary-btn:hover {
+  transform: translateY(-1px);
+}
+
+.ghost-btn {
+  background: transparent;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 12px;
+  padding: 8px 10px;
+  cursor: pointer;
+  color: #2f2a24;
+}
+
+.small-btn {
+  font-size: 12px;
+  padding: 6px 10px;
 }
 
 @media (max-width: 768px) {
