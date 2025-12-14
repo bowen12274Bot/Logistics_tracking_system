@@ -3,12 +3,15 @@ import { RouterLink, RouterView } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { useAuthStore } from './stores/auth'
 import { computed } from 'vue'
+import { useRouter } from 'vue-router'
 
 const auth = useAuthStore()
 const { user, isLoggedIn } = storeToRefs(auth)
+const router = useRouter()
 
 const logout = () => {
   auth.logout()
+  router.push('/')
 }
 
 const roleNav = computed(() => {
