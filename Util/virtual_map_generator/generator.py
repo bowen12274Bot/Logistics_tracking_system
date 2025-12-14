@@ -1,44 +1,43 @@
 import random
 import math
+from pathlib import Path
+import argparse
 
 # ================= 設定區 =================
 SEED = 2025
 MAP_SIZE = 10000
-OUTPUT_SQL_FILE = "init_map.sql"
+# Default output SQL file (can be overridden by CLI --out).
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+OUTPUT_SQL_FILE = str(PROJECT_ROOT / "backend" / "migrations" / "0007_virtual_map_seed.sql")
 
-# 設定各層級
+# 設定各層級 (3 層: HUB -> REG -> END)
 CONFIG = {
     1: {
-        "count": 4,
+        "count": 6,
         "name": "HUB",
         "speed_factor": 0.5,
         "parent_dist_min": 0,
         "parent_dist_max": 0,
-        "spacing": 4000,
+        "spacing": 2000,
     },
     2: {
-        "count": 12,
+        "count": 27,
         "name": "REG",
         "speed_factor": 1.0,
-        "parent_dist_min": 1500,
-        "parent_dist_max": 2500,
+        "parent_dist_min": 800,
+        "parent_dist_max": 2000,
         "spacing": 1500,
     },
     3: {
-        "count": 30,
-        "name": "LOC",
-        "speed_factor": 2.0,
-        "parent_dist_min": 800,
-        "parent_dist_max": 1500,
-        "spacing": 600,
-    },
-    4: {
-        "count": 300,
+        "count": 100,
         "name": "END",
         "speed_factor": 5.0,
         "parent_dist_min": 200,
         "parent_dist_max": 600,
-        "spacing": 100,
+        "spacing": 300,
+        # Level 3 (END) can be different endpoint types.
+        # Keys are subtype labels, values are relative weights.
+        "subtypes": {"home": 0.7, "store": 0.3},
     },
 }
 # =========================================
@@ -47,13 +46,21 @@ random.seed(SEED)
 
 
 class Node:
-    def __init__(self, uid, level, parent_id, x, y):
-        self.id = str(uid)
+    def __init__(self, node_id, level, parent_id, x, y, subtype=None):
+        self.id = str(node_id)
         self.level = level
         self.parent_id = str(parent_id) if parent_id is not None else None
         self.x = x
         self.y = y
-        self.name = f"{CONFIG[level]['name']}_{uid}"
+        self.subtype = subtype
+        self.name = self.id
+
+
+def pick_end_subtype():
+    subtypes = CONFIG[3].get("subtypes") or {"home": 1.0}
+    labels = list(subtypes.keys())
+    weights = list(subtypes.values())
+    return random.choices(labels, weights=weights, k=1)[0]
 
 
 def distance_sq(x1, y1, x2, y2):
@@ -73,8 +80,10 @@ def is_valid_position(x, y, existing_nodes, min_spacing):
 def generate_data():
     nodes = []
     edges = []
-    nodes_by_level = {1: [], 2: [], 3: [], 4: []}
-    node_counter = 0
+    nodes_by_level = {1: [], 2: [], 3: []}
+    hub_counter = 0
+    reg_counter = 0
+    end_counters = {"home": 0, "store": 0}
 
     print("正在生成節點...")
 
@@ -84,14 +93,15 @@ def generate_data():
         x = random.randint(0, MAP_SIZE)
         y = random.randint(0, MAP_SIZE)
         if is_valid_position(x, y, nodes, CONFIG[1]["spacing"]):
-            node = Node(node_counter, 1, None, x, y)
+            node_id = f"HUB_{hub_counter}"
+            node = Node(node_id, 1, None, x, y)
             nodes.append(node)
             nodes_by_level[1].append(node)
-            node_counter += 1
+            hub_counter += 1
         attempts += 1
 
-    # Level 2-4 Generation
-    for lvl in [2, 3, 4]:
+    # Level 2-3 Generation (REG, END)
+    for lvl in [2, 3]:
         target_count = CONFIG[lvl]["count"]
         parent_candidates = nodes_by_level[lvl - 1]
         failures = 0
@@ -107,10 +117,18 @@ def generate_data():
             new_y = int(parent.y + dist_range * math.sin(angle))
 
             if is_valid_position(new_x, new_y, nodes, CONFIG[lvl]["spacing"]):
-                node = Node(node_counter, lvl, parent.id, new_x, new_y)
+                subtype = pick_end_subtype() if lvl == 3 else None
+                if lvl == 2:
+                    node_id = f"REG_{reg_counter}"
+                    reg_counter += 1
+                else:
+                    end_index = end_counters[subtype]
+                    node_id = f"END_{subtype.upper()}_{end_index}"
+                    end_counters[subtype] += 1
+
+                node = Node(node_id, lvl, parent.id, new_x, new_y, subtype=subtype)
                 nodes.append(node)
                 nodes_by_level[lvl].append(node)
-                node_counter += 1
                 current_count += 1
 
                 # Create Edge Logic
@@ -155,7 +173,8 @@ def generate_data():
             )
 
     print("正在生成橫向連接...")
-    for lvl in [2, 3]:
+    # Only REG nodes have lateral connections in 3-layer map.
+    for lvl in [2]:
         curr_nodes = nodes_by_level[lvl]
         try_limit = len(curr_nodes) * 2
         for _ in range(try_limit):
@@ -192,14 +211,16 @@ def generate_data():
 def generate_sql_file(nodes, edges):
     print(f"正在寫入 SQL 檔案: {OUTPUT_SQL_FILE} ...")
 
-    with open(OUTPUT_SQL_FILE, "w", encoding="utf-8") as f:
+    out_path = Path(OUTPUT_SQL_FILE)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with out_path.open("w", encoding="utf-8") as f:
         # 1. 寫入 Schema
         f.write("-- Auto-generated Map Migration File\n")
         f.write("DROP TABLE IF EXISTS edges;\n")
         f.write("DROP TABLE IF EXISTS nodes;\n\n")
 
         f.write(
-            "CREATE TABLE nodes (id TEXT PRIMARY KEY, name TEXT, level INTEGER, x INTEGER, y INTEGER);\n"
+            "CREATE TABLE nodes (id TEXT PRIMARY KEY, name TEXT, level INTEGER, subtype TEXT, x INTEGER, y INTEGER);\n"
         )
         f.write(
             "CREATE TABLE edges (id INTEGER PRIMARY KEY AUTOINCREMENT, source TEXT, target TEXT, distance REAL, road_multiple INTEGER, cost INTEGER, FOREIGN KEY(source) REFERENCES nodes(id), FOREIGN KEY(target) REFERENCES nodes(id));\n"
@@ -210,8 +231,9 @@ def generate_sql_file(nodes, edges):
         f.write("-- Seed Nodes\n")
         for n in nodes:
             # 使用 SQL 轉義防止錯誤 (雖然這裡ID都是數字)
+            subtype_val = f"'{n.subtype}'" if n.subtype is not None else "NULL"
             f.write(
-                f"INSERT INTO nodes (id, name, level, x, y) VALUES ('{n.id}', '{n.name}', {n.level}, {n.x}, {n.y});\n"
+                f"INSERT INTO nodes (id, name, level, subtype, x, y) VALUES ('{n.id}', '{n.name}', {n.level}, {subtype_val}, {n.x}, {n.y});\n"
             )
 
         # 3. 寫入 Edges 數據 (雙向寫入)
@@ -230,5 +252,14 @@ def generate_sql_file(nodes, edges):
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Generate virtual map SQL seed file.")
+    parser.add_argument(
+        "--out",
+        help="Output SQL file path.",
+        default=OUTPUT_SQL_FILE,
+    )
+    args = parser.parse_args()
+    OUTPUT_SQL_FILE = args.out
+
     nodes, edges = generate_data()
     generate_sql_file(nodes, edges)
