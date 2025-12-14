@@ -1,48 +1,49 @@
 <script setup lang="ts">
-import { computed } from "vue";
-import { RouterLink, RouterView, useRouter } from "vue-router";
-import { storeToRefs } from "pinia";
-import { useAuthStore } from "./stores/auth";
+import { RouterLink, RouterView } from 'vue-router'
+import { storeToRefs } from 'pinia'
+import { useAuthStore } from './stores/auth'
+import { computed } from 'vue'
+import { useRouter } from 'vue-router'
 
-const auth = useAuthStore();
-const { user, isLoggedIn } = storeToRefs(auth);
-const router = useRouter();
+const auth = useAuthStore()
+const { user, isLoggedIn } = storeToRefs(auth)
+const router = useRouter()
 
 const logout = () => {
-  auth.logout();
-  router.push("/");
-};
+  auth.logout()
+  router.push('/')
+}
 
 const roleNav = computed(() => {
-  const role = user.value?.user_class;
-  if (!role) return null;
+  const role = user.value?.user_class
+  if (!role) return null
 
-  if (role === "contract_customer" || role === "non_contract_customer") {
-    return { to: "/customer", label: "客戶" };
+  if (role === 'contract_customer' || role === 'non_contract_customer') {
+    return { to: '/customer', label: '客戶' }
   }
 
   const map: Record<string, { to: string; label: string }> = {
-    driver: { to: "/employee/driver", label: "司機" },
-    warehouse_staff: { to: "/employee/warehouse", label: "倉管" },
-    customer_service: { to: "/employee/customer-service", label: "客服" },
-    admin: { to: "/admin", label: "管理" },
-  };
+    driver: { to: '/employee/driver', label: '司機' },
+    warehouse_staff: { to: '/employee/warehouse', label: '倉儲' },
+    customer_service: { to: '/employee/customer-service', label: '客服' },
+    admin: { to: '/admin', label: '管理' },
+  }
 
-  return map[role] ?? null;
-});
+  return map[role] ?? null
+})
 </script>
 
 <template>
   <div class="app-shell">
     <header class="topbar">
       <div class="topbar-inner">
-        <RouterLink to="/" class="brand" aria-label="LogiSim 首頁">
+        <RouterLink to="/" class="brand" aria-label="回到總覽">
           <span class="brand-mark">LogiSim</span>
-          <span class="brand-sub">物流追蹤</span>
+          <span class="brand-sub">物流系統</span>
         </RouterLink>
 
-        <nav class="nav-links" aria-label="主選單">
-          <RouterLink to="/">首頁</RouterLink>
+        <nav class="nav-links" aria-label="主導覽">
+          <RouterLink to="/">總覽</RouterLink>
           <RouterLink v-if="!isLoggedIn" to="/login">登入</RouterLink>
           <RouterLink v-if="isLoggedIn && roleNav" :to="roleNav.to">{{ roleNav.label }}</RouterLink>
         </nav>
@@ -53,7 +54,7 @@ const roleNav = computed(() => {
             <span class="user-role">{{ user?.user_class }}</span>
             <button class="ghost-btn small-btn" type="button" @click="logout">登出</button>
           </div>
-          <RouterLink v-else to="/login" class="primary-btn small-btn">開始使用</RouterLink>
+          <RouterLink v-else to="/login" class="primary-btn small-btn">開啟控制台</RouterLink>
         </div>
       </div>
     </header>
@@ -114,6 +115,7 @@ const roleNav = computed(() => {
 
 .nav-links {
   display: flex;
+  gap: 14px;
   align-items: center;
   font-size: 14px;
   justify-self: center;
@@ -128,6 +130,15 @@ const roleNav = computed(() => {
 }
 
 .nav-links a.router-link-active {
+  background: rgba(244, 182, 194, 0.4);
+  border-color: rgba(244, 182, 194, 0.55);
+  color: #3f2620;
+}
+
+.small-btn {
+  padding: 10px 16px;
+  border-radius: 999px;
+  font-weight: 700;
   background: rgba(244, 182, 194, 0.4);
   border-color: rgba(244, 182, 194, 0.55);
   color: #3f2620;
@@ -165,38 +176,7 @@ const roleNav = computed(() => {
 
 .user-role {
   font-size: 12px;
-  opacity: 0.7;
-}
-
-.primary-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 14px;
-  padding: 10px 14px;
-  text-decoration: none;
-  color: #2f2a24;
-  background: rgba(255, 182, 193, 0.55);
-  border: 1px solid rgba(0, 0, 0, 0.06);
-  transition: transform 0.15s ease;
-}
-
-.primary-btn:hover {
-  transform: translateY(-1px);
-}
-
-.ghost-btn {
-  background: transparent;
-  border: 1px solid rgba(0, 0, 0, 0.12);
-  border-radius: 12px;
-  padding: 8px 10px;
-  cursor: pointer;
-  color: #2f2a24;
-}
-
-.small-btn {
-  font-size: 12px;
-  padding: 6px 10px;
+  opacity: 0.8;
 }
 
 @media (max-width: 768px) {
@@ -216,4 +196,3 @@ const roleNav = computed(() => {
   }
 }
 </style>
-
