@@ -14,37 +14,22 @@ import EmployeeCustomerServiceView from '../views/EmployeeCustomerServiceView.vu
 import AdminView from '../views/AdminView.vue'
 import VirtualMapView from '../views/VirtualMapView.vue'
 import ShippingEstimateView from '../views/ShippingEstimateView.vue'
+import type { Role } from '../types/router'
 import { useAuthStore } from '../stores/auth'
 
-/** ✅ 統一放角色常數，避免打錯字 */
+// Route access control by role
 const CUSTOMER_ROLES = ['contract_customer', 'non_contract_customer'] as const
 const DRIVER_ROLES = ['driver'] as const
 const WAREHOUSE_ROLES = ['warehouse_staff'] as const
 const CS_ROLES = ['customer_service'] as const
 const ADMIN_ROLES = ['admin'] as const
 
-type Role =
-  | (typeof CUSTOMER_ROLES)[number]
-  | (typeof DRIVER_ROLES)[number]
-  | (typeof WAREHOUSE_ROLES)[number]
-  | (typeof CS_ROLES)[number]
-  | (typeof ADMIN_ROLES)[number]
-
-declare module 'vue-router' {
-  interface RouteMeta {
-    roles?: readonly Role[]
-  }
-}
-
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
     { path: '/', name: 'home', component: HomeView },
-
     { path: '/login', name: 'login', component: LoginView },
     { path: '/register', name: 'register', component: LoginView },
-
-
     { path: '/map', name: 'virtual-map', component: VirtualMapView },
     { path: '/shipping/estimate', name: 'shipping-estimate', component: ShippingEstimateView },
 
@@ -116,31 +101,21 @@ const router = createRouter({
       component: AdminView,
       meta: { roles: ADMIN_ROLES },
     },
-
   ],
 })
 
 router.beforeEach((to) => {
   const auth = useAuthStore()
-
-
-  // ✅ meta.roles 可能不存在，先安全取值
   const requiredRoles = (to.meta?.roles as readonly Role[] | undefined) ?? []
 
-  // ✅ 不需要登入的頁面（沒有 roles）直接放行
   if (requiredRoles.length === 0) return true
-
-  // ✅ 需要登入但未登入 → 去登入頁，並帶 redirect
 
   if (!auth.isLoggedIn) {
     return { path: '/login', query: { redirect: to.fullPath } }
   }
 
-
-  // ✅ 已登入但角色不符 → 導回首頁
   const role = (auth.user?.user_class ?? '') as Role | ''
   if (!requiredRoles.includes(role as Role)) {
-
     return { path: '/' }
   }
 
