@@ -3,143 +3,164 @@ import { computed } from 'vue'
 import { RouterLink, RouterView } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { useAuthStore } from './stores/auth'
+import { computed } from 'vue'
+import { useRouter } from 'vue-router'
 
 const auth = useAuthStore()
 const { user, isLoggedIn } = storeToRefs(auth)
+const router = useRouter()
 
-const logout = () => auth.logout()
+const logout = () => {
+  auth.logout()
+  router.push('/')
+}
 
-/** 依角色回傳：導覽上要顯示的文字 */
-const roleNavLabel = computed(() => {
-  const r = user.value?.user_class
-  if (r === 'admin') return '管理員'
-  if (r === 'customer_service') return '客服'
-  if (r === 'warehouse_staff') return '倉儲'
-  if (r === 'driver') return '司機'
-  if (r === 'contract_customer' || r === 'non_contract_customer') return '客戶'
-  return '我的介面'
-})
+const roleNav = computed(() => {
+  const role = user.value?.user_class
+  if (!role) return null
 
-/** 依角色回傳：點導覽要前往的路由 */
-const roleHomePath = computed(() => {
-  const r = user.value?.user_class
-  if (r === 'admin') return '/admin'
-  if (r === 'customer_service') return '/employee/customer-service'
-  if (r === 'warehouse_staff') return '/employee/warehouse'
-  if (r === 'driver') return '/employee/driver'
-  return '/customer'
+  if (role === 'contract_customer' || role === 'non_contract_customer') {
+    return { to: '/customer', label: '客戶' }
+  }
+
+  const map: Record<string, { to: string; label: string }> = {
+    driver: { to: '/employee/driver', label: '司機' },
+    warehouse_staff: { to: '/employee/warehouse', label: '倉儲' },
+    customer_service: { to: '/employee/customer-service', label: '客服' },
+    admin: { to: '/admin', label: '管理' },
+  }
+
+  return map[role] ?? null
 })
 </script>
 
 <template>
   <div class="app-shell">
     <header class="topbar">
-      <RouterLink to="/" class="brand">
-        <span class="brand-mark">LogiSim</span>
-        <span class="brand-sub">物流系統</span>
-      </RouterLink>
+      <div class="topbar-inner">
+        <RouterLink to="/" class="brand" aria-label="回到總覽">
+          <span class="brand-mark">LogiSim</span>
+          <span class="brand-sub">物流系統</span>
+        </RouterLink>
 
-      <nav class="nav-links">
-        <RouterLink to="/">總覽</RouterLink>
+        <nav class="nav-links" aria-label="主導覽">
+          <RouterLink to="/">總覽</RouterLink>
+          <RouterLink v-if="!isLoggedIn" to="/login">登入</RouterLink>
+          <RouterLink v-if="isLoggedIn && roleNav" :to="roleNav.to">{{ roleNav.label }}</RouterLink>
+        </nav>
 
-        <!-- 🔓 未登入：只顯示 總覽 / 登入 / 註冊 -->
-        <template v-if="!isLoggedIn">
-          <RouterLink to="/login">登入</RouterLink>
-          <RouterLink to="/register">註冊</RouterLink>
-        </template>
-
-        <!-- 🔐 已登入：顯示「客戶/司機/倉儲/客服/管理員」(依角色變動) -->
-        <template v-else>
-          <RouterLink :to="roleHomePath">{{ roleNavLabel }}</RouterLink>
-        </template>
-      </nav>
-
-      <div class="topbar-actions">
-        <div v-if="isLoggedIn" class="user-chip">
-          <span class="user-name">{{ user?.user_name }}</span>
-          <span class="user-role">{{ user?.user_class }}</span>
-          <button class="ghost-btn small-btn" type="button" @click="logout">登出</button>
+        <div class="topbar-actions">
+          <div v-if="isLoggedIn" class="user-chip">
+            <span class="user-name">{{ user?.user_name }}</span>
+            <span class="user-role">{{ user?.user_class }}</span>
+            <button class="ghost-btn small-btn" type="button" @click="logout">登出</button>
+          </div>
+          <RouterLink v-else to="/login" class="primary-btn small-btn">開啟控制台</RouterLink>
         </div>
-        <RouterLink v-else to="/login" class="primary-btn small-btn">開啟控制台</RouterLink>
       </div>
     </header>
 
     <main class="content">
-      <RouterView />
+      <div class="content-inner">
+        <RouterView />
+      </div>
     </main>
   </div>
 </template>
 
 <style scoped>
 .app-shell {
+  width: 100%;
   min-height: 100vh;
-  background: #fff8f2;
+  display: flex;
+  flex-direction: column;
 }
 
 .topbar {
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--text-main);
+  border-bottom: 1px solid rgba(165, 122, 99, 0.18);
   position: sticky;
   top: 0;
+  backdrop-filter: blur(14px);
   z-index: 20;
-  display: flex;
+}
+
+.topbar-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 14px 20px;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  justify-content: space-between;
-  gap: 18px;
-  padding: 16px 20px;
-  background: rgba(255, 255, 255, 0.75);
-  backdrop-filter: blur(10px);
-  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  gap: 14px;
 }
 
 .brand {
-  display: inline-flex;
-  align-items: baseline;
+  display: flex;
+  align-items: center;
   gap: 10px;
-  text-decoration: none;
-  color: #2f2a24;
+  color: inherit;
+  justify-self: start;
 }
 
 .brand-mark {
   font-weight: 800;
-  letter-spacing: 0.2px;
+  letter-spacing: 0.02em;
 }
 
 .brand-sub {
-  font-size: 13px;
-  opacity: 0.7;
+  font-size: 12px;
+  opacity: 0.75;
 }
 
 .nav-links {
   display: flex;
   align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
+  font-size: 14px;
+  justify-self: center;
 }
 
 .nav-links a {
-  text-decoration: none;
-  color: #4a4036;
-  padding: 8px 10px;
-  border-radius: 12px;
-  transition: background 0.15s ease, transform 0.15s ease;
+  color: var(--text-main);
+  padding: 9px 14px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 .nav-links a.router-link-active {
-  background: rgba(255, 182, 193, 0.35);
+  background: rgba(244, 182, 194, 0.4);
+  border-color: rgba(244, 182, 194, 0.55);
+  color: #3f2620;
 }
 
-.nav-links a:hover {
-  background: rgba(233, 210, 180, 0.35);
-  transform: translateY(-1px);
+.small-btn {
+  padding: 10px 16px;
+  border-radius: 999px;
+  font-weight: 700;
+  background: rgba(244, 182, 194, 0.4);
+  border-color: rgba(244, 182, 194, 0.55);
+  color: #3f2620;
 }
 
 .content {
-  margin-top: 28px;
+  padding: 28px 0 72px;
+  background: #fff8f2;
+  flex: 1;
+}
+
+.content-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 20px;
 }
 
 .topbar-actions {
   display: flex;
   align-items: center;
   gap: 10px;
+  justify-self: end;
 }
 
 .user-chip {
@@ -147,14 +168,10 @@ const roleHomePath = computed(() => {
   align-items: center;
   gap: 8px;
   padding: 8px 10px;
-  background: rgba(233, 210, 180, 0.25);
-  border: 1px solid rgba(0, 0, 0, 0.06);
-  border-radius: 14px;
-}
-
-.user-name {
-  font-weight: 700;
-  font-size: 13px;
+  border-radius: 999px;
+  border: 1px solid rgba(165, 122, 99, 0.22);
+  background: rgba(255, 255, 255, 0.7);
+  color: var(--text-main);
 }
 
 .user-role {
@@ -194,15 +211,19 @@ const roleHomePath = computed(() => {
 }
 
 @media (max-width: 768px) {
-  .topbar {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 12px;
+  .topbar-inner {
+    grid-template-columns: 1fr;
+    justify-items: start;
   }
 
   .nav-links {
     flex-wrap: wrap;
     justify-content: flex-start;
+    justify-self: start;
+  }
+
+  .topbar-actions {
+    justify-self: start;
   }
 }
 </style>

@@ -41,113 +41,135 @@
 此專案採用前後端分離架構 (Monorepo)，以下為實際檔案結構：
 
 ```text
-Logistics_tracking_system/
+logistics-system/               # Repo 根目錄
 │  .gitignore                    # Git 忽略檔案設定
 │  readme.md                     # 本文件
 │  todoList.md                   # 待辦事項清單
 │
+├─.github/                       # GitHub Actions / PR 設定
+│  └─workflows/                  # CI/CD workflows（自動測試/部署）
+│
 ├─backend/                       # [後端] Cloudflare Workers + Hono + Chanfana
-│  │  wrangler.jsonc             # Workers 設定檔
+│  │  README.md                  # 後端文件與 API 列表
+│  │  wrangler.jsonc             # Workers 設定檔（JSONC）
+│  │  wrangler.toml              # Workers 設定檔（TOML）
+│  │  worker-configuration.d.ts  # wrangler types 產生的型別
 │  │  package.json               # 依賴套件設定
+│  │  package-lock.json          # 依賴鎖檔
+│  │  tsconfig.json              # TS 設定
 │  │  vitest.config.ts           # Vitest 測試設定
 │  │  apply_migrations.py        # 資料庫遷移腳本 (Python)
 │  │
-│  ├─migrations/        # [資料庫模型]
-│  │      0000_users.sql                 # 使用者表
-│  │      0001_packages.sql              # 包裹表
-│  │      0002_package_events.sql        # 物流事件
-│  │      0003_payments.sql              # 支付紀錄
-│  │      0004_monthly_billing.sql       # 月結帳單
-│  │      0005_monthly_billing_items.sql # 帳單細項
-│  │      0006_virtual_map_schema.sql    # 虛擬地圖 Schema (Nodes/Edges tables)
-│  │      0007_virtual_map_seed.sql      # 虛擬地圖 seed data
+│  ├─migrations/                 # [資料庫模型]
+│  │      0000_users.sql                 # users + 預設帳號 seed
+│  │      0001_packages.sql              # packages（包裹主檔）
+│  │      0002_package_events.sql        # package_events（貨態事件）
+│  │      0003_payments.sql              # payments（費用/付款）
+│  │      0004_monthly_billing.sql       # monthly_billing（月結帳單主檔）
+│  │      0005_monthly_billing_items.sql # monthly_billing_items（帳單明細）
+│  │      0006_virtual_map_schema.sql    # nodes/edges schema（虛擬地圖）
+│  │      0007_virtual_map_seed.sql      # nodes/edges seed（虛擬地圖資料）
+│  │      0008_contract_applications.sql # contract_applications（合約申請）
+│  │      0009_tokens.sql                # tokens（登入 token）
+│  │      0010_system_errors.sql         # system_errors（系統錯誤/紀錄）
 │  │
-│  └─src/
-│      │  index.ts               # [入口] App 初始化、認證 (Auth)、CORS
+│  └─src/                        # 後端程式碼（Worker source）
+│      │  index.ts               # API 路由註冊（OpenAPI）
+│      │  types.ts               # OpenAPI schema 與共用型別
 │      │  index.test.ts          # 主要整合測試
-│      │  types.ts               # 型別定義 (Type Definitions)
 │      │
 │      ├─endpoints/              # [API 端點 (Endpoints)]
-│      │      adminContracts.ts      # 合約審核 API
-│      │      adminErrors.ts         # 系統錯誤查詢 API
-│      │      adminUsers.ts          # 員工帳號管理 API
-│      │      authMe.ts              # 當前使用者 API
-│      │      billingBills.ts        # 帳單查詢 API
-│      │      billingPayments.ts     # 付款 API
-│      │      contractApplication.ts # 合約申請 API
-│      │      customerUpdate.ts      # 客戶資料更新 API
-│      │      driverTasks.ts         # 駕駛員任務 API
-│      │      mapFetch.ts            # 地圖查詢 API
-│      │      mapRoute.ts            # 路線計算 API
-│      │      mapUpdate.ts           # 地圖更新 API
-│      │      packageCreate.ts       # 建立包裹 API
-│      │      packageEstimate.ts     # 運費試算 API
-│      │      packageEventCreate.ts  # 貨態事件 API
-│      │      packageStatusQuery.ts  # 包裹狀態查詢 API
-│      │      trackingPublic.ts      # 公開追蹤 API
-│      │      trackingSearch.ts      # 進階追蹤搜尋 API
-│      │      warehouseOperations.ts # 倉儲操作 API
-│      │      task*.ts               # 範例任務 API
+│      │      authMe.ts                    # GET /api/auth/me
+│      │      packageCreate.ts             # POST /api/packages
+│      │      packageStatusQuery.ts        # GET /api/packages/:id/status、GET /api/packages
+│      │      packageEventCreate.ts        # POST /api/packages/:id/events
+│      │      packageEstimate.ts           # POST /api/packages/estimate
+│      │      trackingPublic.ts            # GET /api/tracking/:trackingNumber
+│      │      trackingSearch.ts            # GET /api/tracking/search（員工用）
+│      │      mapFetch.ts                  # GET /api/map
+│      │      mapRoute.ts                  # GET /api/map/route
+│      │      mapUpdate.ts                 # PUT /api/map/edges/:id（admin）
+│      │      driverTasks.ts               # 司機工作清單/貨態更新
+│      │      warehouseOperations.ts       # 倉儲批次入庫/出庫/分揀
+│      │      billingBills.ts              # 帳單查詢（合約/月結）
+│      │      billingPayments.ts           # 付款與付款紀錄
+│      │      contractApplicationCreate.ts # 合約申請建立（客戶）
+│      │      contractApplicationStatus.ts # 合約申請查詢狀態（客戶）
+│      │      adminUsers.ts                # 員工帳號管理（admin）
+│      │      adminContracts.ts            # 合約審核（admin/cs）
+│      │      adminErrors.ts               # 系統錯誤查詢（admin）
+│      │      customerUpdate.ts            # 客戶資料更新
+│      │      customerExists.ts            # 客戶查詢（輔助）
+│      │      task*.ts                     # 範例任務 API（示範用）
 │      │
-│      └─__tests__/              # [單元測試 (Unit Tests)]
-│              helpers.ts            # 測試輔助函式
-│              auth.test.ts          # 認證測試
-│              packages.test.ts      # 包裹測試
-│              tracking.test.ts      # 追蹤測試
-│              map.test.ts           # 地圖測試
-│              billing.test.ts       # 帳單測試
-│              admin.test.ts         # 管理員測試
-│              customer.test.ts      # 客戶測試
-│              staff.test.ts         # 員工測試
+│      └─__tests__/              # [單元/整合測試]
+│              helpers.ts              # 測試共用 helper（建立使用者/包裹/取得 token）
+│              auth.test.ts            # Auth 測試（register/login/me）
+│              packages.test.ts        # 包裹測試（create/list/status/events）
+│              tracking.test.ts        # 追蹤測試（public/search）
+│              map.test.ts             # 地圖測試（fetch/route/update edge）
+│              billing.test.ts         # 計費測試（bills/payments）
+│              admin.test.ts           # 管理端測試（users/contracts/errors）
+│              customer.test.ts        # 客戶模組測試（profile/contract）
+│              staff.test.ts           # 員工權限測試（driver/warehouse）
 │
 ├─frontend/                      # [前端] Vue 3 + Vite + Pinia
+│  │  README.md                  # 前端文件
+│  │  index.html                 # 入口 HTML
 │  │  vite.config.ts             # Vite 設定檔
+│  │  vitest.config.ts           # Vitest 設定
 │  │  package.json               # 依賴套件設定
+│  │  package-lock.json          # 依賴鎖檔
 │  │
-│  └─src/
+│  ├─public/                     # 靜態資源（favicon 等）
+│  └─src/                        # 前端程式碼（Vue source）
 │      │  main.ts                # 應用程式入口
 │      │  App.vue                # 根組件 (Root Component)
 │      │
-│      ├─router/
-│      │      index.ts           # 路由定義 (含權限守門員 Navigation Guards)
-│      │
-│      ├─stores/
-│      │      auth.ts            # Pinia 認證狀態 (Auth Store)
-│      │
-│      ├─services/
-│      │      api.ts             # API 呼叫封裝
-│      │
+│      ├─assets/                 # 全域樣式/圖片
 │      ├─components/             # 可重用組件 (Reusable Components)
-│      │
+│      ├─router/                 # 路由定義（含權限守門員）
+│      ├─services/               # API 呼叫封裝
+│      ├─stores/                 # Pinia stores
+│      │      auth.ts                # 登入狀態與 token 管理
+│      │      packages.ts            # 包裹查詢/建立等狀態
+│      │      counter.ts             # 範例 store（Vue/Vite 模板）
+│      ├─types/                  # 前端型別
 │      └─views/                  # 頁面視圖 (Page Views)
-│              LoginView.vue         # 登入頁
-│              HomeView.vue          # 首頁
-│              AdminView.vue         # 管理員頁面
-│              CustomerDashboard.vue     # 客戶主控台
-│              CustomerTrackView.vue     # 包裹追蹤
-│              CustomerSendView.vue      # 寄件建立
-│              CustomerPaymentView.vue   # 付款頁面
-│              CustomerContractView.vue  # 合約申請
-│              CustomerScheduleView.vue  # 排程取件
-│              EmployeeDriverView.vue        # 駕駛員頁面
-│              EmployeeWarehouseView.vue     # 倉儲人員頁面
-│              EmployeeCustomerServiceView.vue   # 客服頁面
+│              HomeView.vue                  # 首頁
+│              LoginView.vue                 # 登入
+│              VirtualMapView.vue            # 虛擬地圖展示/模擬
+│              CustomerDashboard.vue         # 客戶主控台
+│              CustomerTrackView.vue         # 包裹追蹤
+│              CustomerSendView.vue          # 建立寄件
+│              CustomerPaymentView.vue       # 付款/帳單（客戶）
+│              CustomerContractView.vue      # 合約/月結申請
+│              CustomerScheduleView.vue      # 排程取件（客戶）
+│              CustomerProfileView.vue       # 客戶資料
+│              ShippingEstimateView.vue      # 運費試算（頁面）
+│              EmployeeDriverView.vue        # 司機端（工作清單/操作）
+│              EmployeeWarehouseView.vue     # 倉儲端（入庫/分揀/轉運）
+│              EmployeeCustomerServiceView.vue # 客服端（查詢/異常池）
+│              AdminView.vue                 # 管理員後台
+│              AboutView.vue                 # 範例頁（Vue/Vite 模板）
 │
 ├─docs/                          # [文件 (Documentation)]
-│      api-contract.md           # API 契約文件
-│      database-schema.md        # 資料庫結構說明
-│      vitest-plan.md            # 測試計畫
+│      api-contract.md           # 後端 API 契約（含規劃中端點）
+│      database-schema.md        # 資料庫 schema（含規劃中資料表）
 │      getting-started.md        # 開發環境設定
 │      testing-guide.md          # 測試指南
-│      contributing.md           # 貢獻指南
+│      vitest-plan.md            # 測試案例規劃
+│      ci-cd-guide.md            # CI/CD 說明
+│      contributing.md           # 貢獻指南/協作規範
 │
 ├─UML/                           # 設計文件 (Design Documents)
+│      TermProject114.md         # 需求/說明文件（原始資料）
 │      使用者案例圖.puml/png     # Use Case Diagram
 │      類別圖.puml/png           # Class Diagram
 │      系統架構圖.puml/png       # System Architecture Diagram
 │
 └─Util/                          # 工具程式 (Utilities)
-    └─virtual_map_generator/
+    └─virtual_map_generator/     # 虛擬地圖產生器
             generator.py         # 地圖生成器 (Python)
 ```
 
@@ -230,23 +252,24 @@ npm run test:unit
 
 地圖包含 3 種層級的節點，模擬真實世界的物流中心結構：
 
-1.  **HUB (轉運中心)**
-    -   數量: 4
+1.  **HUB (配送中心)**
+    -   數量: 6
     -   功能: 全域樞紐，連接所有區域。
     -   速度係數: 0.5 (最快，數值越小代表移動成本越低/速度越快)
-    -   間距: ~4000
-2.  **REG (區域中心)**
-    -   數量: 12
+    -   間距: ~2000
+2.  **REG (配送站)**
+    -   數量: 27
     -   功能: 連接 HUB 與大量 END。
     -   速度係數: 1.0 (幹線運輸)
     -   間距: ~1500
-3.  **END (收派點/終端)**
-    -   數量: 300
+3.  **END (住家/超商)**
+    -   數量: 100
     -   功能: 模擬詳細地址或代收點。
     -   速度係數: 5.0 (市區慢速配送)
-    -   間距: ~100
+    -   間距: ~300
 
-> 💡 速度係數 (Speed Factor)：數值越小代表移動成本越低/速度越快
+- 💡 速度係數 (Speed Factor)：數值越小代表移動成本越低/速度越快
+- 💡 節點數量 (Count)：數量是地圖上最多可能的節點數量，實際生成會嘗試在地圖找可以生成的點位，如果找不到就有可能不生成。
 
 地圖數據儲存於 `nodes` 與 `edges` 資料表中 (參見 `backend/migrations/0006_virtual_map_schema.sql`、`backend/migrations/0007_virtual_map_seed.sql`)：
 
@@ -264,13 +287,13 @@ npm run test:unit
     -   `road_multiple` (INTEGER): 道路權重係數 (通常取決於兩端點中較低級別者的速度係數)
     -   `cost` (INTEGER): 運輸成本 (`distance * road_multiple`)
 
-=======
 ### 資料庫結構 (Database Schema)
 
-地圖數據儲存於 `nodes` 與 `edges` 資料表中：
+核心資料表包含 `users`、`packages`、`package_events`、`payments`、`nodes`、`edges` 等；並規劃新增：
 
-- **nodes**：節點資訊（id, name, level, x, y）
-- **edges**：路徑資訊（source, target, distance, road_multiple, cost）
+- `package_exceptions`：客服異常池（未處理/已處理 + 處理報告）
+- `delivery_tasks`：司機工作清單/任務狀態
+- `vehicles`：司機住家起點、車輛編號、目前節點（支援地圖移動）
 
 詳細說明請參考 [資料庫結構文件](docs/database-schema.md)。
 
@@ -286,6 +309,12 @@ npm run test:unit
 | 倉儲人員 | employee | warehouse_staff | 入庫/出庫/分揀 |
 | 駕駛員 | employee | driver | 取件/配送 |
 | 管理員 | employee | admin | 系統管理 |
+
+### 角色工作流程（規劃中）
+
+- 客服：異常池檢視未處理/已處理，將未處理標示為已處理並填寫處理報告
+- 司機：取得工作清單、可在地圖點選相鄰節點移動、取件/送達含到付收款、貨態更新、異常申報
+- 倉儲：入站後設為分揀轉運處理 → 完成後設為待貨車轉運、可調整後續配送路徑、貨態更新、異常申報
 
 ---
 

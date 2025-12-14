@@ -47,30 +47,25 @@ const roles = [
 
   <section class="page-shell">
     <header class="section-header">
-      <h2>包含內容</h2>
-      <p class="hint">前端、Worker API、D1 schema 同步演進。</p>
+      <h2>運費算法</h2>
+      <p class="hint">目前先提供面板佈局，後續會接上實際計價規則與 API。</p>
     </header>
-    <div class="card-grid">
-      <div v-for="item in highlights" :key="item.title" class="card">
-        <p class="eyebrow">{{ item.title }}</p>
-        <p>{{ item.copy }}</p>
-      </div>
-    </div>
-  </section>
 
-  <section class="page-shell">
-    <header class="section-header">
-      <h2>角色主控台</h2>
-      <p class="hint">每個角色只看到推動包裹需要的操作。</p>
-    </header>
-    <div class="card-grid role-grid">
-      <RouterLink v-for="role in roles" :key="role.to" :to="role.to" class="card link-card">
+    <div class="card">
+      <div class="stack">
         <div>
-          <p class="eyebrow">{{ role.title }}</p>
-          <p class="hint">{{ role.detail }}</p>
+          <p class="eyebrow">輸入</p>
+          <p class="hint">尺寸（長寬高）、重量、配送時段、寄件/取件方式、付款方式。</p>
         </div>
-        <span aria-hidden="true">&rarr;</span>
-      </RouterLink>
+        <div>
+          <p class="eyebrow">規則</p>
+          <p class="hint">基本費 + 距離/區域加成 + 重量/材積加成 + 時段加價 + 服務處理費。</p>
+        </div>
+        <div>
+          <p class="eyebrow">輸出</p>
+          <p class="hint">預估運費、拆解明細（各項加成）、以及不符合規則時的原因提示。</p>
+        </div>
+      </div>
     </div>
   </section>
 </template>
