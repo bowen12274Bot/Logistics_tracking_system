@@ -1,12 +1,25 @@
-﻿<script setup lang="ts">
-const recentParcels = [
+<script setup lang="ts">
+import { RouterLink } from 'vue-router'
+
+type Parcel = {
+  id: string
+  status: string
+  desc: string
+}
+
+type QuickAction = {
+  label: string
+  to: string
+}
+
+const recentParcels: Parcel[] = [
   { id: 'P20241201', status: '配送中', desc: '高雄 → 台北，常溫宅配' },
   { id: 'P20241128', status: '已送達', desc: '高雄 → 台南，門市取件' },
 ]
 
-const quickActions = [
+const quickActions: QuickAction[] = [
   { label: '排程取件', to: '/customer/schedule' },
-  { label: '寄件/建立訂單', to: '/customer/send' },
+  { label: '寄件 / 建立訂單', to: '/customer/send' },
   { label: '追蹤包裹', to: '/customer/track' },
   { label: '查看帳務與付款', to: '/customer/payment' },
 ]
@@ -20,6 +33,8 @@ const quickActions = [
     </header>
 
     <div class="card-grid">
+      <!-- 快速操作 -->
+
       <div class="card">
         <p class="eyebrow">快速操作</p>
         <div class="hero-actions">
@@ -34,14 +49,21 @@ const quickActions = [
         </div>
       </div>
 
+      <!-- 近期包裹 -->
+
       <div class="card">
         <p class="eyebrow">近期包裹</p>
         <ul class="task-list">
           <li v-for="p in recentParcels" :key="p.id">
-            <strong>{{ p.id }}</strong> — {{ p.desc }}（{{ p.status }}）
+            <strong>{{ p.id }}</strong>
+            — {{ p.desc }}（{{ p.status }}）
+
           </li>
         </ul>
       </div>
+
+
+      <!-- 帳務摘要 -->
 
       <div class="card">
         <p class="eyebrow">帳務摘要</p>

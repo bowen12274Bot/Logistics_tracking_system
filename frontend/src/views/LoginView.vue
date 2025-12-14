@@ -25,8 +25,12 @@ const switchMode = (next: Mode) => {
   mode.value = next
   statusMessage.value = ''
   const redirect = route.query.redirect as string | undefined
-  if (next === 'register') router.replace({ path: '/register', query: redirect ? { redirect } : undefined })
-  else router.replace({ path: '/login', query: redirect ? { redirect } : undefined })
+
+  if (next === 'register') {
+    router.replace({ path: '/register', query: redirect ? { redirect } : undefined })
+  } else {
+    router.replace({ path: '/login', query: redirect ? { redirect } : undefined })
+  }
 }
 
 const loginForm = reactive({
@@ -73,7 +77,8 @@ const handleLogin = async () => {
     })
 
     const redirect = (route.query.redirect as string) ?? roleHomeByCurrentUser()
-    router.push(redirect)
+    await router.push(redirect)
+
   } catch (err: any) {
     statusMessage.value = err?.message ?? '帳號或密碼錯誤'
   } finally {
@@ -99,7 +104,11 @@ const handleRegister = async () => {
       user_class: 'non_contract_customer',
     })
 
-    router.push('/customer')
+
+    // ✅ 註冊完成後：若有 redirect 就回去，沒有就去客戶首頁
+    const redirect = (route.query.redirect as string) ?? '/customer'
+    await router.push(redirect)
+
   } catch (err: any) {
     statusMessage.value = err?.message ?? '註冊失敗，請稍後再試'
   } finally {
@@ -108,6 +117,9 @@ const handleRegister = async () => {
 }
 
 const fillAccount = (email: string, password: string) => {
+
+  // ✅ 點快速測試帳號時，先清掉錯誤訊息
+  statusMessage.value = ''
   switchMode('login')
   loginForm.identifier = email
   loginForm.password = password
@@ -148,7 +160,13 @@ const fillAccount = (email: string, password: string) => {
         <div class="quick">
           <p class="quick-title">快速測試帳號（會自動填入正確密碼）</p>
           <div class="quick-grid">
-            <button v-for="acc in quickAccounts" :key="acc.email" class="quick-item" type="button" @click="fillAccount(acc.email, acc.password)">
+            <button
+              v-for="acc in quickAccounts"
+              :key="acc.email"
+              class="quick-item"
+              type="button"
+              @click="fillAccount(acc.email, acc.password)"
+            >
               <span class="quick-role">{{ acc.role }}</span>
               <span class="quick-email">{{ acc.email }}</span>
             </button>

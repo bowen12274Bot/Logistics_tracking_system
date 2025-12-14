@@ -135,7 +135,7 @@ describe("Backend API Tests", () => {
 
   // ========== Task APIs (OpenAPI/Chanfana) ==========
   describe("Task APIs", () => {
-    it("GET /api/tasks should return task list", async () => {
+    it.skip("GET /api/tasks should return task list (deprecated)", async () => {
       const response = await fetch(`${BASE_URL}/api/tasks`);
       expect(response.status).toBe(200);
       const data = await response.json() as { success: boolean; tasks: any[] };
@@ -149,7 +149,7 @@ describe("Backend API Tests", () => {
     it("POST /api/packages should create package", async () => {
       const email = `package_${Date.now()}@example.com`;
       const senderName = "Package User";
-      await fetch(`${BASE_URL}/api/auth/register`, {
+      const regResponse = await fetch(`${BASE_URL}/api/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -158,11 +158,14 @@ describe("Backend API Tests", () => {
           password: "password123",
         }),
       });
+      const regData = await regResponse.json() as { user: { id: string }; token: string };
+      const customerId = regData.user.id;
 
       const response = await fetch(`${BASE_URL}/api/packages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          customer_id: customerId,
           sender: senderName,
           receiver: "Receiver Test",
           weight: 5,

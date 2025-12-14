@@ -8,14 +8,24 @@
   "main": "src/index.ts",
   "compatibility_date": "2025-11-28",
   "observability": {
-    "enabled": true
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "invocation_logs": true,
+      "persist": true
+    },
+    "traces": {
+      "enabled": false,
+      "persist": true,
+      "head_sampling_rate": 1
+    }
   },
-  "migrations_dir": "migrations",
+  //"migrations_dir": "migrations",
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "local-db2",
-      "database_id": "51f0397b-8c9e-4773-9c15-e3483d6527f6"
+      "database_name": "logistics-db",
+      "database_id": "d35f214a-2c1a-4f29-9965-db919c32e0d9"
     }
   ]
   /**
