@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { RouterLink, RouterView } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { useAuthStore } from './stores/auth'
@@ -6,9 +7,28 @@ import { useAuthStore } from './stores/auth'
 const auth = useAuthStore()
 const { user, isLoggedIn } = storeToRefs(auth)
 
-const logout = () => {
-  auth.logout()
-}
+const logout = () => auth.logout()
+
+/** 依角色回傳：導覽上要顯示的文字 */
+const roleNavLabel = computed(() => {
+  const r = user.value?.user_class
+  if (r === 'admin') return '管理員'
+  if (r === 'customer_service') return '客服'
+  if (r === 'warehouse_staff') return '倉儲'
+  if (r === 'driver') return '司機'
+  if (r === 'contract_customer' || r === 'non_contract_customer') return '客戶'
+  return '我的介面'
+})
+
+/** 依角色回傳：點導覽要前往的路由 */
+const roleHomePath = computed(() => {
+  const r = user.value?.user_class
+  if (r === 'admin') return '/admin'
+  if (r === 'customer_service') return '/employee/customer-service'
+  if (r === 'warehouse_staff') return '/employee/warehouse'
+  if (r === 'driver') return '/employee/driver'
+  return '/customer'
+})
 </script>
 
 <template>
@@ -21,10 +41,17 @@ const logout = () => {
 
       <nav class="nav-links">
         <RouterLink to="/">總覽</RouterLink>
-        <RouterLink to="/login">登入</RouterLink>
-        <RouterLink to="/customer">客戶</RouterLink>
-        <RouterLink to="/employee/driver">司機</RouterLink>
-        <RouterLink to="/admin">管理</RouterLink>
+
+        <!-- 🔓 未登入：只顯示 總覽 / 登入 / 註冊 -->
+        <template v-if="!isLoggedIn">
+          <RouterLink to="/login">登入</RouterLink>
+          <RouterLink to="/register">註冊</RouterLink>
+        </template>
+
+        <!-- 🔐 已登入：顯示「客戶/司機/倉儲/客服/管理員」(依角色變動) -->
+        <template v-else>
+          <RouterLink :to="roleHomePath">{{ roleNavLabel }}</RouterLink>
+        </template>
       </nav>
 
       <div class="topbar-actions">
@@ -45,69 +72,64 @@ const logout = () => {
 
 <style scoped>
 .app-shell {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 32px 20px 72px;
+  min-height: 100vh;
+  background: #fff8f2;
 }
 
 .topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 18px;
-  border: 1px solid var(--surface-stroke);
-  border-radius: 16px;
-  background: linear-gradient(120deg, rgba(255, 245, 237, 0.95), rgba(249, 210, 220, 0.92));
-  color: #5b3a2c;
-  position: sticky;
-  top: 16px;
-  backdrop-filter: blur(12px);
-  box-shadow: 0 12px 40px rgba(168, 118, 96, 0.2);
-  z-index: 5;
+  gap: 18px;
+  padding: 16px 20px;
+  background: rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
 }
 
 .brand {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  color: inherit;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 10px;
+  text-decoration: none;
+  color: #2f2a24;
 }
 
 .brand-mark {
-  font-weight: 700;
-  letter-spacing: 0.04em;
+  font-weight: 800;
+  letter-spacing: 0.2px;
 }
 
 .brand-sub {
-  font-size: 12px;
+  font-size: 13px;
   opacity: 0.7;
 }
 
 .nav-links {
   display: flex;
-  gap: 14px;
   align-items: center;
-  font-size: 14px;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .nav-links a {
-  color: #7b5344;
-  padding: 6px 10px;
-  border-radius: 10px;
-  transition: background-color 0.2s ease, color 0.2s ease;
+  text-decoration: none;
+  color: #4a4036;
+  padding: 8px 10px;
+  border-radius: 12px;
+  transition: background 0.15s ease, transform 0.15s ease;
 }
 
 .nav-links a.router-link-active {
-  background: rgba(255, 255, 255, 0.6);
-  color: #3f2620;
+  background: rgba(255, 182, 193, 0.35);
 }
 
-.small-btn {
-  padding: 10px 14px;
-  background: linear-gradient(135deg, var(--accent), var(--accent-strong));
-  color: #4a2623;
-  border-radius: 12px;
-  font-weight: 700;
+.nav-links a:hover {
+  background: rgba(233, 210, 180, 0.35);
+  transform: translateY(-1px);
 }
 
 .content {
@@ -124,16 +146,51 @@ const logout = () => {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 12px;
-  border-radius: 12px;
-  border: 1px solid var(--surface-stroke);
-  background: rgba(255, 255, 255, 0.72);
-  color: #5b3a2c;
+  padding: 8px 10px;
+  background: rgba(233, 210, 180, 0.25);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 14px;
+}
+
+.user-name {
+  font-weight: 700;
+  font-size: 13px;
 }
 
 .user-role {
   font-size: 12px;
-  opacity: 0.8;
+  opacity: 0.7;
+}
+
+.primary-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+  padding: 10px 14px;
+  text-decoration: none;
+  color: #2f2a24;
+  background: rgba(255, 182, 193, 0.55);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  transition: transform 0.15s ease;
+}
+
+.primary-btn:hover {
+  transform: translateY(-1px);
+}
+
+.ghost-btn {
+  background: transparent;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 12px;
+  padding: 8px 10px;
+  cursor: pointer;
+  color: #2f2a24;
+}
+
+.small-btn {
+  font-size: 12px;
+  padding: 6px 10px;
 }
 
 @media (max-width: 768px) {

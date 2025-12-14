@@ -1,31 +1,62 @@
-﻿
-<script setup lang="ts">
-import { RouterLink } from 'vue-router'
+﻿<script setup lang="ts">
+const recentParcels = [
+  { id: 'P20241201', status: '配送中', desc: '高雄 → 台北，常溫宅配' },
+  { id: 'P20241128', status: '已送達', desc: '高雄 → 台南，門市取件' },
+]
 
-const quickLinks = [
-  { title: '建立寄件', to: '/customer/send', description: '設定寄件人/收件人、配送速度與付款方式。' },
-  { title: '包裹追蹤', to: '/customer/track', description: '查看站點、車輛、物流中心的即時狀態。' },
-  { title: '合約 / 月結', to: '/customer/contract', description: '申請或管理月結合約。' },
-  { title: '付款', to: '/customer/payment', description: '支付預付、貨到付款或月結帳單。' },
+const quickActions = [
+  { label: '排程取件', to: '/customer/schedule' },
+  { label: '寄件/建立訂單', to: '/customer/send' },
+  { label: '追蹤包裹', to: '/customer/track' },
+  { label: '查看帳務與付款', to: '/customer/payment' },
 ]
 </script>
 
 <template>
   <section class="page-shell">
-    <header class="page-header">
-      <p class="eyebrow">客戶</p>
-      <h1>你的包裹主控台</h1>
-      <p class="lede">監控每件貨態、快速寄件，並以月結讓帳務更可預期。</p>
+    <header class="section-header">
+      <h2>客戶總覽</h2>
+      <p class="hint">快速查看最近包裹、帳務與常用操作。</p>
     </header>
 
     <div class="card-grid">
-      <RouterLink v-for="link in quickLinks" :key="link.to" :to="link.to" class="card link-card">
-        <div>
-          <p class="eyebrow">{{ link.title }}</p>
-          <p class="hint">{{ link.description }}</p>
+      <div class="card">
+        <p class="eyebrow">快速操作</p>
+        <div class="hero-actions">
+          <RouterLink
+            v-for="act in quickActions"
+            :key="act.to"
+            :to="act.to"
+            class="primary-btn small-btn"
+          >
+            {{ act.label }}
+          </RouterLink>
         </div>
-        <span aria-hidden="true">&rarr;</span>
-      </RouterLink>
+      </div>
+
+      <div class="card">
+        <p class="eyebrow">近期包裹</p>
+        <ul class="task-list">
+          <li v-for="p in recentParcels" :key="p.id">
+            <strong>{{ p.id }}</strong> — {{ p.desc }}（{{ p.status }}）
+          </li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <p class="eyebrow">帳務摘要</p>
+        <p>本期預估月結金額：$ 12,300</p>
+        <p>待付款貨到付款件數：3 件</p>
+        <p class="hint">實際金額與資料串接後可由後端計算填入。</p>
+      </div>
     </div>
   </section>
 </template>
+
+<style scoped>
+.task-list {
+  margin-top: 8px;
+  padding-left: 18px;
+  font-size: 13px;
+}
+</style>
