@@ -1,0 +1,47 @@
+import { beforeAll } from "vitest";
+import { env } from "cloudflare:test";
+
+import m0000 from "../../migrations/0000_users.sql?raw";
+import m0001 from "../../migrations/0001_packages.sql?raw";
+import m0002 from "../../migrations/0002_package_events.sql?raw";
+import m0003 from "../../migrations/0003_payments.sql?raw";
+import m0004 from "../../migrations/0004_monthly_billing.sql?raw";
+import m0005 from "../../migrations/0005_monthly_billing_items.sql?raw";
+import m0007 from "../../migrations/0007_virtual_map_seed.sql?raw";
+import m0008 from "../../migrations/0008_contract_applications.sql?raw";
+import m0009 from "../../migrations/0009_tokens.sql?raw";
+import m0010 from "../../migrations/0010_system_errors.sql?raw";
+
+const migrations = [m0000, m0001, m0002, m0003, m0004, m0005, m0007, m0008, m0009, m0010];
+
+const splitSqlStatements = (sql: string) => {
+  const normalized = sql.replace(/\r\n/g, "\n");
+  const withoutBlockComments = normalized.replace(/\/\*[\s\S]*?\*\//g, "");
+  const withoutComments = withoutBlockComments.replace(/^\s*--.*$/gm, "");
+  return withoutComments
+    .split(/;/)
+    .map((part) => part.trim())
+    .filter((part) => !part.startsWith("--"))
+    .map((part) => part.replace(/;+$/, "").trim())
+    .filter((part) => /[A-Za-z]/.test(part))
+    .map((part) => `${part};`);
+};
+
+beforeAll(async () => {
+  const hasUsers = await env.DB.prepare(
+    "SELECT 1 as ok FROM sqlite_master WHERE type='table' AND name='users' LIMIT 1",
+  ).first();
+
+  if (hasUsers) return;
+
+  for (const sql of migrations) {
+    for (const statement of splitSqlStatements(sql)) {
+      try {
+        await env.DB.prepare(statement).run();
+      } catch (err: any) {
+        const preview = statement.replace(/\s+/g, " ").slice(0, 200);
+        throw new Error(`D1 migration failed on statement: ${preview}`);
+      }
+    }
+  }
+});

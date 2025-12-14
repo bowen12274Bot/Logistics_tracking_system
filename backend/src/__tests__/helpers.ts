@@ -1,7 +1,7 @@
 // backend/src/__tests__/helpers.ts
 // 測試輔助函式
 
-export const BASE_URL = "http://localhost:8787";
+import { SELF } from "cloudflare:test";
 
 interface ApiResponse<T> {
   status: number;
@@ -12,7 +12,8 @@ export async function apiRequest<T>(
   endpoint: string,
   options?: RequestInit
 ): Promise<ApiResponse<T>> {
-  const response = await fetch(`${BASE_URL}${endpoint}`, {
+  const url = new URL(endpoint, "http://local.test").toString();
+  const response = await SELF.fetch(url, {
     headers: { "Content-Type": "application/json", ...options?.headers },
     ...options,
   });

@@ -155,10 +155,44 @@ export type MapResponse = {
   edges: MapEdge[];
 };
 
+export type DeliveryType = "overnight" | "two_day" | "standard" | "economy";
+export type SpecialMark = "fragile" | "dangerous" | "international";
+
+export type PackageEstimatePayload = {
+  fromNodeId: string;
+  toNodeId: string;
+  weightKg: number;
+  dimensionsCm: { length: number; width: number; height: number };
+  deliveryType: DeliveryType;
+  specialMarks?: SpecialMark[];
+};
+
+export type PackageEstimateResponse = {
+  success: boolean;
+  estimate: {
+    fromNodeId: string;
+    toNodeId: string;
+    route_cost: number;
+    route_path: string[];
+    route_cost_norm: number;
+    box_type: "envelope" | "S" | "M" | "L";
+    base: number;
+    shipping: number;
+    weight_surcharge: number;
+    international_multiplier_applied: number;
+    mark_fee: number;
+    calculated_price: number;
+    min_price: number;
+    max_price: number;
+    total_cost: number;
+    estimated_delivery_date: string;
+  };
+};
+
 // API base URL:
 // - Dev: 預設打本機 wrangler dev (http://localhost:8787)
 // - Prod: 建議用 VITE_API_BASE 指到 Cloudflare Worker；沒設定時 fallback 同網域 (Pages/自架反向代理)
-const fallbackBaseUrl = import.meta.env.DEV ? "http://localhost:8787" : window.location.origin;
+const fallbackBaseUrl = import.meta.env.DEV ? "http://127.0.0.1:8787" : window.location.origin;
 const baseUrl = (import.meta.env.VITE_API_BASE ?? fallbackBaseUrl).replace(/\/+$/, "");
 
 const AUTH_STORAGE_KEY = "logisim-auth";
@@ -191,7 +225,10 @@ async function request<T>(path: string, options: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || res.statusText);
+    const messageParts = [body.error || res.statusText].filter(Boolean);
+    if (body.from && body.to) messageParts.push(`(from=${body.from}, to=${body.to})`);
+    if (body.reason) messageParts.push(`[reason=${body.reason}]`);
+    throw new Error(messageParts.join(" "));
   }
   return res.json();
 }
@@ -226,6 +263,11 @@ export const api = {
     }),
   createPackage: (payload: CreatePackagePayload) =>
     request<{ success: boolean; package: PackageRecord }>("/api/packages", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  estimatePackage: (payload: PackageEstimatePayload) =>
+    request<PackageEstimateResponse>("/api/packages/estimate", {
       method: "POST",
       body: JSON.stringify(payload),
     }),
