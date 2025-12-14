@@ -197,6 +197,9 @@ const roleNav = computed(() => {
 .small-btn {
   font-size: 12px;
   padding: 6px 10px;
+  background: rgba(244, 182, 194, 0.4);
+  border-color: rgba(244, 182, 194, 0.55);
+  color: #3f2620;
 }
 
 @media (max-width: 768px) {
