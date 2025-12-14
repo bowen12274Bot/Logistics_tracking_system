@@ -30,6 +30,12 @@ type Role =
   | (typeof CS_ROLES)[number]
   | (typeof ADMIN_ROLES)[number]
 
+declare module 'vue-router' {
+  interface RouteMeta {
+    roles?: readonly Role[]
+  }
+}
+
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
