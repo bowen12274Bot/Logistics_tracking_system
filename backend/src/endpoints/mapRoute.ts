@@ -5,65 +5,17 @@ import type { AppContext } from "../types";
 type NodeData = { id: string };
 type EdgeData = { source: string; target: string; cost: number };
 
-type HeapItem = { node: string; distance: number };
-
-class MinHeap {
-  private items: HeapItem[] = [];
-
-  push(item: HeapItem) {
-    this.items.push(item);
-    this.bubbleUp(this.items.length - 1);
-  }
-
-  pop(): HeapItem | undefined {
-    if (this.items.length === 0) return undefined;
-    const top = this.items[0];
-    const last = this.items.pop()!;
-    if (this.items.length > 0) {
-      this.items[0] = last;
-      this.bubbleDown(0);
-    }
-    return top;
-  }
-
-  get size() {
-    return this.items.length;
-  }
-
-  private bubbleUp(index: number) {
-    while (index > 0) {
-      const parent = Math.floor((index - 1) / 2);
-      if (this.items[parent].distance <= this.items[index].distance) break;
-      [this.items[parent], this.items[index]] = [this.items[index], this.items[parent]];
-      index = parent;
-    }
-  }
-
-  private bubbleDown(index: number) {
-    const n = this.items.length;
-    while (true) {
-      const left = index * 2 + 1;
-      const right = index * 2 + 2;
-      let smallest = index;
-
-      if (left < n && this.items[left].distance < this.items[smallest].distance) smallest = left;
-      if (right < n && this.items[right].distance < this.items[smallest].distance) smallest = right;
-
-      if (smallest === index) break;
-      [this.items[smallest], this.items[index]] = [this.items[index], this.items[smallest]];
-      index = smallest;
-    }
-  }
-}
-
 const computeRoute = async (
   db: D1Database,
   fromNodeId: string,
   toNodeId: string,
 ): Promise<{ path: string[]; totalCost: number } | null> => {
-  const fromExists = await db.prepare("SELECT 1 FROM nodes WHERE id = ?").bind(fromNodeId).first();
+  const fromId = String(fromNodeId).trim();
+  const toId = String(toNodeId).trim();
+
+  const fromExists = await db.prepare("SELECT 1 FROM nodes WHERE id = ?").bind(fromId).first();
   if (!fromExists) return null;
-  const toExists = await db.prepare("SELECT 1 FROM nodes WHERE id = ?").bind(toNodeId).first();
+  const toExists = await db.prepare("SELECT 1 FROM nodes WHERE id = ?").bind(toId).first();
   if (!toExists) return null;
 
   const nodesResult = await db.prepare("SELECT id FROM nodes").all();
@@ -73,46 +25,68 @@ const computeRoute = async (
   const edges = (edgesResult.results || []) as EdgeData[];
 
   const graph: Map<string, { neighbor: string; cost: number }[]> = new Map();
-  for (const node of nodes) graph.set(node.id, []);
+  for (const node of nodes) graph.set(String(node.id).trim(), []);
+  if (!graph.has(fromId)) graph.set(fromId, []);
+  if (!graph.has(toId)) graph.set(toId, []);
+
   for (const edge of edges) {
-    graph.get(edge.source)?.push({ neighbor: edge.target, cost: edge.cost });
-    graph.get(edge.target)?.push({ neighbor: edge.source, cost: edge.cost });
+    const cost = Number((edge as any).cost);
+    if (!Number.isFinite(cost)) continue;
+
+    const source = String(edge.source).trim();
+    const target = String(edge.target).trim();
+    if (!source || !target) continue;
+
+    if (!graph.has(source)) graph.set(source, []);
+    if (!graph.has(target)) graph.set(target, []);
+
+    graph.get(source)?.push({ neighbor: target, cost });
+    graph.get(target)?.push({ neighbor: source, cost });
   }
 
   const distances: Map<string, number> = new Map();
   const previous: Map<string, string | null> = new Map();
-  const heap = new MinHeap();
+  const visited: Set<string> = new Set();
+  const pq: { node: string; distance: number }[] = [];
 
   for (const node of nodes) {
-    distances.set(node.id, Infinity);
-    previous.set(node.id, null);
+    const id = String(node.id).trim();
+    distances.set(id, Infinity);
+    previous.set(id, null);
   }
 
-  distances.set(fromNodeId, 0);
-  heap.push({ node: fromNodeId, distance: 0 });
+  distances.set(fromId, 0);
+  pq.push({ node: fromId, distance: 0 });
 
-  while (heap.size > 0) {
-    const current = heap.pop()!;
-    if (current.distance !== distances.get(current.node)) continue;
-    if (current.node === toNodeId) break;
+  while (pq.length > 0) {
+    pq.sort((a, b) => a.distance - b.distance);
+    const current = pq.shift()!;
+    if (visited.has(current.node)) continue;
+    visited.add(current.node);
+    if (current.node === toId) break;
 
     const neighbors = graph.get(current.node) || [];
     for (const { neighbor, cost } of neighbors) {
-      const newDist = current.distance + cost;
-      if (newDist < (distances.get(neighbor) || Infinity)) {
+      if (visited.has(neighbor)) continue;
+      const currentDist = distances.get(current.node);
+      const newDist = (currentDist ?? Infinity) + cost;
+      if (newDist < (distances.get(neighbor) ?? Infinity)) {
         distances.set(neighbor, newDist);
         previous.set(neighbor, current.node);
-        heap.push({ node: neighbor, distance: newDist });
+        pq.push({ node: neighbor, distance: newDist });
       }
     }
   }
 
-  const totalCost = distances.get(toNodeId);
+  const totalCost = distances.get(toId);
   if (totalCost === undefined || totalCost === Infinity) return null;
 
   const path: string[] = [];
-  let current: string | null = toNodeId;
+  let current: string | null = toId;
+  const seen = new Set<string>();
   while (current !== null) {
+    if (seen.has(current)) return null;
+    seen.add(current);
     path.unshift(current);
     current = previous.get(current) || null;
   }
@@ -157,7 +131,7 @@ export class MapRoute extends OpenAPIRoute {
     const query = c.req.query();
     if (!query.from || !query.to) return c.json({ error: "Missing from/to" }, 400);
 
-    const route = await computeRoute(c.env.DB, query.from, query.to);
+    const route = await computeRoute(c.env.DB, String(query.from).trim(), String(query.to).trim());
     if (!route) {
       return c.json({ error: "Route not found", from: query.from, to: query.to }, 404);
     }
@@ -173,4 +147,3 @@ export class MapRoute extends OpenAPIRoute {
     });
   }
 }
-

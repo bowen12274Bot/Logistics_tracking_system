@@ -9,7 +9,8 @@
     "dev:clean": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/stop-local-workers.ps1 -Port 8787",
     "dev:reset": "npm run dev:clean && wrangler dev",
     "cf-typegen": "wrangler types",
-    "test": "vitest"
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "chanfana": "^2.6.3",

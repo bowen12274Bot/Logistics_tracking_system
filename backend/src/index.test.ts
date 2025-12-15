@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { apiRequest } from "./__tests__/helpers";
+import { apiRequest, uniqueEmail } from "./__tests__/helpers";
 
 describe("Backend API Tests", () => {
   // ========== Hello API ==========
@@ -33,11 +33,11 @@ describe("Backend API Tests", () => {
 
   // ========== Auth APIs ==========
   describe("Auth APIs", () => {
-    const testEmail = `test_${Date.now()}@example.com`;
     const testPassword = "password123";
     const testUserName = "Test User";
 
     it("POST /api/auth/register should create new user", async () => {
+      const testEmail = uniqueEmail();
       const { status, data } = await apiRequest<{ user: { email: string }; token: string }>(`/api/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -64,6 +64,19 @@ describe("Backend API Tests", () => {
     });
 
     it("POST /api/auth/login should authenticate user", async () => {
+      const testEmail = uniqueEmail();
+
+      const register = await apiRequest<{ user: { email: string }; token: string }>(`/api/auth/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_name: testUserName,
+          email: testEmail,
+          password: testPassword,
+        }),
+      });
+      expect(register.status).toBe(200);
+
       const { status, data } = await apiRequest<{ user: { email: string }; token: string }>(`/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -125,4 +138,3 @@ describe("Backend API Tests", () => {
     });
   });
 });
-
