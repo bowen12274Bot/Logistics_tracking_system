@@ -98,8 +98,9 @@ describe("包裹管理 (Package)", () => {
       expect(created.success).toBe(true);
       expect(created.package?.id).toBeDefined();
 
-      const { status: queryStatus, data: statusData } = await apiRequest<any>(
-        `/api/packages/${created.package.id}/status`
+      const { status: queryStatus, data: statusData } = await authenticatedRequest<any>(
+        `/api/packages/${created.package.id}/status`,
+        customerToken
       );
 
       expect(queryStatus).toBe(200);

@@ -202,6 +202,23 @@ export class PackageCreate extends OpenAPIRoute {
 		const trackingNumber = `TRK-${Date.now().toString(36)}-${packageId.slice(0, 8)}`;
 		const createdAt = new Date().toISOString();
 
+		const getDeliveryDays = (deliveryTime?: string | null) => {
+			const dt = String(deliveryTime ?? "");
+			if (dt === "overnight") return 1;
+			if (dt === "two_day") return 2;
+			if (dt === "standard") return 3;
+			if (dt === "economy") return 5;
+			return null;
+		};
+		const deliveryDays = getDeliveryDays(body.delivery_time ?? null);
+		const estimatedDelivery = (() => {
+			if (!deliveryDays) return null;
+			const base = new Date(createdAt);
+			if (Number.isNaN(base.getTime())) return null;
+			base.setUTCDate(base.getUTCDate() + deliveryDays);
+			return base.toISOString();
+		})();
+
 		const descriptionJson = {
 			sender: resolvedSenderName,
 			receiver: resolvedReceiverName,
@@ -242,8 +259,8 @@ export class PackageCreate extends OpenAPIRoute {
 			weight, size, delivery_time,
 			payment_type, declared_value, final_billing_date, special_handling,
 			tracking_number, contents_description, route_path, description_json,
-			status, created_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			status, created_at, estimated_delivery
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			)
 				.bind(
 					packageId,
@@ -267,6 +284,7 @@ export class PackageCreate extends OpenAPIRoute {
 					JSON.stringify(descriptionJson),
 					"created",
 					createdAt,
+					estimatedDelivery,
 				)
 				.run();
 
@@ -316,6 +334,7 @@ export class PackageCreate extends OpenAPIRoute {
 				description_json: descriptionJson,
 				special_handling: specialHandlingList,
 				final_billing_date: createdAt,
+				estimated_delivery: estimatedDelivery,
 				route_path: body.route_path ?? null,
 				pickup_date: body.pickup_date,
 				pickup_time_window: body.pickup_time_window,

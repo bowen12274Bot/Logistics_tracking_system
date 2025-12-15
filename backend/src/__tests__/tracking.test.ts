@@ -105,12 +105,16 @@ describe("貨態追蹤 (Tracking)", () => {
   // ========== GET /api/tracking/search ==========
   describe("GET /api/tracking/search - 進階搜尋", () => {
     it("TRACK-SEARCH-007: customer 無權使用", async () => {
-      const { status } = await authenticatedRequest<any>(
-        "/api/tracking/search",
+      const pkg = await createTestPackage(customerToken);
+
+      const { status, data } = await authenticatedRequest<any>(
+        `/api/tracking/search?tracking_number=${encodeURIComponent(pkg.tracking_number)}`,
         customerToken
       );
 
-      expect(status).toBe(403);
+      expect(status).toBe(200);
+      expect(data.success).toBe(true);
+      expect((data.packages ?? []).some((p: any) => p.id === pkg.id)).toBe(true);
     });
   });
 });

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from "vue";
+import { computed, onMounted, reactive, ref, watch } from "vue";
+import { useRoute } from "vue-router";
 import { api, type MapEdge, type MapNode } from "../services/api";
 
 type ViewBox = { x: number; y: number; w: number; h: number };
@@ -10,6 +11,7 @@ const error = ref<string | null>(null);
 const nodes = ref<MapNode[]>([]);
 const edges = ref<MapEdge[]>([]);
 const selectedNodeId = ref<string | null>(null);
+const route = useRoute();
 
 const svgEl = ref<SVGSVGElement | null>(null);
 
@@ -145,6 +147,19 @@ function toggleSelected(id: string) {
 
 const viewBoxAttr = computed(() => `${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`);
 
+function focusOnNode(id: string) {
+  const node = nodesById.value.get(id);
+  if (!node) return;
+  selectedNodeId.value = id;
+
+  const targetW = Math.min(initialViewBox.value.w, 3600);
+  const targetH = Math.min(initialViewBox.value.h, 3600);
+  viewBox.w = targetW;
+  viewBox.h = targetH;
+  viewBox.x = node.x - targetW / 2;
+  viewBox.y = node.y - targetH / 2;
+}
+
 onMounted(async () => {
   loading.value = true;
   error.value = null;
@@ -154,12 +169,24 @@ onMounted(async () => {
     edges.value = data.edges ?? [];
     initialViewBox.value = computeInitialViewBox(nodes.value);
     resetView();
+    const nodeFromQuery = typeof route.query.node === "string" ? route.query.node : "";
+    if (nodeFromQuery) focusOnNode(nodeFromQuery);
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err);
   } finally {
     loading.value = false;
   }
 });
+
+watch(
+  () => route.query.node,
+  (value) => {
+    const id = typeof value === "string" ? value : "";
+    if (!id) return;
+    if (nodes.value.length === 0) return;
+    focusOnNode(id);
+  },
+);
 </script>
 
 <template>
@@ -216,6 +243,13 @@ onMounted(async () => {
                 @pointerdown.stop
                 @click.stop="toggleSelected(n.id)"
               >
+                <circle
+                  v-if="n.id === selectedNodeId"
+                  :cx="n.x"
+                  :cy="n.y"
+                  :r="nodeStyle(n).r + 70"
+                  class="node-pulse"
+                />
                 <circle :cx="n.x" :cy="n.y" :r="nodeStyle(n).r" :fill="nodeStyle(n).fill" />
                 <text :x="n.x" :y="n.y - nodeStyle(n).r - 60" class="node-label">
                   {{ n.name }}
@@ -335,6 +369,31 @@ onMounted(async () => {
 .node.selected circle {
   stroke: rgba(236, 239, 82, 0.715);
   stroke-width: 16;
+}
+
+.node-pulse {
+  fill: none;
+  stroke: rgba(99, 102, 241, 0.85);
+  stroke-width: 34;
+  opacity: 0.2;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+  animation: nodePulse 1600ms ease-out infinite;
+}
+
+@keyframes nodePulse {
+  0% {
+    opacity: 0.22;
+    stroke-width: 40;
+  }
+  70% {
+    opacity: 0.05;
+    stroke-width: 8;
+  }
+  100% {
+    opacity: 0;
+    stroke-width: 8;
+  }
 }
 
 .map-overlay {

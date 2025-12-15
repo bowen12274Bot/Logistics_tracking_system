@@ -52,6 +52,7 @@ const confirmation = ref('')
 const errorMessage = ref('')
 const estimateMessage = ref('')
 const estimateError = ref('')
+const estimateRoutePath = ref<string[]>([])
 const isEstimating = ref(false)
 const isSubmitting = ref(false)
 const auth = useAuthStore()
@@ -90,6 +91,7 @@ function buildSpecialMarks() {
 const requestEstimate = async () => {
   estimateMessage.value = ''
   estimateError.value = ''
+  estimateRoutePath.value = []
   errorMessage.value = ''
 
   if (
@@ -141,6 +143,7 @@ const requestEstimate = async () => {
 
     const formatter = new Intl.NumberFormat('zh-TW')
     estimateMessage.value = `預估運費：${formatter.format(res.estimate.total_cost)} 元（箱型 ${res.estimate.box_type}、routeCost ${formatter.format(res.estimate.route_cost)}）`
+    estimateRoutePath.value = res.estimate.route_path ?? []
   } catch (err: any) {
     estimateError.value = err?.message || '運費試算失敗，請稍後再試。'
   } finally {
@@ -311,6 +314,28 @@ const submitPackage = async () => {
 
   isSubmitting.value = true
   try {
+    let routePathToSend = estimateRoutePath.value
+    if (!routePathToSend?.length) {
+      try {
+        const res = await api.estimatePackage({
+          fromNodeId: normalizedSenderAddress,
+          toNodeId: normalizedReceiverAddress,
+          weightKg: form.weight,
+          dimensionsCm: {
+            length: form.length,
+            width: form.width,
+            height: form.height,
+          },
+          deliveryType: form.deliveryTime,
+          specialMarks: buildSpecialMarks(),
+        })
+        routePathToSend = res.estimate.route_path ?? []
+        estimateRoutePath.value = routePathToSend
+      } catch {
+        routePathToSend = []
+      }
+    }
+
     const response = await api.createPackage({
       customer_id: auth.user?.id,
       sender: form.senderName,
@@ -332,6 +357,7 @@ const submitPackage = async () => {
       pickup_date: form.pickupType === 'home' ? form.pickupDate : undefined,
       pickup_time_window: form.pickupType === 'home' ? form.pickupTimeWindow : undefined,
       pickup_notes: form.pickupType === 'home' ? form.pickupNotes : undefined,
+      route_path: routePathToSend.length ? JSON.stringify(routePathToSend) : undefined,
       metadata: {
         created_at: new Date().toISOString(),
         delivery_time_label: deliveryLabel[form.deliveryTime],

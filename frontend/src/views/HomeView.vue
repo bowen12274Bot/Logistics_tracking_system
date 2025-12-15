@@ -28,7 +28,7 @@ const roles = [
         </p>
         <div class="hero-actions">
           <RouterLink to="/map" class="primary-btn">虛擬地圖</RouterLink>
-          <RouterLink to="/customer/track" class="ghost-btn">追蹤包裹</RouterLink>
+          <RouterLink to="/track" class="ghost-btn">追蹤包裹</RouterLink>
           <RouterLink to="/shipping/estimate" class="ghost-btn">計算運費</RouterLink>
         </div>
       </div>

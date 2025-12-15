@@ -99,6 +99,7 @@ export type CreatePackagePayload = {
 export type PackageRecord = {
   id: string;
   tracking_number?: string;
+  status?: string | null;
   customer_id?: string | null;
   sender?: string | null;
   receiver?: string | null;
@@ -124,11 +125,67 @@ export type PackageRecord = {
   pickup_time_window?: string | null;
   pickup_notes?: string | null;
   description_json?: Record<string, unknown>;
+  created_at?: string | null;
+  estimated_delivery?: string | null;
 };
 
 export type PackageListResponse = {
   success: boolean;
   packages: PackageRecord[];
+};
+
+export type PackageEventRecord = {
+  id: string;
+  package_id: string;
+  delivery_status: string;
+  delivery_details?: string | null;
+  events_at: string;
+  location?: string | null;
+};
+
+export type PackageStatusResponse = {
+  success: boolean;
+  package: PackageRecord;
+  events: PackageEventRecord[];
+};
+
+export type TrackingPublicResponse = {
+  success: boolean;
+  tracking_number: string;
+  current_status: string;
+  current_location: string | null;
+  estimated_delivery: string | null;
+  updated_at?: string | null;
+  events: Array<{
+    status: string;
+    description: string | null;
+    location: string | null;
+    timestamp: string;
+  }>;
+};
+
+export type TrackingSearchQuery = {
+  tracking_number?: string;
+  customer_id?: string;
+  customer_account?: string;
+  date_from?: string;
+  date_to?: string;
+  vehicle_id?: string;
+  location_id?: string;
+  status_group?: "in_transit" | "history";
+  status?: string;
+  exception_only?: "true" | "false";
+};
+
+export type TrackingSearchResponse = {
+  success: boolean;
+  packages: Array<
+    PackageRecord & {
+      current_location?: string | null;
+      current_updated_at?: string | null;
+    }
+  >;
+  total: number;
 };
 
 export type MapNode = {
@@ -300,4 +357,16 @@ export const api = {
         method: "GET",
       },
     ),
+  getPackageStatus: (packageId: string) =>
+    request<PackageStatusResponse>(`/api/packages/${encodeURIComponent(packageId)}/status`, { method: "GET" }),
+  searchTracking: (query: TrackingSearchQuery) => {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(query)) {
+      if (value === undefined || value === null || value === "") continue;
+      params.set(key, String(value));
+    }
+    return request<TrackingSearchResponse>(`/api/tracking/search?${params.toString()}`, { method: "GET" });
+  },
+  getTrackingPublic: (trackingNumber: string) =>
+    request<TrackingPublicResponse>(`/api/tracking/${encodeURIComponent(trackingNumber)}`, { method: "GET" }),
 };

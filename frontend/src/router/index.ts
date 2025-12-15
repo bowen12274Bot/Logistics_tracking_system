@@ -9,6 +9,7 @@ import CustomerSendView from '../views/CustomerSendView.vue'
 import CustomerTrackView from '../views/CustomerTrackView.vue'
 import CustomerContractView from '../views/CustomerContractView.vue'
 import CustomerPaymentView from '../views/CustomerPaymentView.vue'
+import PublicTrackView from '../views/PublicTrackView.vue'
 
 import EmployeeDriverView from '../views/EmployeeDriverView.vue'
 import EmployeeWarehouseView from '../views/EmployeeWarehouseView.vue'
@@ -44,6 +45,7 @@ const router = createRouter({
 
     { path: '/map', name: 'virtual-map', component: VirtualMapView },
     { path: '/shipping/estimate', name: 'shipping-estimate', component: ShippingEstimateView },
+    { path: '/track', name: 'public-track', component: PublicTrackView },
 
     {
       path: '/customer',
