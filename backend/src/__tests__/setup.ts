@@ -11,8 +11,12 @@ import m0007 from "../../migrations/0007_virtual_map_seed.sql?raw";
 import m0008 from "../../migrations/0008_contract_applications.sql?raw";
 import m0009 from "../../migrations/0009_tokens.sql?raw";
 import m0010 from "../../migrations/0010_system_errors.sql?raw";
+import m0011 from "../../migrations/0011_seed_test_users.sql?raw";
+import m0012 from "../../migrations/0012_package_exceptions.sql?raw";
+import m0013 from "../../migrations/0013_delivery_tasks.sql?raw";
+import m0014 from "../../migrations/0014_vehicles.sql?raw";
 
-const migrations = [m0000, m0001, m0002, m0003, m0004, m0005, m0007, m0008, m0009, m0010];
+const migrations = [m0000, m0001, m0002, m0003, m0004, m0005, m0007, m0008, m0009, m0010, m0011, m0012, m0013, m0014];
 
 const splitSqlStatements = (sql: string) => {
   const normalized = sql.replace(/\r\n/g, "\n");

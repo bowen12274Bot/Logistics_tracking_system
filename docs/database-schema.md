@@ -29,16 +29,22 @@
 | `contract_applications` | 合約客戶申請/審核 | `backend/migrations/0008_contract_applications.sql` |
 | `tokens` | 認證 token | `backend/migrations/0009_tokens.sql` |
 | `system_errors` | 系統錯誤/異常紀錄 | `backend/migrations/0010_system_errors.sql` |
+| `package_exceptions` | 異常池：異常申報與處理 | `backend/migrations/0012_package_exceptions.sql` |
+| `delivery_tasks` | 司機任務：取件/配送/轉運 | `backend/migrations/0013_delivery_tasks.sql` |
+| `vehicles` | 車輛與位置 | `backend/migrations/0014_vehicles.sql` |
+
+### Seed / 測試資料 migrations
+
+> 以下 migration 主要用於寫入 seed/測試資料（非新增資料表）。
+
+| 檔案 | 說明 |
+|---|---|
+| `backend/migrations/0007_virtual_map_seed.sql` | 重建 `nodes` / `edges` 並寫入虛擬地圖資料 |
+| `backend/migrations/0011_seed_test_users.sql` | 寫入測試帳號與員工工作地（依 `nodes` 內容生成） |
 
 ### 規劃中（尚未落地到 migrations）
 
-> 以下為配合「客服異常池 / 司機任務與移動 / 倉儲轉運與改路徑」的規劃資料模型；落地後會補上對應 migrations 檔案並更新本文件。
-
-| 表格名稱 | 說明 |
-|---|---|
-| `package_exceptions` | 異常池：異常申報與處理（未處理/已處理 + 處理報告） |
-| `delivery_tasks` | 司機任務：取件/配送/轉運工作指派與狀態 |
-| `vehicles` | 車輛與位置：司機住家起點、當前節點、貨車編號 |
+> 目前暫無。
 
 ---
 
@@ -60,6 +66,11 @@ CREATE TABLE IF NOT EXISTS users (
   created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
 ```
+
+- `address` 欄位定義：
+  - `customer`：客戶預設地址/位置（目前以字串保存，可能是座標字串如 `10,20` 或節點 ID）
+  - `employee`：員工工作地（地圖節點 ID，例如配送中心 `HUB_0`、配送站 `REG_0`）
+- 測試帳號/員工工作地 seed：`backend/migrations/0011_seed_test_users.sql`
 
 ---
 
@@ -103,7 +114,9 @@ CREATE TABLE IF NOT EXISTS package_events (
   delivery_status TEXT,
   delivery_details TEXT,
   events_at TEXT,
-  location TEXT
+  location TEXT,
+  paid_at TEXT,
+  collected_by TEXT
 );
 ```
 
@@ -123,83 +136,6 @@ CREATE TABLE IF NOT EXISTS payments (
   paid_at TEXT,
   package_id TEXT REFERENCES packages(id)
 );
-```
-
----
-
-### 2.11 `package_exceptions` - 異常池（規劃中）
-
-用途：當司機/倉儲在作業中將包裹狀態改為 `exception` 時，建立異常紀錄供客服在異常池處理；客服 MVP 先做到「標示已處理 + 處理報告」。
-
-```sql
-CREATE TABLE IF NOT EXISTS package_exceptions (
-  id TEXT PRIMARY KEY,
-  package_id TEXT NOT NULL REFERENCES packages(id),
-  reason_code TEXT,
-  description TEXT,
-  reported_by TEXT REFERENCES users(id),
-  reported_role TEXT, -- driver / warehouse_staff / customer_service
-  reported_at TEXT,
-  handled INTEGER DEFAULT 0,
-  handled_by TEXT REFERENCES users(id),
-  handled_at TEXT,
-  handling_report TEXT
-);
-CREATE INDEX idx_package_exceptions_handled_reported_at ON package_exceptions(handled, reported_at);
-CREATE INDEX idx_package_exceptions_package_id ON package_exceptions(package_id);
-```
-
----
-
-### 2.12 `delivery_tasks` - 司機任務（規劃中）
-
-用途：將「待取件/待配送/待轉運」抽象成任務，支援單一司機的工作清單與任務狀態（接受/進行中/完成）。
-
-```sql
-CREATE TABLE IF NOT EXISTS delivery_tasks (
-  id TEXT PRIMARY KEY,
-  package_id TEXT NOT NULL REFERENCES packages(id),
-  task_type TEXT NOT NULL, -- pickup / deliver / transfer_pickup / transfer_dropoff
-  from_location TEXT,
-  to_location TEXT,
-  assigned_driver_id TEXT REFERENCES users(id),
-  status TEXT NOT NULL DEFAULT 'pending', -- pending / accepted / in_progress / completed / canceled
-  created_at TEXT,
-  updated_at TEXT
-);
-CREATE INDEX idx_delivery_tasks_assignee_status_created ON delivery_tasks(assigned_driver_id, status, created_at);
-```
-
----
-
-### 2.13 `vehicles` - 車輛/位置（規劃中）
-
-用途：支援司機「貨車起始點=住家節點」與「地圖上點選相鄰節點移動」；包裹上車後所在地可記錄為 `vehicle_code`。
-
-```sql
-CREATE TABLE IF NOT EXISTS vehicles (
-  id TEXT PRIMARY KEY,
-  driver_user_id TEXT NOT NULL REFERENCES users(id),
-  vehicle_code TEXT NOT NULL,
-  home_node_id TEXT REFERENCES nodes(id),
-  current_node_id TEXT REFERENCES nodes(id),
-  updated_at TEXT
-);
-CREATE UNIQUE INDEX idx_vehicles_driver_user_id ON vehicles(driver_user_id);
-```
-
----
-
-### 2.14 `payments` 到付實收欄位（規劃中）
-
-用途：司機在送達時回報「貨到付款」實收金額，留下收費時間與收費人。
-
-> 實作上可選擇「直接擴充 `payments`」或另建 `cod_collections` 表；目前規劃先擴充 `payments`。
-
-```sql
-ALTER TABLE payments ADD COLUMN collected_amount INTEGER;
-ALTER TABLE payments ADD COLUMN collected_at TEXT;
-ALTER TABLE payments ADD COLUMN collected_by TEXT REFERENCES users(id);
 ```
 
 ---
@@ -314,6 +250,79 @@ CREATE TABLE IF NOT EXISTS system_errors (
   resolved_at TEXT
 );
 ```
+
+---
+
+### 2.11 `package_exceptions` - 異常池
+
+用途：當司機/倉儲在作業中將包裹狀態改為 `exception` 時，建立異常紀錄供客服在異常池處理；客服 MVP 先做到「標示已處理 + 處理報告」。
+
+```sql
+CREATE TABLE IF NOT EXISTS package_exceptions (
+  id TEXT PRIMARY KEY,
+  package_id TEXT NOT NULL REFERENCES packages(id),
+  reason_code TEXT,
+  description TEXT,
+  reported_by TEXT REFERENCES users(id),
+  reported_role TEXT, -- driver / warehouse_staff / customer_service
+  reported_at TEXT,
+  handled INTEGER DEFAULT 0,
+  handled_by TEXT REFERENCES users(id),
+  handled_at TEXT,
+  handling_report TEXT
+);
+CREATE INDEX idx_package_exceptions_handled_reported_at ON package_exceptions(handled, reported_at);
+CREATE INDEX idx_package_exceptions_package_id ON package_exceptions(package_id);
+```
+
+---
+
+### 2.12 `delivery_tasks` - 司機任務
+
+用途：將「待取件/待配送/待轉運」抽象成任務，支援單一司機的工作清單與任務狀態（接受/進行中/完成）。
+
+```sql
+CREATE TABLE IF NOT EXISTS delivery_tasks (
+  id TEXT PRIMARY KEY,
+  package_id TEXT NOT NULL REFERENCES packages(id),
+  task_type TEXT NOT NULL, -- pickup / deliver / transfer_pickup / transfer_dropoff
+  from_location TEXT,
+  to_location TEXT,
+  assigned_driver_id TEXT REFERENCES users(id),
+  status TEXT NOT NULL DEFAULT 'pending', -- pending / accepted / in_progress / completed / canceled
+  created_at TEXT,
+  updated_at TEXT
+);
+CREATE INDEX idx_delivery_tasks_assignee_status_created ON delivery_tasks(assigned_driver_id, status, created_at);
+```
+
+---
+
+### 2.13 `vehicles` - 車輛/位置
+
+用途：支援司機「貨車起始點=司機工作地點」與「地圖上點選相鄰節點移動」；包裹上車後所在地可記錄為 `vehicle_code`。
+
+```sql
+CREATE TABLE IF NOT EXISTS vehicles (
+  id TEXT PRIMARY KEY,
+  driver_user_id TEXT NOT NULL REFERENCES users(id),
+  vehicle_code TEXT NOT NULL,
+  home_node_id TEXT REFERENCES nodes(id),
+  current_node_id TEXT REFERENCES nodes(id),
+  updated_at TEXT
+);
+CREATE UNIQUE INDEX idx_vehicles_driver_user_id ON vehicles(driver_user_id);
+```
+
+---
+
+### 2.14 付款資訊（合併到 `package_events`）
+
+用途：付款資訊欄位位於 `package_events`；系統允許客戶付款，不處理「少給/多給」差額，因此不需要 `collected_amount`，只保留付款時間與收款人（依付款方式不同可能是系統或司機）。
+
+- 是否付款：以 `paid_at` 是否為 `NULL` 判斷（`NULL`=未付款，非 `NULL`=已付款）
+- 付款時間：`paid_at`（客戶實際付款時間）
+- 收款人：`collected_by`（`system` 或 `users.id`；現金由司機收款時填司機的 `users.id`）
 
 ---
 

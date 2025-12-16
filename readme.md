@@ -61,7 +61,7 @@ logistics-system/               # Repo 根目錄
 │  │  apply_migrations.py        # 資料庫遷移腳本 (Python)
 │  │
 │  ├─migrations/                 # [資料庫模型]
-│  │      0000_users.sql                 # users + 預設帳號 seed
+│  │      0000_users.sql                 # users（使用者表）
 │  │      0001_packages.sql              # packages（包裹主檔）
 │  │      0002_package_events.sql        # package_events（貨態事件）
 │  │      0003_payments.sql              # payments（費用/付款）
@@ -72,6 +72,10 @@ logistics-system/               # Repo 根目錄
 │  │      0008_contract_applications.sql # contract_applications（合約申請）
 │  │      0009_tokens.sql                # tokens（登入 token）
 │  │      0010_system_errors.sql         # system_errors（系統錯誤/紀錄）
+│  │      0011_seed_test_users.sql       # 測試帳號/員工配置 seed
+│  │      0012_package_exceptions.sql    # package_exceptions（異常池）
+│  │      0013_delivery_tasks.sql        # delivery_tasks（司機任務）
+│  │      0014_vehicles.sql              # vehicles（車輛/位置）
 │  │
 │  └─src/                        # 後端程式碼（Worker source）
 │      │  index.ts               # API 路由註冊（OpenAPI）
@@ -320,16 +324,22 @@ npm run test:unit
 
 ## 📦 預設帳號 (Default Accounts)
 
-系統已內建以下測試帳號（密碼皆為 `password123`）：
+系統已內建以下測試帳號（請依下表使用對應密碼）：
 
 | 帳號 | 角色 |
 |------|------|
-| customer@example.com | 非合約客戶 |
-| contract@example.com | 合約客戶 |
+| noncontract@example.com | 非合約客戶 |
+| cust@example.com | 合約客戶 |
 | driver@example.com | 駕駛員 |
 | warehouse@example.com | 倉儲人員 |
 | cs@example.com | 客服人員 |
 | admin@example.com | 管理員 |
+
+員工帳號的 `address` 代表工作地（地圖節點 ID）：`driver/admin/cs` 預設為 `HUB_0`，`warehouse` 預設為 `REG_0`。
+
+另會依地圖自動補齊測試員工（見 `backend/migrations/0011_seed_test_users.sql`）：
+- 其他配送中心司機：`driver_hub_1@example.com`（規則：`driver_<hubId>@example.com`），密碼 `driver123`
+- 其他配送站倉儲：`warehouse_reg_1@example.com`（規則：`warehouse_<regId>@example.com`），密碼 `warehouse123`
 
 ---
 

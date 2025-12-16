@@ -218,8 +218,12 @@ npm test -- --watch
 | `0008_contract_applications.sql` | 合約申請表 |
 | `0009_tokens.sql` | 認證 Token 表 |
 | `0010_system_errors.sql` | 系統錯誤表 |
+| `0011_seed_test_users.sql` | 測試帳號/員工配置 seed |
+| `0012_package_exceptions.sql` | 異常池表 (package_exceptions) |
+| `0013_delivery_tasks.sql` | 司機任務表 (delivery_tasks) |
+| `0014_vehicles.sql` | 車輛/位置表 (vehicles) |
 
-> 規劃中資料表/欄位：`package_exceptions`（異常池）、`delivery_tasks`（司機任務）、`vehicles`（車輛/位置）、`payments` 到付實收欄位。
+> 規劃中資料表/欄位：`package_events` 付款資訊欄位擴充。
 
 ### 套用遷移 (Apply Migrations)
 

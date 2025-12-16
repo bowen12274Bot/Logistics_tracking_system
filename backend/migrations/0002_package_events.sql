@@ -4,5 +4,7 @@ CREATE TABLE IF NOT EXISTS package_events (
   delivery_status TEXT,
   delivery_details TEXT,
   events_at TEXT,
-  location TEXT
+  location TEXT,
+  paid_at TEXT,
+  collected_by TEXT
 );

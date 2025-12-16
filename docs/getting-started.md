@@ -81,14 +81,21 @@ npx wrangler d1 migrations apply DB --local
 
 | 編號 | 檔案 | 說明 |
 |------|------|------|
-| 0000 | users.sql | 使用者表 |
-| 0001 | packages.sql | 包裹表 |
-| 0002 | package_events.sql | 物流事件表 |
-| 0003 | payments.sql | 付款表 |
-| 0004 | monthly_billing.sql | 月結帳單表 |
-| 0005 | monthly_billing_items.sql | 帳單明細表 |
-| 0006 | virtual_map.sql | 虛擬地圖（含 346 個節點和邊資料） |
-| 0007-0012 | *.sql | 額外欄位與表格 |
+| 0000 | `0000_users.sql` | 使用者表（僅建表） |
+| 0001 | `0001_packages.sql` | 包裹表 |
+| 0002 | `0002_package_events.sql` | 包裹事件表 |
+| 0003 | `0003_payments.sql` | 付款/費用表 |
+| 0004 | `0004_monthly_billing.sql` | 月結帳單表 |
+| 0005 | `0005_monthly_billing_items.sql` | 帳單明細表 |
+| 0006 | `0006_virtual_map_schema.sql` | 虛擬地圖 schema（nodes/edges） |
+| 0007 | `0007_virtual_map_seed.sql` | 虛擬地圖 seed（節點/道路資料） |
+| 0008 | `0008_contract_applications.sql` | 合約申請表 |
+| 0009 | `0009_tokens.sql` | 認證 Token 表 |
+| 0010 | `0010_system_errors.sql` | 系統錯誤表 |
+| 0011 | `0011_seed_test_users.sql` | 測試帳號/員工工作地 seed（依地圖節點建立） |
+| 0012 | `0012_package_exceptions.sql` | 異常池（package_exceptions） |
+| 0013 | `0013_delivery_tasks.sql` | 司機任務（delivery_tasks） |
+| 0014 | `0014_vehicles.sql` | 車輛/位置（vehicles） |
 
 ---
 
@@ -121,16 +128,22 @@ npm run dev
 
 ## 🔑 預設帳號 (Default Accounts)
 
-系統已內建測試帳號（密碼皆為 `password123`）：
+系統已內建測試帳號（請依下表使用對應密碼）：
 
 | 類別 | 帳號 | user_type | user_class |
 |------|------|-----------|------------|
-| 非合約客戶 | customer@example.com | customer | non_contract_customer |
-| 合約客戶 | contract@example.com | customer | contract_customer |
+| 非合約客戶 | noncontract@example.com | customer | non_contract_customer |
+| 合約客戶 | cust@example.com | customer | contract_customer |
 | 駕駛員 | driver@example.com | employee | driver |
 | 倉儲人員 | warehouse@example.com | employee | warehouse_staff |
 | 客服人員 | cs@example.com | employee | customer_service |
 | 管理員 | admin@example.com | employee | admin |
+
+> 備註：員工的 `address` 代表工作地（地圖節點 ID），例如配送中心 `HUB_0`、配送站 `REG_0`。
+
+另會依地圖自動補齊測試員工（見 `backend/migrations/0011_seed_test_users.sql`）：
+- 其他配送中心司機：`driver_hub_1@example.com`（規則：`driver_<hubId>@example.com`），密碼 `driver123`
+- 其他配送站倉儲：`warehouse_reg_1@example.com`（規則：`warehouse_<regId>@example.com`），密碼 `warehouse123`
 
 ---
 
