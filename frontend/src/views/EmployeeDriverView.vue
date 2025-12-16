@@ -1,5 +1,7 @@
 ﻿
 <script setup lang="ts">
+import { RouterLink } from "vue-router";
+
 const routeHighlights = [
   '每台貨車固定在自己的區域與覆蓋環。',
   '取件路線：住家/門市 -> 轉運站 -> 物流中心。',
@@ -20,6 +22,10 @@ const routeHighlights = [
       <ul class="task-list">
         <li v-for="item in routeHighlights" :key="item">{{ item }}</li>
       </ul>
+    </div>
+
+    <div class="card" style="margin-top: 16px">
+      <RouterLink class="primary-btn" to="/driver/map">開啟司機地圖</RouterLink>
     </div>
   </section>
 </template>

@@ -212,6 +212,35 @@ export type MapResponse = {
   edges: MapEdge[];
 };
 
+export type MapRouteResponse = {
+  success: boolean;
+  route: {
+    from: string;
+    to: string;
+    path: string[];
+    total_cost: number;
+  };
+};
+
+export type VehicleRecord = {
+  id: string;
+  vehicle_code: string;
+  home_node_id: string | null;
+  current_node_id: string | null;
+  updated_at: string | null;
+};
+
+export type VehicleMeResponse = {
+  success: boolean;
+  vehicle: VehicleRecord;
+};
+
+export type VehicleMovePayload = { fromNodeId: string; toNodeId: string };
+export type VehicleMoveResponse = {
+  success: boolean;
+  vehicle?: VehicleRecord;
+};
+
 export type DeliveryType = "overnight" | "two_day" | "standard" | "economy";
 export type SpecialMark = "fragile" | "dangerous" | "international";
 
@@ -294,6 +323,19 @@ export const api = {
   getMap: () =>
     request<MapResponse>("/api/map", {
       method: "GET",
+    }),
+  getMapRoute: (params: { from: string; to: string }) => {
+    const qs = new URLSearchParams({ from: params.from, to: params.to });
+    return request<MapRouteResponse>(`/api/map/route?${qs.toString()}`, { method: "GET" });
+  },
+  getVehicleMe: () =>
+    request<VehicleMeResponse>("/api/vehicles/me", {
+      method: "GET",
+    }),
+  moveVehicleMe: (payload: VehicleMovePayload) =>
+    request<VehicleMoveResponse>("/api/vehicles/me/move", {
+      method: "POST",
+      body: JSON.stringify(payload),
     }),
   getMe: () =>
     request<{ success: boolean; user: User }>("/api/auth/me", {

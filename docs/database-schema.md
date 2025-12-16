@@ -114,9 +114,7 @@ CREATE TABLE IF NOT EXISTS package_events (
   delivery_status TEXT,
   delivery_details TEXT,
   events_at TEXT,
-  location TEXT,
-  paid_at TEXT,
-  collected_by TEXT
+  location TEXT
 );
 ```
 
@@ -134,6 +132,7 @@ CREATE TABLE IF NOT EXISTS payments (
   special_fee INTEGER,
   calculated_at TEXT,
   paid_at TEXT,
+  collected_by TEXT,
   package_id TEXT REFERENCES packages(id)
 );
 ```
@@ -316,13 +315,13 @@ CREATE UNIQUE INDEX idx_vehicles_driver_user_id ON vehicles(driver_user_id);
 
 ---
 
-### 2.14 付款資訊（合併到 `package_events`）
+### 2.14 付款資訊（`payments`）
 
-用途：付款資訊欄位位於 `package_events`；系統允許客戶付款，不處理「少給/多給」差額，因此不需要 `collected_amount`，只保留付款時間與收款人（依付款方式不同可能是系統或司機）。
+用途：付款紀錄欄位位於 `payments`；`package_events` 專注在貨態/流程事件（需要記錄付款事件時，用事件時間 `events_at` 表示）。
 
-- 是否付款：以 `paid_at` 是否為 `NULL` 判斷（`NULL`=未付款，非 `NULL`=已付款）
-- 付款時間：`paid_at`（客戶實際付款時間）
-- 收款人：`collected_by`（`system` 或 `users.id`；現金由司機收款時填司機的 `users.id`）
+- 是否付款：以 `payments.paid_at` 是否為 `NULL` 判斷（`NULL`=未付款，非 `NULL`=已付款）
+- 付款時間：`payments.paid_at`（客戶實際付款時間）
+- 收款人：`payments.collected_by`（`system` 或 `users.id`；現金由司機收款時填司機的 `users.id`）
 
 ---
 

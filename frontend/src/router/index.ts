@@ -17,6 +17,7 @@ import EmployeeCustomerServiceView from '../views/EmployeeCustomerServiceView.vu
 
 import AdminView from '../views/AdminView.vue'
 import VirtualMapView from '../views/VirtualMapView.vue'
+import DriverMapView from '../views/DriverMapView.vue'
 import ShippingEstimateView from '../views/ShippingEstimateView.vue'
 
 import { useAuthStore } from '../stores/auth'
@@ -44,6 +45,12 @@ const router = createRouter({
     { path: '/register', name: 'register', component: LoginView },
 
     { path: '/map', name: 'virtual-map', component: VirtualMapView },
+    {
+      path: '/driver/map',
+      name: 'driver-map',
+      component: DriverMapView,
+      meta: { roles: DRIVER_ROLES },
+    },
     { path: '/shipping/estimate', name: 'shipping-estimate', component: ShippingEstimateView },
     { path: '/track', name: 'public-track', component: PublicTrackView },
 
