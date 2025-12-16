@@ -335,10 +335,11 @@ npm run test:unit
 | cs@example.com | 客服人員 |
 | admin@example.com | 管理員 |
 
-員工帳號的 `address` 代表工作地（地圖節點 ID）：`driver/admin/cs` 預設為 `HUB_0`，`warehouse` 預設為 `REG_0`。
+員工帳號的 `address` 代表工作地（地圖節點 ID）：`driver/admin/cs/warehouse` 預設為 `HUB_0`。
 
 另會依地圖自動補齊測試員工（見 `backend/migrations/0011_seed_test_users.sql`）：
 - 其他配送中心司機：`driver_hub_1@example.com`（規則：`driver_<hubId>@example.com`），密碼 `driver123`
+- 其他配送中心倉儲：`warehouse_hub_1@example.com`（規則：`warehouse_<hubId>@example.com`），密碼 `warehouse123`
 - 其他配送站倉儲：`warehouse_reg_1@example.com`（規則：`warehouse_<regId>@example.com`），密碼 `warehouse123`
 
 ---

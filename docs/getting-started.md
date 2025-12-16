@@ -143,6 +143,7 @@ npm run dev
 
 另會依地圖自動補齊測試員工（見 `backend/migrations/0011_seed_test_users.sql`）：
 - 其他配送中心司機：`driver_hub_1@example.com`（規則：`driver_<hubId>@example.com`），密碼 `driver123`
+- 其他配送中心倉儲：`warehouse_hub_1@example.com`（規則：`warehouse_<hubId>@example.com`），密碼 `warehouse123`
 - 其他配送站倉儲：`warehouse_reg_1@example.com`（規則：`warehouse_<regId>@example.com`），密碼 `warehouse123`
 
 ---

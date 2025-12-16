@@ -129,10 +129,10 @@ const handleRegister = async () => {
 const testAccounts: TestAccount[] = [
   { email: 'cust@example.com', password: 'cust123', role: '合約客戶' },
   { email: 'noncontract@example.com', password: 'custnc123', role: '非合約客戶' },
-  { email: 'driver@example.com', password: 'driver123', role: '司機' },
-  { email: 'warehouse@example.com', password: 'warehouse123', role: '倉儲' },
-  { email: 'cs@example.com', password: 'cs123', role: '客服' },
-  { email: 'admin@example.com', password: 'admin123', role: '管理員' },
+  { email: 'driver@example.com', password: 'driver123', role: '貨車司機' },
+  { email: 'warehouse@example.com', password: 'warehouse123', role: '倉儲人員' },
+  { email: 'cs@example.com', password: 'cs123', role: '客服專員' },
+  { email: 'admin@example.com', password: 'admin123', role: '系統管理員' },
 ]
 
 const fillTestAccount = (acct: TestAccount) => {
