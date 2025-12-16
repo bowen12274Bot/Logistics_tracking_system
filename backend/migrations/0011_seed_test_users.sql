@@ -8,8 +8,8 @@
 -- 密碼皆為 SHA-256(hex) 後存入 password_hash；以下沿用既有預設帳密：
 -- - cust@example.com / cust123
 -- - noncontract@example.com / custnc123
--- - driver@example.com / driver123
--- - warehouse@example.com / warehouse123
+-- - driver_hub_0@example.com / driver123
+-- - warehouse_hub_0@example.com / warehouse123
 -- - cs@example.com / cs123
 -- - admin@example.com / admin123
 
@@ -20,8 +20,8 @@ INSERT OR IGNORE INTO users (id, user_name, phone_number, address, email, passwo
 
 -- HUB_0 的預設員工（用於測試/文件）
 INSERT OR IGNORE INTO users (id, user_name, phone_number, address, email, password_hash, user_type, user_class, billing_preference) VALUES
-  ('user-driver-0', '司機', '0911222333', 'HUB_0', 'driver@example.com', '494d022492052a06f8f81949639a1d148c1051fa3d4e4688fbd96efe649cd382', 'employee', 'driver', NULL),
-  ('user-warehouse-0', '倉儲人員', '0911777888', 'HUB_0', 'warehouse@example.com', '0e842cbe0341154ee33e0ed3bc18282cd69e016a8d56fda05ec92e7ff20a0f31', 'employee', 'warehouse_staff', NULL),
+  ('user-driver-0', '司機 HUB_0', '0911222333', 'HUB_0', 'driver_hub_0@example.com', '494d022492052a06f8f81949639a1d148c1051fa3d4e4688fbd96efe649cd382', 'employee', 'driver', NULL),
+  ('user-warehouse-0', '倉儲 HUB_0', '0911777888', 'HUB_0', 'warehouse_hub_0@example.com', '0e842cbe0341154ee33e0ed3bc18282cd69e016a8d56fda05ec92e7ff20a0f31', 'employee', 'warehouse_staff', NULL),
   ('user-cs-0', '客服專員', '0911333555', 'HUB_0', 'cs@example.com', 'c3683517539a2452f7890cd9ec8eb330d8465673140d8abc89a82e5a1329d696', 'employee', 'customer_service', NULL),
   ('user-admin-0', '系統管理員', '0911666777', 'HUB_0', 'admin@example.com', '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', 'employee', 'admin', NULL);
 

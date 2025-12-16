@@ -330,8 +330,8 @@ npm run test:unit
 |------|------|
 | noncontract@example.com | 非合約客戶 |
 | cust@example.com | 合約客戶 |
-| driver@example.com | 駕駛員 |
-| warehouse@example.com | 倉儲人員 |
+| driver_hub_0@example.com | 駕駛員 |
+| warehouse_hub_0@example.com | 倉儲人員 |
 | cs@example.com | 客服人員 |
 | admin@example.com | 管理員 |
 

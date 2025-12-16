@@ -159,7 +159,7 @@ export async function getDriverToken() {
     "/api/auth/login",
     {
       method: "POST",
-      body: JSON.stringify({ identifier: "driver@example.com", password: "driver123" }),
+      body: JSON.stringify({ identifier: "driver_hub_0@example.com", password: "driver123" }),
     }
   );
 
@@ -176,7 +176,7 @@ export async function getWarehouseToken() {
     "/api/auth/login",
     {
       method: "POST",
-      body: JSON.stringify({ identifier: "warehouse@example.com", password: "warehouse123" }),
+      body: JSON.stringify({ identifier: "warehouse_hub_0@example.com", password: "warehouse123" }),
     }
   );
 

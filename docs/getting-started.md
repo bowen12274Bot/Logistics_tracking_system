@@ -134,8 +134,8 @@ npm run dev
 |------|------|-----------|------------|
 | 非合約客戶 | noncontract@example.com | customer | non_contract_customer |
 | 合約客戶 | cust@example.com | customer | contract_customer |
-| 駕駛員 | driver@example.com | employee | driver |
-| 倉儲人員 | warehouse@example.com | employee | warehouse_staff |
+| 駕駛員 | driver_hub_0@example.com | employee | driver |
+| 倉儲人員 | warehouse_hub_0@example.com | employee | warehouse_staff |
 | 客服人員 | cs@example.com | employee | customer_service |
 | 管理員 | admin@example.com | employee | admin |
 
