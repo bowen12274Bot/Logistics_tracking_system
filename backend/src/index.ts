@@ -26,6 +26,7 @@ import { BillingPaymentCreate, BillingPaymentList } from "./endpoints/billingPay
 import { AdminUserCreate } from "./endpoints/adminUsers";
 import { AdminContractList, AdminContractReview } from "./endpoints/adminContracts";
 import { AdminSystemErrors } from "./endpoints/adminErrors";
+import { VehicleMeGet, VehicleMeMove } from "./endpoints/vehiclesMe";
 
 type Bindings = {
   DB: D1Database;
@@ -240,6 +241,10 @@ openapi.delete("/api/tasks/:taskSlug", TaskDelete);
 openapi.get("/api/map", MapFetch);
 openapi.put("/api/map/edges/:id", MapEdgeUpdate);
 openapi.get("/api/map/route", MapRoute);
+
+// Vehicles APIs (driver only)
+openapi.get("/api/vehicles/me", VehicleMeGet);
+openapi.post("/api/vehicles/me/move", VehicleMeMove);
 
 // Package APIs (T3 & T4)
 openapi.post("/api/packages", PackageCreate);

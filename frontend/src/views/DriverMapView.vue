@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref } from "vue";
 import { api, type MapEdge, type MapNode, type VehicleRecord } from "../services/api";
 import { useFullscreen } from "../composables/useFullscreen";
+const truckIconUrl = new URL("../assets/truck.png", import.meta.url).href;
 
 type ViewBox = { x: number; y: number; w: number; h: number };
 
@@ -13,6 +14,8 @@ const edges = ref<MapEdge[]>([]);
 
 const vehicle = ref<VehicleRecord | null>(null);
 const currentNodeId = ref<string | null>(null);
+const truckCode = computed(() => vehicle.value?.vehicle_code ?? "TRUCK");
+const truckFlipX = ref<1 | -1>(1);
 
 const svgEl = ref<SVGSVGElement | null>(null);
 const stageEl = ref<HTMLDivElement | null>(null);
@@ -67,8 +70,18 @@ const drag = reactive({
   active: false,
   startClientX: 0,
   startClientY: 0,
+  moved: false,
+  downNodeId: null as string | null,
   startBox: { x: 0, y: 0, w: 10000, h: 10000 } as ViewBox,
 });
+
+function eventToNodeId(e: Event): string | null {
+  const target = e.target as Element | null;
+  if (!target) return null;
+  const nodeEl = target.closest("g.node") as SVGGElement | null;
+  const id = nodeEl?.dataset?.nodeId;
+  return typeof id === "string" && id ? id : null;
+}
 
 function clientToSvg(clientX: number, clientY: number): { x: number; y: number } | null {
   const el = svgEl.value;
@@ -100,10 +113,13 @@ function onWheel(e: WheelEvent) {
 function onPointerDown(e: PointerEvent) {
   const el = svgEl.value;
   if (!el) return;
+  e.preventDefault();
   el.setPointerCapture(e.pointerId);
   drag.active = true;
   drag.startClientX = e.clientX;
   drag.startClientY = e.clientY;
+  drag.moved = false;
+  drag.downNodeId = eventToNodeId(e);
   drag.startBox = { x: viewBox.x, y: viewBox.y, w: viewBox.w, h: viewBox.h };
 }
 
@@ -115,6 +131,11 @@ function onPointerMove(e: PointerEvent) {
   if (rect.width === 0 || rect.height === 0) return;
   const dx = (e.clientX - drag.startClientX) / rect.width;
   const dy = (e.clientY - drag.startClientY) / rect.height;
+  if (!drag.moved) {
+    const px = e.clientX - drag.startClientX;
+    const py = e.clientY - drag.startClientY;
+    if (Math.hypot(px, py) >= 6) drag.moved = true;
+  }
   viewBox.x = drag.startBox.x - dx * drag.startBox.w;
   viewBox.y = drag.startBox.y - dy * drag.startBox.h;
 }
@@ -123,6 +144,14 @@ function onPointerUp(e: PointerEvent) {
   const el = svgEl.value;
   if (el) el.releasePointerCapture(e.pointerId);
   drag.active = false;
+  if (!drag.moved && drag.downNodeId && currentNodeId.value) {
+    const id = drag.downNodeId;
+    if (moving.value) {
+      // ignore interactions while moving
+    } else if (isNeighbor(id)) void animateMoveTo(id);
+    else void highlightRouteTo(id);
+  }
+  drag.downNodeId = null;
 }
 
 function nodeStyle(node: MapNode) {
@@ -194,6 +223,7 @@ function isNeighbor(targetId: string) {
 }
 
 async function highlightRouteTo(targetId: string) {
+  if (moving.value) return;
   const from = currentNodeId.value;
   if (!from) return;
   if (targetId === from) {
@@ -210,6 +240,42 @@ async function highlightRouteTo(targetId: string) {
     const res = await api.getMapRoute({ from, to: targetId });
     activeRoutePath.value = res.route.path;
     activeRouteTargetId.value = targetId;
+    if (res.route.path.length >= 2) {
+      const nextId = String(res.route.path[1] ?? "");
+      const fromNode = nodesById.value.get(from);
+      const nextNode = nodesById.value.get(nextId);
+      if (fromNode && nextNode) {
+        truckFlipX.value = nextNode.x - fromNode.x < 0 ? -1 : 1;
+      }
+    }
+  } catch {
+    activeRoutePath.value = null;
+    activeRouteTargetId.value = null;
+  }
+}
+
+async function refreshActiveRouteFromCurrent() {
+  if (moving.value) return;
+  const to = activeRouteTargetId.value;
+  const from = currentNodeId.value;
+  if (!to || !from) return;
+  if (to === from) {
+    activeRoutePath.value = null;
+    activeRouteTargetId.value = null;
+    return;
+  }
+
+  try {
+    const res = await api.getMapRoute({ from, to });
+    activeRoutePath.value = res.route.path;
+    if (res.route.path.length >= 2) {
+      const nextId = String(res.route.path[1] ?? "");
+      const fromNode = nodesById.value.get(from);
+      const nextNode = nodesById.value.get(nextId);
+      if (fromNode && nextNode) {
+        truckFlipX.value = nextNode.x - fromNode.x < 0 ? -1 : 1;
+      }
+    }
   } catch {
     activeRoutePath.value = null;
     activeRouteTargetId.value = null;
@@ -350,12 +416,12 @@ async function animateMoveTo(targetId: string) {
   if (moving.value) return;
 
   moving.value = true;
-  activeRoutePath.value = null;
 
   const fromX = fromNode.x;
   const fromY = fromNode.y;
   const toX = toNode.x;
   const toY = toNode.y;
+  truckFlipX.value = toX - fromX < 0 ? -1 : 1;
 
   const distance = edgeDistance(fromId, targetId) ?? Math.hypot(toX - fromX, toY - fromY);
   const speed = 1200;
@@ -380,8 +446,6 @@ async function animateMoveTo(targetId: string) {
     await api.moveVehicleMe({ fromNodeId: fromId, toNodeId: targetId });
     currentNodeId.value = targetId;
     if (vehicle.value) vehicle.value.current_node_id = targetId;
-    activeRoutePath.value = null;
-    activeRouteTargetId.value = null;
   } catch (e: any) {
     error.value = `更新車輛位置失敗：${String(e?.message ?? e)}`;
     truckPos.x = fromX;
@@ -389,6 +453,8 @@ async function animateMoveTo(targetId: string) {
   } finally {
     moving.value = false;
   }
+
+  await refreshActiveRouteFromCurrent();
 }
 
 function focusOnNode(id: string) {
@@ -521,15 +587,14 @@ onMounted(async () => {
               v-for="n in nodes"
               :key="n.id"
               class="node"
+              :data-node-id="n.id"
               :class="{
                 current: n.id === currentNodeId,
                 neighbor: currentNodeId ? neighborsById.get(currentNodeId)?.has(n.id) : false,
                 hovered: hoveredNodeId === n.id,
               }"
-              @pointerdown.stop
               @mouseenter="hoveredNodeId = n.id"
               @mouseleave="hoveredNodeId = null"
-              @click.stop="currentNodeId ? (isNeighbor(n.id) ? animateMoveTo(n.id) : highlightRouteTo(n.id)) : null"
               @dblclick.stop="focusOnNode(n.id)"
             >
               <circle
@@ -591,17 +656,27 @@ onMounted(async () => {
           </g>
 
           <g class="truck" :transform="`translate(${truckPos.x} ${truckPos.y})`">
-            <circle r="90" class="truck-dot" stroke-width="14" />
-            <text y="18" text-anchor="middle" class="truck-label">TRUCK</text>
+            <g class="truck-icon-wrap" :transform="truckFlipX < 0 ? 'scale(-1 1)' : undefined">
+              <image
+                class="truck-icon"
+                :href="truckIconUrl"
+                :xlink:href="truckIconUrl"
+                x="-300"
+                y="-240"
+                width="600"
+                height="480"
+                preserveAspectRatio="xMidYMid meet"
+              />
+            </g>
+            <text y="-96" text-anchor="middle" class="truck-code">{{ truckCode }}</text>
           </g>
         </svg>
 
         <div class="card map-overlay" role="complementary" aria-label="driver map panel">
           <p class="eyebrow">狀態</p>
           <div class="hint">
-            <div><strong>Vehicle：</strong>{{ vehicle?.vehicle_code ?? "未串接" }}</div>
-            <div><strong>Current：</strong>{{ currentNodeId ?? "-" }}</div>
-            <div><strong>Moving：</strong>{{ moving ? "yes" : "no" }}</div>
+            <div><strong>貨車編號：</strong>{{ vehicle?.vehicle_code ?? "未串接" }}</div>
+            <div><strong>目前位置：</strong>{{ currentNodeId ?? "-" }}</div>
           </div>
 
           <div v-if="activeRoutePath" class="hint">
@@ -667,6 +742,9 @@ onMounted(async () => {
   background:
     radial-gradient(circle at 1px 1px, rgba(148, 163, 184, 0.35) 1px, transparent 0) 0 0 / 26px 26px,
     #ffffff;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
 }
 
 .map-svg:active {
@@ -791,14 +869,17 @@ onMounted(async () => {
   vector-effect: none;
 }
 
-.truck-dot {
-  fill: rgba(15, 23, 42, 0.88);
-  stroke: rgba(255, 255, 255, 0.85);
+.truck-code {
+  font-size: 72px;
+  fill: rgba(15, 23, 42, 0.92);
+  pointer-events: none;
+  user-select: none;
+  paint-order: stroke;
+  stroke: rgba(255, 255, 255, 0.92);
+  stroke-width: 22px;
 }
 
-.truck-label {
-  font-size: 78px;
-  fill: rgba(255, 255, 255, 0.95);
+.truck-icon {
   pointer-events: none;
   user-select: none;
 }
@@ -807,7 +888,7 @@ onMounted(async () => {
   position: absolute;
   top: 12px;
   right: 12px;
-  width: 280px;
+  width: 220px;
   max-height: calc(100% - 24px);
   overflow: auto;
   background: rgba(255, 255, 255, 0.88);
