@@ -46,6 +46,12 @@ export class PackageStatusQuery extends OpenAPIRoute {
 							success: z.boolean(),
 							package: Package,
 							events: z.array(PackageEvent),
+							vehicle: z
+								.object({
+									id: z.string(),
+									vehicle_code: z.string(),
+								})
+								.nullable(),
 						}),
 					},
 				},
@@ -85,6 +91,35 @@ export class PackageStatusQuery extends OpenAPIRoute {
 			.bind(pkg.id)
 			.all();
 
+		let vehicle = await c.env.DB.prepare(
+			`
+			SELECT v.id AS id, v.vehicle_code AS vehicle_code
+			FROM vehicle_cargo vc
+			JOIN vehicles v ON v.id = vc.vehicle_id
+			WHERE vc.package_id = ? AND vc.unloaded_at IS NULL
+			ORDER BY vc.loaded_at DESC
+			LIMIT 1
+			`,
+		)
+			.bind(pkg.id)
+			.first<{ id: string; vehicle_code: string }>();
+
+		// If not loaded yet, but the latest event location is a TRUCK_ code (driver en-route to pickup),
+		// resolve it to a vehicle record so the customer UI can show truck code.
+		if (!vehicle) {
+			const latest = await c.env.DB.prepare(
+				"SELECT location FROM package_events WHERE package_id = ? ORDER BY events_at DESC LIMIT 1",
+			)
+				.bind(pkg.id)
+				.first<{ location: string | null }>();
+			const loc = String(latest?.location ?? "").trim();
+			if (/^TRUCK_/i.test(loc)) {
+				vehicle = await c.env.DB.prepare("SELECT id, vehicle_code FROM vehicles WHERE UPPER(vehicle_code) = ? LIMIT 1")
+					.bind(loc.toUpperCase())
+					.first<{ id: string; vehicle_code: string }>();
+			}
+		}
+
 		let parsedPackage = pkg;
 		if (pkg.description_json) {
 			try {
@@ -121,6 +156,7 @@ export class PackageStatusQuery extends OpenAPIRoute {
 			success: true,
 			package: parsedPackage,
 			events: events.results,
+			vehicle: vehicle ? { id: String(vehicle.id), vehicle_code: String(vehicle.vehicle_code) } : null,
 		};
 	}
 }
@@ -213,4 +249,3 @@ export class PackageList extends OpenAPIRoute {
 		};
 	}
 }
-

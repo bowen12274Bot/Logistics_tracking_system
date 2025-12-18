@@ -15,6 +15,7 @@ import m0011 from "../../migrations/0011_seed_test_users.sql?raw";
 import m0012 from "../../migrations/0012_package_exceptions.sql?raw";
 import m0013 from "../../migrations/0013_delivery_tasks.sql?raw";
 import m0014 from "../../migrations/0014_vehicles.sql?raw";
+import m0015 from "../../migrations/0015_vehicle_cargo.sql?raw";
 
 const migrations = [
   m0000,
@@ -31,6 +32,7 @@ const migrations = [
   m0012,
   m0013,
   m0014,
+  m0015,
 ];
 
 const splitSqlStatements = (sql: string) => {

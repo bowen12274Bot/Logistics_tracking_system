@@ -205,6 +205,41 @@ export class VehicleMeMove extends OpenAPIRoute {
       .bind(auth.user.id)
       .first<VehicleRow>();
 
+    // If the truck is carrying packages, mark them as in_transit and append a movement event on the truck.
+    // We intentionally use `vehicle_code` as the event location so customer UI can render this as "on the road"
+    // (line state) without overwriting node arrival timestamps (point state).
+    const cargoRows = await c.env.DB.prepare(
+      `
+      SELECT vc.package_id AS package_id
+      FROM vehicle_cargo vc
+      WHERE vc.vehicle_id = ? AND vc.unloaded_at IS NULL
+      `,
+    )
+      .bind(vehicle.id)
+      .all<{ package_id: string }>();
+
+    const cargoPackageIds = (cargoRows.results ?? []).map((r) => String((r as any).package_id)).filter(Boolean);
+    if (cargoPackageIds.length > 0) {
+      const vehicleCode = String(vehicle.vehicle_code ?? "").trim();
+      for (const packageId of cargoPackageIds) {
+        await c.env.DB.prepare(
+          "UPDATE packages SET status = 'in_transit' WHERE id = ? AND COALESCE(status,'') NOT IN ('delivered','exception')",
+        )
+          .bind(packageId)
+          .run();
+
+        const eventId = crypto.randomUUID();
+        await c.env.DB.prepare(
+          `
+          INSERT INTO package_events (id, package_id, delivery_status, delivery_details, events_at, location)
+          VALUES (?, ?, 'in_transit', ?, ?, ?)
+          `,
+        )
+          .bind(eventId, packageId, `前往 ${toNodeId}`, updatedAt, vehicleCode || null)
+          .run();
+      }
+    }
+
     return c.json({ success: true, vehicle: updated ?? null });
   }
 }

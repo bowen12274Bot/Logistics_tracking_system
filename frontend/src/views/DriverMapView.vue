@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from "vue";
-import { api, type MapEdge, type MapNode, type VehicleRecord } from "../services/api";
+import { api, type DeliveryTaskRecord, type MapEdge, type MapNode, type VehicleRecord } from "../services/api";
 import { useFullscreen } from "../composables/useFullscreen";
 const truckIconUrl = new URL("../assets/truck.png", import.meta.url).href;
 
@@ -167,6 +167,50 @@ const activeRoutePath = ref<string[] | null>(null);
 const activeRouteTargetId = ref<string | null>(null);
 const hoveredNodeId = ref<string | null>(null);
 
+const assignedTasks = ref<DeliveryTaskRecord[]>([]);
+const handoffTasks = ref<DeliveryTaskRecord[]>([]);
+const arrivePanelOpen = ref(false);
+const arrivePanelTab = ref<"actions" | "handoff">("actions");
+const arriveError = ref<string | null>(null);
+const arriveBusy = ref(false);
+const cargo = ref<Array<{ package_id: string; tracking_number: string | null; loaded_at: string | null }>>([]);
+const cargoPackageIds = computed(() => new Set(cargo.value.map((c) => String(c.package_id))));
+
+const tasksAtCurrentNode = computed(() => {
+  const nodeId = currentNodeId.value;
+  if (!nodeId) return [];
+  return assignedTasks.value.filter((t) => String(t.from_location ?? "").trim() === nodeId);
+});
+
+const tasksEndingAtCurrentNode = computed(() => {
+  const nodeId = currentNodeId.value;
+  if (!nodeId) return [];
+  return assignedTasks.value.filter((t) => String(t.to_location ?? "").trim() === nodeId);
+});
+
+function canDropoffTask(task: DeliveryTaskRecord) {
+  if (String(task.status) !== "in_progress") return false;
+  return cargoPackageIds.value.has(String(task.package_id));
+}
+
+const droppableTasksEndingAtCurrentNode = computed(() => tasksEndingAtCurrentNode.value.filter(canDropoffTask));
+
+const otherAssignedTasks = computed(() => {
+  const nodeId = currentNodeId.value;
+  if (!nodeId) return assignedTasks.value;
+  return assignedTasks.value.filter((t) => String(t.from_location ?? "").trim() !== nodeId);
+});
+
+const handoffAtCurrentNode = computed(() => {
+  const nodeId = currentNodeId.value;
+  if (!nodeId) return [];
+  return handoffTasks.value.filter((t) => String(t.from_location ?? "").trim() === nodeId);
+});
+
+const exceptionModalOpen = ref(false);
+const exceptionTarget = ref<{ packageId: string; taskId?: string } | null>(null);
+const exceptionForm = reactive({ reason_code: "", description: "" });
+
 const hoveredNode = computed(() => {
   const id = hoveredNodeId.value;
   return id ? nodesById.value.get(id) ?? null : null;
@@ -177,6 +221,171 @@ const hoveredIsNeighbor = computed(() => {
   if (!id) return false;
   return isNeighbor(id);
 });
+
+function suggestedStatus(task: DeliveryTaskRecord) {
+  if (task.task_type === "pickup") return "picked_up";
+  const to = String(task.to_location ?? "");
+  if (/^END_/i.test(to)) return "delivered";
+  return "in_transit";
+}
+
+async function refreshArriveData() {
+  arriveError.value = null;
+  try {
+    const [assignedRes, handoffRes, cargoRes] = await Promise.all([
+      api.getDriverTasks("assigned"),
+      api.getDriverTasks("handoff"),
+      api.getVehicleCargoMe(),
+    ]);
+    assignedTasks.value = assignedRes.tasks ?? [];
+    handoffTasks.value = handoffRes.tasks ?? [];
+    cargo.value = cargoRes.cargo ?? [];
+  } catch (e: any) {
+    arriveError.value = String(e?.message ?? e);
+  }
+}
+
+function openArrivePanel(auto = false) {
+  if (auto) {
+    const hasAny = tasksAtCurrentNode.value.length > 0 || handoffAtCurrentNode.value.length > 0;
+    if (!hasAny) return;
+  }
+  arrivePanelOpen.value = true;
+  arrivePanelTab.value = tasksAtCurrentNode.value.length > 0 ? "actions" : "handoff";
+}
+
+function closeArrivePanel() {
+  arrivePanelOpen.value = false;
+  exceptionModalOpen.value = false;
+}
+
+async function takeOverTask(taskId: string) {
+  if (arriveBusy.value) return;
+  arriveBusy.value = true;
+  arriveError.value = null;
+  try {
+    await api.acceptDriverTask(taskId);
+    await refreshArriveData();
+    arrivePanelTab.value = "actions";
+  } catch (e: any) {
+    arriveError.value = String(e?.message ?? e);
+  } finally {
+    arriveBusy.value = false;
+  }
+}
+
+async function completeTask(task: DeliveryTaskRecord) {
+  if (arriveBusy.value) return;
+  arriveBusy.value = true;
+  arriveError.value = null;
+  try {
+    await api.completeDriverTask(task.id);
+    await refreshArriveData();
+  } catch (e: any) {
+    arriveError.value = String(e?.message ?? e);
+  } finally {
+    arriveBusy.value = false;
+  }
+}
+
+async function completeAndUpdateStatus(task: DeliveryTaskRecord) {
+  // kept for backward compatibility (manual override); prefer pickup/dropoff actions below
+  if (arriveBusy.value) return;
+  arriveBusy.value = true;
+  arriveError.value = null;
+  try {
+    const status = suggestedStatus(task);
+    await api.driverUpdatePackageStatus(task.package_id, {
+      status,
+      note: `Manual from Arrive Panel (${task.task_type})`,
+      location: currentNodeId.value ?? undefined,
+    });
+    await api.completeDriverTask(task.id);
+    await refreshArriveData();
+  } catch (e: any) {
+    arriveError.value = String(e?.message ?? e);
+  } finally {
+    arriveBusy.value = false;
+  }
+}
+
+async function pickupTask(task: DeliveryTaskRecord) {
+  if (arriveBusy.value) return;
+  arriveBusy.value = true;
+  arriveError.value = null;
+  try {
+    await api.pickupDriverTask(task.id);
+    await refreshArriveData();
+  } catch (e: any) {
+    arriveError.value = String(e?.message ?? e);
+  } finally {
+    arriveBusy.value = false;
+  }
+}
+
+async function dropoffTask(task: DeliveryTaskRecord) {
+  if (arriveBusy.value) return;
+  arriveBusy.value = true;
+  arriveError.value = null;
+  try {
+    await api.dropoffDriverTask(task.id);
+    await refreshArriveData();
+  } catch (e: any) {
+    arriveError.value = String(e?.message ?? e);
+  } finally {
+    arriveBusy.value = false;
+  }
+}
+
+async function enrouteTask(task: DeliveryTaskRecord) {
+  if (arriveBusy.value) return;
+  arriveBusy.value = true;
+  arriveError.value = null;
+  try {
+    await api.enrouteDriverTask(task.id);
+    await refreshArriveData();
+    const status = String(task.status ?? "").trim().toLowerCase();
+    const destination =
+      status === "in_progress" ? String(task.to_location ?? "").trim() : String(task.from_location ?? "").trim();
+    if (destination) await highlightRouteTo(destination);
+  } catch (e: any) {
+    arriveError.value = String(e?.message ?? e);
+  } finally {
+    arriveBusy.value = false;
+  }
+}
+
+function startException(task: DeliveryTaskRecord) {
+  exceptionTarget.value = { packageId: task.package_id, taskId: task.id };
+  exceptionForm.reason_code = "";
+  exceptionForm.description = "";
+  exceptionModalOpen.value = true;
+}
+
+async function submitException() {
+  if (!exceptionTarget.value) return;
+  if (arriveBusy.value) return;
+  if (!exceptionForm.description.trim()) {
+    arriveError.value = "請填寫異常描述";
+    return;
+  }
+  arriveBusy.value = true;
+  arriveError.value = null;
+  try {
+    await api.driverReportPackageException(exceptionTarget.value.packageId, {
+      reason_code: exceptionForm.reason_code.trim() || undefined,
+      description: exceptionForm.description.trim(),
+      location: currentNodeId.value ?? undefined,
+    });
+    exceptionModalOpen.value = false;
+    exceptionTarget.value = null;
+    await refreshArriveData();
+  } catch (e: any) {
+    arriveError.value = String(e?.message ?? e);
+  } finally {
+    arriveBusy.value = false;
+  }
+}
 
 const routeSegments = computed(() => {
   const path = activeRoutePath.value;
@@ -455,6 +664,8 @@ async function animateMoveTo(targetId: string) {
   }
 
   await refreshActiveRouteFromCurrent();
+  await refreshArriveData();
+  openArrivePanel(true);
 }
 
 function focusOnNode(id: string) {
@@ -499,6 +710,8 @@ onMounted(async () => {
         focusOnNode(n.id);
       }
     }
+
+    await refreshArriveData();
   } catch (e: any) {
     error.value = String(e?.message ?? e);
   } finally {
@@ -530,6 +743,9 @@ onMounted(async () => {
             @click="toggleFullscreen"
           >
             {{ isFullscreen ? "退出全螢幕" : "全螢幕" }}
+          </button>
+          <button class="ghost-btn" type="button" @click="openArrivePanel()">
+            抵達面板
           </button>
         </div>
 
@@ -682,6 +898,166 @@ onMounted(async () => {
           <div v-if="activeRoutePath" class="hint">
             <p class="eyebrow">導航路徑</p>
             <div class="route-chip">{{ activeRoutePath.join(" → ") }}</div>
+          </div>
+        </div>
+
+        <div v-if="arrivePanelOpen" class="arrive-panel" role="dialog" aria-label="arrive panel">
+          <div class="arrive-header">
+            <div>
+              <p class="eyebrow">抵達面板</p>
+              <p class="hint" style="margin: 0"><strong>節點：</strong>{{ currentNodeId ?? "-" }}</p>
+              <p class="hint" style="margin: 6px 0 0"><strong>車上貨物：</strong>{{ cargo.length }}</p>
+            </div>
+            <div class="arrive-header-actions">
+              <button class="ghost-btn" type="button" :disabled="arriveBusy" @click="refreshArriveData">重新整理</button>
+              <button class="ghost-btn" type="button" @click="closeArrivePanel">關閉</button>
+            </div>
+          </div>
+
+          <p v-if="arriveError" class="hint" style="margin-top: 10px; color: #b91c1c">{{ arriveError }}</p>
+
+          <div class="arrive-tabs">
+            <button
+              class="ghost-btn"
+              type="button"
+              :class="{ active: arrivePanelTab === 'actions' }"
+              @click="arrivePanelTab = 'actions'"
+            >
+              可執行（此節點） {{ tasksAtCurrentNode.length }}
+            </button>
+            <button
+              class="ghost-btn"
+              type="button"
+              :class="{ active: arrivePanelTab === 'handoff' }"
+              @click="arrivePanelTab = 'handoff'"
+            >
+              可接手（此節點） {{ handoffAtCurrentNode.length }}
+            </button>
+          </div>
+
+          <div v-if="arrivePanelTab === 'actions'" class="arrive-body">
+            <div v-if="tasksAtCurrentNode.length === 0 && tasksEndingAtCurrentNode.length === 0" class="hint">
+              此節點沒有可執行任務。
+            </div>
+
+            <div v-if="tasksAtCurrentNode.length > 0">
+              <p class="eyebrow">起點作業（上車/開始）</p>
+              <ul class="arrive-task-list">
+                <li v-for="t in tasksAtCurrentNode" :key="t.id" class="arrive-task">
+                  <div class="arrive-task-top">
+                    <strong>{{ t.tracking_number ?? t.package_id }}</strong>
+                    <span class="hint">{{ t.task_type }} · #{{ t.segment_index ?? "-" }} · {{ t.status }}</span>
+                  </div>
+                  <div class="hint">{{ t.from_location }} → {{ t.to_location }}</div>
+                  <div class="arrive-task-actions">
+                    <button
+                      v-if="String(t.status ?? '').trim().toLowerCase() !== 'in_progress'"
+                      class="primary-btn small-btn"
+                      type="button"
+                      :disabled="arriveBusy"
+                      @click="pickupTask(t)"
+                    >
+                      取件上車
+                    </button>
+                    <button
+                      v-else
+                      class="ghost-btn small-btn"
+                      type="button"
+                      :disabled="arriveBusy"
+                      @click="enrouteTask(t)"
+                    >
+                      正在前往
+                    </button>
+                    <button class="ghost-btn small-btn" type="button" :disabled="arriveBusy" @click="startException(t)">
+                      申報異常
+                    </button>
+                  </div>
+                </li>
+              </ul>
+            </div>
+
+            <div v-if="droppableTasksEndingAtCurrentNode.length > 0" style="margin-top: 12px">
+              <p class="eyebrow">終點作業（卸貨/完成）</p>
+              <ul class="arrive-task-list">
+                <li v-for="t in droppableTasksEndingAtCurrentNode" :key="t.id" class="arrive-task">
+                  <div class="arrive-task-top">
+                    <strong>{{ t.tracking_number ?? t.package_id }}</strong>
+                    <span class="hint">{{ t.task_type }} · #{{ t.segment_index ?? "-" }} · {{ t.status }}</span>
+                  </div>
+                  <div class="hint">{{ t.from_location }} → {{ t.to_location }}</div>
+                  <div class="arrive-task-actions">
+                    <button class="primary-btn small-btn" type="button" :disabled="arriveBusy" @click="dropoffTask(t)">
+                      卸貨到站
+                    </button>
+                    <button class="ghost-btn small-btn" type="button" :disabled="arriveBusy" @click="startException(t)">
+                      申報異常
+                    </button>
+                  </div>
+                </li>
+              </ul>
+            </div>
+
+            <details v-if="otherAssignedTasks.length > 0" class="arrive-details">
+              <summary class="hint">其他節點任務（{{ otherAssignedTasks.length }}）</summary>
+              <ul class="arrive-task-list" style="margin-top: 10px">
+                <li v-for="t in otherAssignedTasks" :key="t.id" class="arrive-task compact">
+                  <div class="arrive-task-top">
+                    <strong>{{ t.tracking_number ?? t.package_id }}</strong>
+                    <span class="hint">{{ t.task_type }} · #{{ t.segment_index ?? "-" }}</span>
+                  </div>
+                  <div class="hint">{{ t.from_location }} → {{ t.to_location }}</div>
+                  <div class="arrive-task-actions" style="margin-top: 8px">
+                    <button class="ghost-btn small-btn" type="button" :disabled="arriveBusy" @click="enrouteTask(t)">
+                      正在前往
+                    </button>
+                  </div>
+                </li>
+              </ul>
+            </details>
+          </div>
+
+          <div v-else class="arrive-body">
+            <div v-if="handoffAtCurrentNode.length === 0" class="hint">此節點沒有可接手任務。</div>
+            <ul v-else class="arrive-task-list">
+              <li v-for="t in handoffAtCurrentNode" :key="t.id" class="arrive-task">
+                <div class="arrive-task-top">
+                  <strong>{{ t.tracking_number ?? t.package_id }}</strong>
+                  <span class="hint">{{ t.task_type }} · #{{ t.segment_index ?? "-" }}</span>
+                </div>
+                <div class="hint">{{ t.from_location }} → {{ t.to_location }}</div>
+                <div class="arrive-task-actions">
+                  <button class="primary-btn small-btn" type="button" :disabled="arriveBusy" @click="takeOverTask(t.id)">
+                    接手任務
+                  </button>
+                </div>
+              </li>
+            </ul>
+          </div>
+
+          <div v-if="exceptionModalOpen" class="arrive-modal" role="dialog" aria-label="report exception">
+            <div class="arrive-modal-card">
+              <div class="arrive-header" style="margin: 0">
+                <div>
+                  <p class="eyebrow">申報異常</p>
+                  <p class="hint" style="margin: 0">包裹：{{ exceptionTarget?.packageId }}</p>
+                </div>
+                <button class="ghost-btn" type="button" @click="exceptionModalOpen = false">關閉</button>
+              </div>
+
+              <label class="hint" style="display: grid; gap: 6px; margin-top: 10px">
+                原因代碼（選填）
+                <input v-model="exceptionForm.reason_code" class="text-input" placeholder="damaged / lost / ..." />
+              </label>
+              <label class="hint" style="display: grid; gap: 6px; margin-top: 10px">
+                描述（必填）
+                <textarea v-model="exceptionForm.description" class="text-input" rows="3" placeholder="請描述異常狀況…" />
+              </label>
+
+              <div class="arrive-task-actions" style="margin-top: 12px">
+                <button class="primary-btn small-btn" type="button" :disabled="arriveBusy" @click="submitException">送出</button>
+                <button class="ghost-btn small-btn" type="button" :disabled="arriveBusy" @click="exceptionModalOpen = false">取消</button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -935,5 +1311,119 @@ onMounted(async () => {
     max-height: none;
     margin: 12px;
   }
+  .arrive-panel {
+    position: static;
+    width: auto;
+    max-height: none;
+    margin: 12px;
+  }
+}
+
+.arrive-panel {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 7;
+  width: min(520px, calc(100% - 24px));
+  max-height: calc(100% - 24px);
+  overflow: auto;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 16px;
+  padding: 14px;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.22);
+}
+
+.arrive-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.arrive-header-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.arrive-tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.arrive-tabs .ghost-btn.active {
+  border-color: rgba(37, 99, 235, 0.45);
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.arrive-body {
+  margin-top: 12px;
+}
+
+.arrive-task-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.arrive-task {
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  background: rgba(248, 250, 252, 0.9);
+  border-radius: 14px;
+  padding: 10px;
+}
+
+.arrive-task.compact {
+  padding: 8px;
+}
+
+.arrive-task-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.arrive-task-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.arrive-details summary {
+  cursor: pointer;
+  user-select: none;
+}
+
+.arrive-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.4);
+  display: grid;
+  place-items: center;
+  z-index: 20;
+}
+
+.arrive-modal-card {
+  width: min(520px, calc(100vw - 32px));
+  background: white;
+  border-radius: 16px;
+  padding: 14px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  box-shadow: 0 30px 70px rgba(15, 23, 42, 0.25);
+}
+
+.text-input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(15, 23, 42, 0.16);
+  background: rgba(255, 255, 255, 0.96);
 }
 </style>

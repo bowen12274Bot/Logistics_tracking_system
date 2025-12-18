@@ -50,7 +50,16 @@ const totalForActiveTab = computed(() =>
 );
 
 const detailByPackageId = ref<
-  Record<string, { isLoading: boolean; error: string | null; events: PackageEventRecord[]; latestDetails: string | null }>
+  Record<
+    string,
+    {
+      isLoading: boolean;
+      error: string | null;
+      events: PackageEventRecord[];
+      latestDetails: string | null;
+      vehicleCode: string | null;
+    }
+  >
 >({});
 
 const resolveNodeLabel = (nodeId: string) => {
@@ -59,7 +68,7 @@ const resolveNodeLabel = (nodeId: string) => {
 };
 
 const nodeStageLabel = (nodeId: string) => {
-  if (nodeId === TRUCK_ORIGIN_NODE_ID) return "貨車";
+  if (nodeId === TRUCK_ORIGIN_NODE_ID) return "貨車出發";
   if (nodeId.startsWith("HUB_")) return "物流中心";
   if (nodeId.startsWith("REG_")) return "配送站";
   if (nodeId.startsWith("END_HOME_")) return "住家";
@@ -203,7 +212,7 @@ const ensurePackageDetails = async (pkgId: string) => {
   if (detailByPackageId.value[pkgId]) return;
   detailByPackageId.value = {
     ...detailByPackageId.value,
-    [pkgId]: { isLoading: true, error: null, events: [], latestDetails: null },
+    [pkgId]: { isLoading: true, error: null, events: [], latestDetails: null, vehicleCode: null },
   };
 
   try {
@@ -218,6 +227,7 @@ const ensurePackageDetails = async (pkgId: string) => {
         error: null,
         events: sorted,
         latestDetails: latest?.delivery_details ?? null,
+        vehicleCode: res.vehicle?.vehicle_code ?? null,
       },
     };
   } catch (err) {
@@ -228,6 +238,7 @@ const ensurePackageDetails = async (pkgId: string) => {
         error: err instanceof Error ? err.message : String(err),
         events: [],
         latestDetails: null,
+        vehicleCode: null,
       },
     };
   }
@@ -261,21 +272,29 @@ const routeModel = (pkg: any) => {
 
   const nodeTimeById = new Map<string, string>();
   let originAtFromEvent: string | null = null;
-  for (const evt of events) {
-    const loc = String(evt.location ?? "").trim();
-    if (!loc) continue;
-    if (!baseNodes.includes(loc)) continue;
-    if (baseNodes.length && loc === baseNodes[0] && isPrePickupEvent(evt, baseNodes[0])) {
-      if (!originAtFromEvent) originAtFromEvent = evt.events_at;
-      else {
-        const cur = new Date(originAtFromEvent).getTime();
-        const nxt = new Date(evt.events_at).getTime();
-        if (Number.isFinite(nxt) && (!Number.isFinite(cur) || nxt < cur)) originAtFromEvent = evt.events_at;
-      }
-      continue;
-    }
-    nodeTimeById.set(loc, evt.events_at);
-  }
+	  for (const evt of events) {
+	    const loc = String(evt.location ?? "").trim();
+	    if (!loc) continue;
+	    if (!baseNodes.includes(loc)) continue;
+	    if (baseNodes.length && loc === baseNodes[0] && isPrePickupEvent(evt, baseNodes[0])) {
+	      if (!originAtFromEvent) originAtFromEvent = evt.events_at;
+	      else {
+	        const cur = new Date(originAtFromEvent).getTime();
+	        const nxt = new Date(evt.events_at).getTime();
+	        if (Number.isFinite(nxt) && (!Number.isFinite(cur) || nxt < cur)) originAtFromEvent = evt.events_at;
+	      }
+	      continue;
+	    }
+	    // Keep the earliest arrival time for each node, so later pass-bys won't overwrite the point timeline.
+	    const existing = nodeTimeById.get(loc);
+	    if (!existing) {
+	      nodeTimeById.set(loc, evt.events_at);
+	    } else {
+	      const cur = new Date(existing).getTime();
+	      const nxt = new Date(evt.events_at).getTime();
+	      if (Number.isFinite(nxt) && (!Number.isFinite(cur) || nxt < cur)) nodeTimeById.set(loc, evt.events_at);
+	    }
+	  }
 
   const baseNodeTimes = baseNodes.map((node) => nodeTimeById.get(node) ?? null);
   const startTime = (() => {
@@ -316,45 +335,27 @@ const routeModel = (pkg: any) => {
 
   const segmentTruckIds = nodes.length > 1 ? nodes.slice(0, -1).map(() => null as string | null) : [];
 
-  if (events.length && nodes.length > 1) {
-    const nodeSet = new Set(baseNodes);
-    const truckEvents = events
-      .map((e) => ({ at: e.events_at, loc: String(e.location ?? "").trim() }))
-      .filter((e) => e.loc && !nodeSet.has(e.loc));
+  // Line (in_transit) state: assign truck id to the segment that matches the destination in event details.
+  // This keeps segment tooltips stable across refreshes and after arrival events (picked_up/warehouse_in/etc).
+  if (events.length && segmentTruckIds.length) {
+    for (const evt of events) {
+      const status = String(evt.delivery_status ?? "").trim().toLowerCase();
+      if (status !== "in_transit") continue;
 
-    const firstRealNodeAt = nodeTimes[nodes[0] === TRUCK_ORIGIN_NODE_ID ? 1 : 0] ?? null;
-    const startNodeAt = nodeTimes[0] ?? null;
-    if (firstRealNodeAt) {
-      const endT = new Date(firstRealNodeAt).getTime();
-      const startT = startNodeAt ? new Date(startNodeAt).getTime() : Number.NEGATIVE_INFINITY;
-      const candidates = truckEvents.filter((t) => {
-        const tAt = new Date(t.at).getTime();
-        return Number.isFinite(tAt) && tAt >= startT && tAt < endT;
-      });
-      const last = candidates.length ? candidates[candidates.length - 1] : undefined;
-      if (last) segmentTruckIds[0] = last.loc;
-    }
+      const truckId = String(evt.location ?? "").trim();
+      if (!truckId) continue;
 
-    const nodeTime = (idx: number) => nodeTimes[idx];
-    for (let i = 0; i < segmentTruckIds.length; i += 1) {
-      if (i === 0 && nodes[0] === TRUCK_ORIGIN_NODE_ID) continue;
-      const fromAt = nodeTime(i);
-      const toAt = nodeTime(i + 1);
-      const candidates = truckEvents.filter((t) => {
-        const tAt = new Date(t.at).getTime();
-        if (!Number.isFinite(tAt)) return false;
-        if (fromAt) {
-          const fromT = new Date(fromAt).getTime();
-          if (tAt < fromT) return false;
-        }
-        if (toAt) {
-          const toT = new Date(toAt).getTime();
-          if (tAt >= toT) return false;
-        }
-        return true;
-      });
-      const last = candidates.length ? candidates[candidates.length - 1] : undefined;
-      if (last) segmentTruckIds[i] = last.loc;
+      const details = String(evt.delivery_details ?? "").trim();
+      const match = details.match(/(?:前往|下一站)\s*([A-Z0-9_]+)/i);
+      const destination = match?.[1] ? String(match[1]).trim() : "";
+      if (!destination) continue;
+
+      const destIndex = nodes.findIndex((n) => n === destination);
+      if (destIndex <= 0) continue;
+
+      const segIndex = destIndex - 1;
+      if (segIndex < 0 || segIndex >= segmentTruckIds.length) continue;
+      segmentTruckIds[segIndex] = truckId;
     }
   }
 
@@ -623,12 +624,15 @@ onMounted(async () => {
 
                 <p class="route-summary">
                   <span class="summary-label">目前位置：</span>
-                  <span class="summary-value">
-                    <template v-if="routeModel(pkg).displayNode">
-                      {{ displayNodeText(routeModel(pkg).displayNode) }}
-                    </template>
-                    <template v-else>{{ pkg.current_location || "-" }}</template>
-                  </span>
+	                  <span class="summary-value">
+	                    <template v-if="detailByPackageId[pkg.id]?.vehicleCode">
+	                      {{ detailByPackageId[pkg.id]?.vehicleCode }}
+	                    </template>
+	                    <template v-else-if="routeModel(pkg).displayNode">
+	                      {{ displayNodeText(routeModel(pkg).displayNode) }}
+	                    </template>
+	                    <template v-else>{{ pkg.current_location || "-" }}</template>
+	                  </span>
                   <span class="summary-sep">·</span>
                   <span class="summary-label">狀態資訊：</span>
                   <span class="summary-value">

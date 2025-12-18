@@ -147,6 +147,7 @@ export type PackageStatusResponse = {
   success: boolean;
   package: PackageRecord;
   events: PackageEventRecord[];
+  vehicle: { id: string; vehicle_code: string } | null;
 };
 
 export type TrackingPublicResponse = {
@@ -359,6 +360,11 @@ export const api = {
     request<VehicleMeResponse>("/api/vehicles/me", {
       method: "GET",
     }),
+  getVehicleCargoMe: () =>
+    request<{ success: boolean; vehicle_id: string; cargo: Array<{ package_id: string; tracking_number: string | null; loaded_at: string | null }> }>(
+      "/api/vehicles/me/cargo",
+      { method: "GET" },
+    ),
   moveVehicleMe: (payload: VehicleMovePayload) =>
     request<VehicleMoveResponse>("/api/vehicles/me/move", {
       method: "POST",
@@ -372,6 +378,35 @@ export const api = {
     request<{ success: boolean }>(`/api/driver/tasks/${encodeURIComponent(taskId)}/accept`, {
       method: "POST",
     }),
+  completeDriverTask: (taskId: string) =>
+    request<{ success: boolean }>(`/api/driver/tasks/${encodeURIComponent(taskId)}/complete`, {
+      method: "POST",
+    }),
+  pickupDriverTask: (taskId: string) =>
+    request<{ success: boolean; cargo_id: string }>(`/api/driver/tasks/${encodeURIComponent(taskId)}/pickup`, {
+      method: "POST",
+    }),
+  dropoffDriverTask: (taskId: string) =>
+    request<{ success: boolean; status: string }>(`/api/driver/tasks/${encodeURIComponent(taskId)}/dropoff`, {
+      method: "POST",
+    }),
+  enrouteDriverTask: (taskId: string) =>
+    request<{ success: boolean; status: string; location: string | null }>(`/api/driver/tasks/${encodeURIComponent(taskId)}/enroute`, {
+      method: "POST",
+    }),
+  driverUpdatePackageStatus: (packageId: string, payload: { status: string; note?: string; location?: string }) =>
+    request<{ success: boolean; message?: string; event_id?: string }>(
+      `/api/driver/packages/${encodeURIComponent(packageId)}/status`,
+      { method: "POST", body: JSON.stringify(payload) },
+    ),
+  driverReportPackageException: (
+    packageId: string,
+    payload: { reason_code?: string; description: string; location?: string },
+  ) =>
+    request<{ success: boolean; exception_id: string }>(
+      `/api/driver/packages/${encodeURIComponent(packageId)}/exception`,
+      { method: "POST", body: JSON.stringify(payload) },
+    ),
   getMe: () =>
     request<{ success: boolean; user: User }>("/api/auth/me", {
       method: "GET",
