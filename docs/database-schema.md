@@ -289,10 +289,12 @@ CREATE TABLE IF NOT EXISTS delivery_tasks (
   to_location TEXT,
   assigned_driver_id TEXT REFERENCES users(id),
   status TEXT NOT NULL DEFAULT 'pending', -- pending / accepted / in_progress / completed / canceled
+  segment_index INTEGER, -- 路徑分段序號（每段對應一條 edges，相鄰節點）
   created_at TEXT,
   updated_at TEXT
 );
 CREATE INDEX idx_delivery_tasks_assignee_status_created ON delivery_tasks(assigned_driver_id, status, created_at);
+CREATE INDEX idx_delivery_tasks_package_segment ON delivery_tasks(package_id, segment_index);
 ```
 
 ---
@@ -362,6 +364,7 @@ erDiagram
 | `system_errors` | `idx_system_errors_resolved` | `resolved` | 加速依是否已處理篩選 |
 | `package_exceptions` | `idx_package_exceptions_handled_reported_at` | `handled, reported_at` | 加速客服異常池未處理/已處理列表 |
 | `delivery_tasks` | `idx_delivery_tasks_assignee_status_created` | `assigned_driver_id, status, created_at` | 加速司機工作清單查詢 |
+| `delivery_tasks` | `idx_delivery_tasks_package_segment` | `package_id, segment_index` | 加速同包裹任務分段查詢/排序 |
 | `vehicles` | `idx_vehicles_driver_user_id` | `driver_user_id` | 加速依司機取得車輛狀態 |
 
 ---

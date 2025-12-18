@@ -5,7 +5,7 @@ import type { AppContext } from "../types";
 type NodeData = { id: string };
 type EdgeData = { source: string; target: string; cost: number };
 
-const computeRoute = async (
+export const computeRoute = async (
   db: D1Database,
   fromNodeId: string,
   toNodeId: string,

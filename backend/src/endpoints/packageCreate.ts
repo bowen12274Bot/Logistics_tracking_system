@@ -1,6 +1,7 @@
 import { OpenAPIRoute, Str } from "chanfana";
 import { z } from "zod";
 import { type AppContext, Package } from "../types";
+import { computeRoute } from "./mapRoute";
 
 export class PackageCreate extends OpenAPIRoute {
 	schema = {
@@ -301,13 +302,126 @@ export class PackageCreate extends OpenAPIRoute {
 					normalizedSenderAddress || null
 				)
 				.run();
+
+			// Create initial delivery task only (sequential dispatch model):
+			// - At creation time, only dispatch pickup END -> its adjacent REG (1 edge).
+			// - Later segments are dispatched by warehouse staff after they decide the real route.
+			if (normalizedSenderAddress && normalizedReceiverAddress) {
+				type NodeRow = { id: string; level: number };
+				type EdgeRow = { source: string; target: string };
+				const nodesResult = await c.env.DB.prepare("SELECT id, level FROM nodes").all();
+				const edgesResult = await c.env.DB.prepare("SELECT source, target FROM edges").all();
+				const nodes = (nodesResult.results || []) as NodeRow[];
+				const edges = (edgesResult.results || []) as EdgeRow[];
+
+				const levelById = new Map<string, number>();
+				for (const n of nodes) levelById.set(String(n.id).trim(), Number(n.level));
+
+				const adj = new Map<string, string[]>();
+				const add = (a: string, b: string) => {
+					if (!adj.has(a)) adj.set(a, []);
+					adj.get(a)!.push(b);
+				};
+				for (const e of edges) {
+					const a = String(e.source).trim();
+					const b = String(e.target).trim();
+					if (!a || !b) continue;
+					add(a, b);
+					add(b, a);
+				}
+
+				const findAdjacentNode = (from: string) => {
+					const neighbors = adj.get(from) ?? [];
+					const reg = neighbors.find((n) => /^REG_\d+$/i.test(n));
+					return reg ?? neighbors[0] ?? null;
+				};
+
+				const findRootHub = (startNodeId: string) => {
+					const start = String(startNodeId).trim();
+					if (!start) return null;
+					const startLevel = levelById.get(start);
+					if (startLevel === 1) return start;
+
+					const visited = new Set<string>();
+					const queue: string[] = [start];
+					visited.add(start);
+
+					while (queue.length > 0) {
+						const node = queue.shift()!;
+						const lvl = levelById.get(node);
+						if (lvl === 1) return node;
+						for (const nei of adj.get(node) ?? []) {
+							if (visited.has(nei)) continue;
+							visited.add(nei);
+							queue.push(nei);
+						}
+					}
+					return null;
+				};
+
+				const driverRows = await c.env.DB.prepare(
+					"SELECT id, address FROM users WHERE user_class = 'driver'",
+				).all();
+				const driverByAddress = new Map<string, string>();
+				for (const r of (driverRows.results || []) as Array<{ id: string; address: string | null }>) {
+					const addr = String(r.address ?? "").trim().toUpperCase();
+					if (!addr) continue;
+					if (!driverByAddress.has(addr)) driverByAddress.set(addr, String(r.id));
+				}
+
+				// Initial pickup segment: END_* should connect directly to a REG_* in this map design.
+				const pickupTo = findAdjacentNode(normalizedSenderAddress);
+				if (!pickupTo) {
+					// Fallback to shortest path next hop if direct adjacency isn't found.
+					const route = await computeRoute(c.env.DB, normalizedSenderAddress, normalizedReceiverAddress);
+					if (!route || !Array.isArray(route.path) || route.path.length < 2) {
+						throw new Error("Route not found");
+					}
+					const nextHop = String(route.path[1]).trim();
+					if (!nextHop) throw new Error("Route not found");
+
+					const assignedHub = findRootHub(normalizedSenderAddress);
+					const assignedDriverId = assignedHub ? driverByAddress.get(String(assignedHub).toUpperCase()) ?? null : null;
+					const taskId = crypto.randomUUID();
+					await c.env.DB.prepare(
+						`
+						INSERT INTO delivery_tasks (
+							id, package_id, task_type, from_location, to_location,
+							assigned_driver_id, status, segment_index, created_at, updated_at
+						) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)
+						`,
+					)
+						.bind(taskId, packageId, "pickup", normalizedSenderAddress, nextHop, assignedDriverId, 0, createdAt, createdAt)
+						.run();
+				} else {
+					const assignedHub = findRootHub(normalizedSenderAddress);
+					const assignedDriverId = assignedHub ? driverByAddress.get(String(assignedHub).toUpperCase()) ?? null : null;
+					const taskId = crypto.randomUUID();
+					await c.env.DB.prepare(
+						`
+						INSERT INTO delivery_tasks (
+							id, package_id, task_type, from_location, to_location,
+							assigned_driver_id, status, segment_index, created_at, updated_at
+						) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)
+						`,
+					)
+						.bind(taskId, packageId, "pickup", normalizedSenderAddress, pickupTo, assignedDriverId, 0, createdAt, createdAt)
+						.run();
+				}
+			}
 		} catch (err: any) {
 			try {
 				await c.env.DB.prepare("DELETE FROM packages WHERE id = ?").bind(packageId).run();
+				await c.env.DB.prepare("DELETE FROM package_events WHERE package_id = ?").bind(packageId).run();
+				await c.env.DB.prepare("DELETE FROM delivery_tasks WHERE package_id = ?").bind(packageId).run();
 			} catch {
 				// ignore rollback failure
 			}
-			return c.json({ success: false, error: "Failed to create package", detail: String(err) }, 500);
+			const message = String(err?.message ?? err);
+			if (message === "Route not found") {
+				return c.json({ success: false, error: "Route not found" }, 400);
+			}
+			return c.json({ success: false, error: "Failed to create package", detail: message }, 500);
 		}
 
 		return {

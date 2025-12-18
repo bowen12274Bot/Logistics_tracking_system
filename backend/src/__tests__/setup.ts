@@ -16,7 +16,22 @@ import m0012 from "../../migrations/0012_package_exceptions.sql?raw";
 import m0013 from "../../migrations/0013_delivery_tasks.sql?raw";
 import m0014 from "../../migrations/0014_vehicles.sql?raw";
 
-const migrations = [m0000, m0001, m0002, m0003, m0004, m0005, m0007, m0008, m0009, m0010, m0011, m0012, m0013, m0014];
+const migrations = [
+  m0000,
+  m0001,
+  m0002,
+  m0003,
+  m0004,
+  m0005,
+  m0007,
+  m0008,
+  m0009,
+  m0010,
+  m0011,
+  m0012,
+  m0013,
+  m0014,
+];
 
 const splitSqlStatements = (sql: string) => {
   const normalized = sql.replace(/\r\n/g, "\n");

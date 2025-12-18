@@ -1,0 +1,150 @@
+// backend/src/__tests__/driverTaskPool.test.ts
+import { describe, it, expect, beforeAll } from "vitest";
+import {
+  apiRequest,
+  authenticatedRequest,
+  createEmployeeUser,
+  createTestPackage,
+  createTestUser,
+  getAdminToken,
+  getDriverToken,
+} from "./helpers";
+
+describe("Driver tasks (segmented assignment + handoff)", () => {
+  let customerToken: string;
+  let driverToken: string;
+
+  beforeAll(async () => {
+    const user = await createTestUser({ address: "END_HOME_1" });
+    customerToken = user.token;
+    driverToken = await getDriverToken();
+  });
+
+  it("DRV-TASK-SEQ-001: package create only produces initial pickup task", async () => {
+    const sender = "END_HOME_1";
+    const receiver = "END_HOME_2";
+
+    const pkg = await createTestPackage(customerToken, { sender_address: sender, receiver_address: receiver });
+
+    const mapRes = await apiRequest<any>("/api/map");
+    expect(mapRes.status).toBe(200);
+    const hubs: string[] = (mapRes.data.nodes ?? [])
+      .filter((n: any) => Number(n.level) === 1 && typeof n.id === "string")
+      .map((n: any) => String(n.id));
+    expect(hubs.length).toBeGreaterThan(0);
+
+    const loginDriver = async (hubId: string) => {
+      const { status, data } = await apiRequest<{ token: string }>(`/api/auth/login`, {
+        method: "POST",
+        body: JSON.stringify({ identifier: `driver_${hubId.toLowerCase()}@example.com`, password: "driver123" }),
+      });
+      expect(status).toBe(200);
+      return data.token;
+    };
+
+    const allTasks: any[] = [];
+    for (const hubId of hubs) {
+      const token = hubId === "HUB_0" ? driverToken : await loginDriver(hubId);
+      const assignedRes = await authenticatedRequest<any>("/api/driver/tasks?scope=assigned", token);
+      expect(assignedRes.status).toBe(200);
+      expect(assignedRes.data.success).toBe(true);
+      const tasks: any[] = (assignedRes.data.tasks ?? []).filter((t: any) => t.package_id === pkg.id);
+      allTasks.push(...tasks);
+    }
+
+    expect(allTasks.length).toBe(1);
+    expect(String(allTasks[0]?.from_location)).toBe(sender);
+    expect(String(allTasks[0]?.task_type)).toBe("pickup");
+    expect(Number(allTasks[0]?.segment_index)).toBe(0);
+  });
+
+  it("DRV-TASK-HANDOFF-001: driver at HUB/REG can take over tasks starting there", async () => {
+    const sender = "END_HOME_1";
+    const receiver = "END_HOME_2";
+
+    const handoffNode = "HUB_0";
+    const adminToken = await getAdminToken();
+    const otherDriver = await createEmployeeUser(adminToken, "driver", { address: String(handoffNode) });
+    const otherDriverToken = otherDriver.token;
+
+    // Ensure vehicle exists at the driver's home node
+    const me = await authenticatedRequest<any>("/api/vehicles/me", otherDriverToken);
+    expect(me.status).toBe(200);
+
+    const pkg = await createTestPackage(customerToken, { sender_address: sender, receiver_address: receiver });
+
+    // Complete the initial pickup task so warehouse can dispatch the next segment.
+    const mapRes = await apiRequest<any>("/api/map");
+    expect(mapRes.status).toBe(200);
+    const hubs: string[] = (mapRes.data.nodes ?? [])
+      .filter((n: any) => Number(n.level) === 1 && typeof n.id === "string")
+      .map((n: any) => String(n.id));
+    expect(hubs.length).toBeGreaterThan(0);
+
+    const loginDriver = async (hubId: string) => {
+      const { status, data } = await apiRequest<{ token: string }>(`/api/auth/login`, {
+        method: "POST",
+        body: JSON.stringify({ identifier: `driver_${hubId.toLowerCase()}@example.com`, password: "driver123" }),
+      });
+      expect(status).toBe(200);
+      return data.token;
+    };
+
+    let pickup: any | null = null;
+    let pickupDriverToken: string | null = null;
+    for (const hubId of hubs) {
+      const token = hubId === "HUB_0" ? driverToken : await loginDriver(hubId);
+      const assignedRes = await authenticatedRequest<any>("/api/driver/tasks?scope=assigned", token);
+      expect(assignedRes.status).toBe(200);
+      const hit = (assignedRes.data.tasks ?? []).find((t: any) => t.package_id === pkg.id);
+      if (hit) {
+        pickup = hit;
+        pickupDriverToken = token;
+        break;
+      }
+    }
+    expect(pickup).toBeTruthy();
+    expect(pickupDriverToken).toBeTruthy();
+
+    const complete = await authenticatedRequest<any>(
+      `/api/driver/tasks/${encodeURIComponent(String(pickup.id))}/complete`,
+      String(pickupDriverToken),
+      { method: "POST" },
+    );
+    expect(complete.status).toBe(200);
+    expect(complete.data.success).toBe(true);
+
+    // Warehouse dispatches a next segment from HUB_0 so it's eligible for handoff there.
+    const warehouse = await createEmployeeUser(adminToken, "warehouse_staff", { address: String(handoffNode) });
+    const dispatch = await authenticatedRequest<any>(
+      `/api/warehouse/packages/${encodeURIComponent(pkg.id)}/dispatch-next`,
+      warehouse.token,
+      { method: "POST", body: JSON.stringify({ toNodeId: "REG_17" }) },
+    );
+    expect(dispatch.status).toBe(200);
+    expect(dispatch.data.success).toBe(true);
+
+    const handoffRes = await authenticatedRequest<any>("/api/driver/tasks?scope=handoff", otherDriverToken);
+    expect(handoffRes.status).toBe(200);
+    expect(handoffRes.data.success).toBe(true);
+
+    const candidates: any[] = (handoffRes.data.tasks ?? []).filter(
+      (t: any) => t.package_id === pkg.id && String(t.from_location) === String(handoffNode),
+    );
+    expect(candidates.length).toBeGreaterThan(0);
+
+    const taskId = String(candidates[0].id ?? "");
+    expect(taskId).toBeTruthy();
+
+    const accept = await authenticatedRequest<any>(`/api/driver/tasks/${encodeURIComponent(taskId)}/accept`, otherDriverToken, {
+      method: "POST",
+    });
+    expect(accept.status).toBe(200);
+    expect(accept.data.success).toBe(true);
+
+    const assigned = await authenticatedRequest<any>("/api/driver/tasks?scope=assigned", otherDriverToken);
+    expect(assigned.status).toBe(200);
+    const list: any[] = assigned.data.tasks ?? [];
+    expect(list.some((t) => t.id === taskId)).toBe(true);
+  });
+});

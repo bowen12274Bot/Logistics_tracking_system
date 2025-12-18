@@ -241,6 +241,33 @@ export type VehicleMoveResponse = {
   vehicle?: VehicleRecord;
 };
 
+export type DriverTaskScope = "assigned" | "handoff";
+export type DeliveryTaskRecord = {
+  id: string;
+  package_id: string;
+  task_type: string;
+  from_location: string | null;
+  to_location: string | null;
+  assigned_driver_id?: string | null;
+  status: string;
+  segment_index?: number | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  tracking_number?: string | null;
+  sender_address?: string | null;
+  receiver_address?: string | null;
+  delivery_time?: string | null;
+  payment_type?: string | null;
+  estimated_delivery?: string | null;
+};
+
+export type DriverTasksResponse = {
+  success: boolean;
+  scope: DriverTaskScope;
+  node_id?: string | null;
+  tasks: DeliveryTaskRecord[];
+};
+
 export type DeliveryType = "overnight" | "two_day" | "standard" | "economy";
 export type SpecialMark = "fragile" | "dangerous" | "international";
 
@@ -336,6 +363,14 @@ export const api = {
     request<VehicleMoveResponse>("/api/vehicles/me/move", {
       method: "POST",
       body: JSON.stringify(payload),
+    }),
+  getDriverTasks: (scope: DriverTaskScope) => {
+    const qs = new URLSearchParams({ scope });
+    return request<DriverTasksResponse>(`/api/driver/tasks?${qs.toString()}`, { method: "GET" });
+  },
+  acceptDriverTask: (taskId: string) =>
+    request<{ success: boolean }>(`/api/driver/tasks/${encodeURIComponent(taskId)}/accept`, {
+      method: "POST",
     }),
   getMe: () =>
     request<{ success: boolean; user: User }>("/api/auth/me", {

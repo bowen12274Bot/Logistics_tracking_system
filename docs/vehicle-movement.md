@@ -72,27 +72,47 @@
 
 你描述的任務單，其實可以拆成「任務來源/分配」與「任務呈現/操作」兩塊。
 
-### 5.1 任務來源：優先 HUB 附近 + 可額外接任務
+### 5.1 任務來源：按 HUB 指派 + HUB/REG 可轉派（搶單）
 
-你提到「優先接收自己 hub 附近的出貨單（節點向上找根）」，建議定義一個可重用的概念：
+你提到「任務一律按 hub 關係派到工作清單」，同時又允許司機在經常跑的 HUB/REG 節點「順路接手」任務（轉派）。
+
+為了搭配倉儲節點停頓，任務必須是「分段任務」：每一段只跨越一條 `edges` 連線（兩個相鄰節點）。
+
+先定義一個可重用的概念：
 - `rootHub(nodeId)`：從任意節點往上找到所屬的 HUB 節點（level=1）。
 
 實作方式（建議其一即可）：
 - 方式 A（依圖搜尋）：在 `edges` 圖上從該 node BFS，找到最近的 `level=1` 節點作為 root hub。
 - 方式 B（預先建表）：新增 `node_root_hub` 映射表，seed 時就算好（查詢最快）。
 
-任務推薦規則（建議 MVP 先做簡版）：
-- driver 的「工作 hub」= `vehicles.home_node_id`（或 `users.address`）
-- 推薦任務 = `rootHub(from_location)` 或 `rootHub(to_location)` 等於 driver hub 的任務
-- 額外接任務：提供「任務池」讓 driver 可以自行 `accept`
+指派規則（目標設計）：
+- driver 的「工作 hub」= `vehicles.home_node_id`（或 `users.address`）。
+- 建立出貨單後，只先建立「第一段」任務（通常是 `END_* -> REG_*` 的取件段，對應一條 `edges`）。
+- 後續每一段任務由倉儲員在 HUB/REG 決定路徑後再派發（每次只派一段，保持任務有時序性）。
+
+轉派（搶單）規則（目標設計）：
+- 只有當任務段的「起點」是 `HUB_*` 或 `REG_*` 時，才允許被其他司機接手(當有司機剛好在物流站時，順路配送可以提高效率)。
+- `from_location` 是 `END_*` 時，禁止接手（避免「陌生司機在住家/超商攔截包裹」的不合理情境）。
+- 只允許接手「尚未開始」的任務段（例如 `status='pending'` / `status='accepted'`）；一旦進入 `in_progress` / `completed` 就禁止轉派。
+- 觸發時機：司機貨車抵達某個 `HUB_*` 或 `REG_*` 節點時（可做成 UI 提示 + 司機確認接手），把該節點作為 `from_location` 的任務段轉派給目前司機（更新同一筆 `delivery_tasks.assigned_driver_id`）。
+
+備註：你已確認「轉派不用留下紀錄」，所以不需要額外 assignment log；以 `assigned_driver_id` 作為任務權屬即可。
+
+已落地的 API（現況）：
+- `POST /api/packages`：建立包裹時只會建立一筆初始任務（`task_type='pickup'`），從 `sender_address(END_*)` 指向其相鄰的 `REG_*`（若找不到相鄰 REG 才 fallback 走最短路徑 next-hop）。
+- `GET /api/driver/tasks?scope=assigned`：取得指派給自己的任務段。
+- `GET /api/driver/tasks?scope=handoff`：以「目前車輛位置 (`vehicles.current_node_id`)」為條件，列出可接手的任務段（必須 `from_location` 為 `HUB_*`/`REG_*` 且狀態為 `pending/accepted`）。
+- `POST /api/driver/tasks/:taskId/accept`：接手任務段（更新該筆 `delivery_tasks.assigned_driver_id`）。
+- `POST /api/driver/tasks/:taskId/complete`：完成自己名下的任務段（將 `status` 變為 `completed`）。
+- `POST /api/warehouse/packages/:packageId/dispatch-next`：倉儲員在自己的節點（`users.address`）派發下一段任務（`from_location=倉儲節點`，`toNodeId` 必須相鄰）。
 
 ### 5.2 任務內容（你希望任務列出/判斷的欄位）
 
 你希望任務包含：
-- 配送路徑：把完整 path 拆成「當次兩節點的路徑」
-  - 現有 `delivery_tasks` 只有 `from_location/to_location`，建議新增其中之一：
-    - A：在 `delivery_tasks` 加 `segment_path TEXT`（JSON array）
-    - B：不加欄位，每次要導航時即時計算（用 `GET /api/map/route`）
+- 配送路徑：任務已拆為「相鄰節點」的分段任務（每段即是一條 `edges`）。
+- 任務排序/串接：同一個包裹會有多段任務，建議新增（擇一）：
+  - A：在 `delivery_tasks` 加 `segment_index INTEGER`（由 0 遞增，表示在此包裹路徑中的順序）
+  - B：在 `delivery_tasks` 加 `prev_task_id/next_task_id`（直接串起任務鏈）
 - 是否該收錢：
   - `cash` 或 `payments.paid_at IS NULL` → 需要收款
 - 配送時效：
@@ -136,7 +156,7 @@
 
 1. 司機地圖頁（不含任務）：顯示自己的車（`GET /api/vehicles/me`）
 2. 相鄰節點移動：UI 動畫 + `POST /api/vehicles/me/move`
-3. 任務清單（先列出 assigned 或推薦任務）
-4. 任務導航高亮：用 `GET /api/map/route` 高亮 path
-5. 抵達面板：取件/送達/異常/收款（串既有或新增事件 API）
-
+3. 任務指派（分段任務）：出貨單建立後產生多段 `delivery_tasks` 並按 hub 指派
+4. 接手機制（只在 HUB/REG）：司機抵達 HUB/REG 節點才允許轉派該段任務
+5. 任務導航高亮：用 `GET /api/map/route` 高亮「車輛位置 → 任務目的地」的最佳路徑
+6. 抵達面板：取件/送達/異常/收款（串既有或新增事件 API）

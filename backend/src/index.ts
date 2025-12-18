@@ -20,7 +20,9 @@ import { ContractApplicationStatus } from "./endpoints/contractApplicationStatus
 import { TrackingPublic } from "./endpoints/trackingPublic";
 import { TrackingSearch } from "./endpoints/trackingSearch";
 import { DriverTaskList, DriverUpdateStatus } from "./endpoints/driverTasks";
+import { DriverTaskListV2, DriverTaskAccept, DriverTaskComplete } from "./endpoints/driverTaskPool";
 import { WarehouseBatchOperation } from "./endpoints/warehouseOperations";
+import { WarehouseDispatchNextTask } from "./endpoints/warehouseTaskDispatch";
 import { BillingBillList, BillingBillDetail } from "./endpoints/billingBills";
 import { BillingPaymentCreate, BillingPaymentList } from "./endpoints/billingPayments";
 import { AdminUserCreate } from "./endpoints/adminUsers";
@@ -269,9 +271,12 @@ openapi.get("/api/tracking/search", TrackingSearch);
 openapi.get("/api/tracking/:trackingNumber", TrackingPublic);
 
 // Staff APIs
-openapi.get("/api/driver/tasks", DriverTaskList);
+openapi.get("/api/driver/tasks", DriverTaskListV2);
+openapi.post("/api/driver/tasks/:taskId/accept", DriverTaskAccept);
+openapi.post("/api/driver/tasks/:taskId/complete", DriverTaskComplete);
 openapi.post("/api/driver/packages/:packageId/status", DriverUpdateStatus);
 openapi.post("/api/warehouse/batch-operation", WarehouseBatchOperation);
+openapi.post("/api/warehouse/packages/:packageId/dispatch-next", WarehouseDispatchNextTask);
 
 // Billing APIs
 openapi.get("/api/billing/bills", BillingBillList);
