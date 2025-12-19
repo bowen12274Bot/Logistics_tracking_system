@@ -61,7 +61,7 @@ logistics-system/               # Repo 根目錄
 │  │  apply_migrations.py        # 資料庫遷移腳本 (Python)
 │  │
 │  ├─migrations/                 # [資料庫模型]
-│  │      0000_users.sql                 # users + 預設帳號 seed
+│  │      0000_users.sql                 # users（使用者表）
 │  │      0001_packages.sql              # packages（包裹主檔）
 │  │      0002_package_events.sql        # package_events（貨態事件）
 │  │      0003_payments.sql              # payments（費用/付款）
@@ -72,6 +72,10 @@ logistics-system/               # Repo 根目錄
 │  │      0008_contract_applications.sql # contract_applications（合約申請）
 │  │      0009_tokens.sql                # tokens（登入 token）
 │  │      0010_system_errors.sql         # system_errors（系統錯誤/紀錄）
+│  │      0011_seed_test_users.sql       # 測試帳號/員工配置 seed
+│  │      0012_package_exceptions.sql    # package_exceptions（異常池）
+│  │      0013_delivery_tasks.sql        # delivery_tasks（司機任務）
+│  │      0014_vehicles.sql              # vehicles（車輛/位置）
 │  │
 │  └─src/                        # 後端程式碼（Worker source）
 │      │  index.ts               # API 路由註冊（OpenAPI）
@@ -172,6 +176,55 @@ logistics-system/               # Repo 根目錄
     └─virtual_map_generator/     # 虛擬地圖產生器
             generator.py         # 地圖生成器 (Python)
 ```
+
+---
+
+## Remote D1 操作（--remote）
+
+> 注意：`--remote` 會操作線上的 Cloudflare D1，執行期間 DB 可能短暫不可用；請確認你正在操作正確的資料庫。
+
+### 套用 migrations（不清空資料）
+
+在 `backend/` 目錄下執行：
+
+- `npx wrangler d1 migrations apply DB --remote`
+
+### 手動重設 Remote DB（清空 + 重建）
+
+在 repo 根目錄執行（Windows PowerShell）：
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File ".\backend\scripts\reset-remote-db.ps1" -Yes`
+
+### 只清空 Remote DB（讓 GitHub Actions 之後自動重建）
+
+本 repo 的 GitHub Actions 會在部署時跑 `npx wrangler d1 migrations apply DB --remote`。
+如果你想「先手動清空 remote，push 之後讓 action 自動建新表」，需要同時清掉 D1 的 migration 記錄表，否則 action 可能會以為 migration 已跑過而跳過。
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File ".\backend\scripts\reset-remote-db.ps1" -Yes -DropOnly -DropMigrationHistory`
+
+（如果你的 D1 binding 不是 `DB`，可以加 `-DatabaseBinding <你的binding>`）
+
+---
+
+## 🧹 本地資料庫清空/重建（D1 --local）
+
+本專案後端在本地開發時，D1 會落地成 sqlite 檔案在：
+`backend/.wrangler/state/v3/d1/miniflare-D1DatabaseObject/*.sqlite`
+
+### 清空本地 DB（刪除 sqlite）
+
+1. 先停止本地 worker（避免檔案被鎖定）
+   - `npm --prefix backend run dev:clean`
+   - 或：`powershell -NoProfile -ExecutionPolicy Bypass -File backend/scripts/stop-local-workers.ps1 -Port 8787`
+2. 刪除本地 sqlite 檔
+   - `Remove-Item -Force backend\.wrangler\state\v3\d1\miniflare-D1DatabaseObject\*.sqlite`
+
+### 清空 + 重建本地 DB（重新套用 migrations）
+
+在做完「清空本地 DB」後，執行：
+
+- `cd backend`
+- `npx wrangler d1 migrations apply DB --local`
 
 ---
 
@@ -320,16 +373,23 @@ npm run test:unit
 
 ## 📦 預設帳號 (Default Accounts)
 
-系統已內建以下測試帳號（密碼皆為 `password123`）：
+系統已內建以下測試帳號（請依下表使用對應密碼）：
 
 | 帳號 | 角色 |
 |------|------|
-| customer@example.com | 非合約客戶 |
-| contract@example.com | 合約客戶 |
-| driver@example.com | 駕駛員 |
-| warehouse@example.com | 倉儲人員 |
+| noncontract@example.com | 非合約客戶 |
+| cust@example.com | 合約客戶 |
+| driver_hub_0@example.com | 駕駛員 |
+| warehouse_hub_0@example.com | 倉儲人員 |
 | cs@example.com | 客服人員 |
 | admin@example.com | 管理員 |
+
+員工帳號的 `address` 代表工作地（地圖節點 ID）：`driver/admin/cs/warehouse` 預設為 `HUB_0`。
+
+另會依地圖自動補齊測試員工（見 `backend/migrations/0011_seed_test_users.sql`）：
+- 其他配送中心司機：`driver_hub_1@example.com`（規則：`driver_<hubId>@example.com`），密碼 `driver123`
+- 其他配送中心倉儲：`warehouse_hub_1@example.com`（規則：`warehouse_<hubId>@example.com`），密碼 `warehouse123`
+- 其他配送站倉儲：`warehouse_reg_1@example.com`（規則：`warehouse_<regId>@example.com`），密碼 `warehouse123`
 
 ---
 

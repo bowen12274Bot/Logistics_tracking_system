@@ -24,6 +24,7 @@ export class AdminUserCreate extends OpenAPIRoute {
               email: z.string().email(),
               password: z.string().min(6),
               phone_number: z.string().optional(),
+              address: z.string().optional(),
               user_class: z.enum(["customer_service", "warehouse_staff", "driver", "admin"]),
             }),
           },
@@ -78,6 +79,7 @@ export class AdminUserCreate extends OpenAPIRoute {
       email: string;
       password: string;
       phone_number?: string;
+      address?: string;
       user_class: string;
     }>();
 
@@ -96,16 +98,18 @@ export class AdminUserCreate extends OpenAPIRoute {
 
     const userId = crypto.randomUUID();
     const passwordHash = await sha256Hex(body.password);
+    const address = body.address?.trim() || null;
 
     await c.env.DB.prepare(`
-      INSERT INTO users (id, user_name, email, password_hash, phone_number, user_type, user_class)
-      VALUES (?, ?, ?, ?, ?, 'employee', ?)
+      INSERT INTO users (id, user_name, email, password_hash, phone_number, address, user_type, user_class)
+      VALUES (?, ?, ?, ?, ?, ?, 'employee', ?)
     `).bind(
       userId,
       body.user_name,
       body.email,
       passwordHash,
       body.phone_number || null,
+      address,
       body.user_class
     ).run();
 
@@ -115,6 +119,7 @@ export class AdminUserCreate extends OpenAPIRoute {
         id: userId,
         user_name: body.user_name,
         email: body.email,
+        address,
         user_type: "employee",
         user_class: body.user_class,
       },

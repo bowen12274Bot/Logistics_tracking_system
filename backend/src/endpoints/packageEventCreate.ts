@@ -6,7 +6,7 @@ export class PackageEventCreate extends OpenAPIRoute {
 	schema = {
 		tags: ["Packages"],
 		summary: "建立貨態事件 (T3)",
-		description: "新增包裹事件並更新當前狀態。供司機/倉儲/客服/模擬使用。",
+		description: "建立包裹事件並更新追蹤資訊。",
 		request: {
 			params: z.object({
 				packageId: Str({ description: "包裹 ID" }),
@@ -17,14 +17,14 @@ export class PackageEventCreate extends OpenAPIRoute {
 						schema: z.object({
 							delivery_status: Str({
 								description: "事件狀態",
-								example: "收件",
+								example: "picked_up",
 							}),
 							delivery_details: Str({
-								description: "詳細說明",
+								description: "事件說明",
 								required: false,
 							}),
 							location: Str({
-								description: "地點 (節點 ID 或描述)",
+								description: "位置或載具識別碼（節點 ID / 貨車編號）",
 								required: false,
 							}),
 						}),
@@ -56,7 +56,6 @@ export class PackageEventCreate extends OpenAPIRoute {
 		const { packageId } = data.params;
 		const { delivery_status, delivery_details, location } = data.body;
 
-		// Verify package exists
 		const pkg = await c.env.DB.prepare("SELECT * FROM packages WHERE id = ?")
 			.bind(packageId)
 			.first();
@@ -65,7 +64,6 @@ export class PackageEventCreate extends OpenAPIRoute {
 			return c.json({ success: false, error: "Package not found" }, 404);
 		}
 
-		// Create event
 		const eventId = crypto.randomUUID();
 		const eventsAt = new Date().toISOString();
 

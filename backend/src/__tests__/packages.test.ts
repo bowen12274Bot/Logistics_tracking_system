@@ -12,6 +12,8 @@ import {
 describe("包裹管理 (Package)", () => {
   let customerToken: string;
   let customerId: string;
+  let estimateFromNodeId: string;
+  let estimateToNodeId: string;
 
   beforeAll(async () => {
     const user = await createTestUser();
@@ -23,6 +25,29 @@ describe("包裹管理 (Package)", () => {
       customerToken
     );
     customerId = meResult.data.user.id;
+
+    const map = await apiRequest<any>("/api/map");
+    if (map.status !== 200 || !map.data?.success) {
+      throw new Error(`Failed to fetch map for estimate tests: ${JSON.stringify(map.data)}`);
+    }
+
+    const nodes = Array.isArray(map.data.nodes) ? map.data.nodes : [];
+    if (nodes.length < 2) {
+      throw new Error("Map has insufficient nodes for estimate tests");
+    }
+
+    const edges = Array.isArray(map.data.edges) ? map.data.edges : [];
+    if (edges.length < 1) {
+      throw new Error("Map has insufficient edges for estimate tests");
+    }
+
+    const edge = edges[0];
+    if (typeof edge?.source !== "string" || typeof edge?.target !== "string") {
+      throw new Error(`Invalid edge format for estimate tests: ${JSON.stringify(edge)}`);
+    }
+
+    estimateFromNodeId = edge.source;
+    estimateToNodeId = edge.target;
   });
 
   // ========== POST /api/packages ==========
@@ -73,8 +98,9 @@ describe("包裹管理 (Package)", () => {
       expect(created.success).toBe(true);
       expect(created.package?.id).toBeDefined();
 
-      const { status: queryStatus, data: statusData } = await apiRequest<any>(
-        `/api/packages/${created.package.id}/status`
+      const { status: queryStatus, data: statusData } = await authenticatedRequest<any>(
+        `/api/packages/${created.package.id}/status`,
+        customerToken
       );
 
       expect(queryStatus).toBe(200);
@@ -167,9 +193,12 @@ describe("包裹管理 (Package)", () => {
       const { status, data } = await apiRequest<any>("/api/packages/estimate", {
         method: "POST",
         body: JSON.stringify({
-          sender_address: "10,10",
-          receiver_address: "50,50",
-          service_level: "standard",
+          fromNodeId: estimateFromNodeId,
+          toNodeId: estimateToNodeId,
+          weightKg: 2,
+          dimensionsCm: { length: 40, width: 30, height: 20 },
+          deliveryType: "standard",
+          specialMarks: [],
         }),
       });
 
@@ -177,24 +206,31 @@ describe("包裹管理 (Package)", () => {
       expect(data.success).toBe(true);
       expect(data.estimate).toBeDefined();
       expect(data.estimate.total_cost).toBeGreaterThan(0);
+      expect(data.estimate.route_cost).toBeGreaterThan(0);
     });
 
     it("PKG-EST-002: 隔夜達較高費用", async () => {
       const overnight = await apiRequest<any>("/api/packages/estimate", {
         method: "POST",
         body: JSON.stringify({
-          sender_address: "10,10",
-          receiver_address: "50,50",
-          service_level: "overnight",
+          fromNodeId: estimateFromNodeId,
+          toNodeId: estimateToNodeId,
+          weightKg: 2,
+          dimensionsCm: { length: 40, width: 30, height: 20 },
+          deliveryType: "overnight",
+          specialMarks: [],
         }),
       });
 
       const standard = await apiRequest<any>("/api/packages/estimate", {
         method: "POST",
         body: JSON.stringify({
-          sender_address: "10,10",
-          receiver_address: "50,50",
-          service_level: "standard",
+          fromNodeId: estimateFromNodeId,
+          toNodeId: estimateToNodeId,
+          weightKg: 2,
+          dimensionsCm: { length: 40, width: 30, height: 20 },
+          deliveryType: "standard",
+          specialMarks: [],
         }),
       });
 
@@ -207,25 +243,32 @@ describe("包裹管理 (Package)", () => {
       const heavy = await apiRequest<any>("/api/packages/estimate", {
         method: "POST",
         body: JSON.stringify({
-          sender_address: "10,10",
-          receiver_address: "50,50",
-          service_level: "standard",
-          weight: 20,
+          fromNodeId: estimateFromNodeId,
+          toNodeId: estimateToNodeId,
+          weightKg: 4,
+          dimensionsCm: { length: 20, width: 20, height: 10 },
+          deliveryType: "standard",
+          specialMarks: [],
         }),
       });
 
       const light = await apiRequest<any>("/api/packages/estimate", {
         method: "POST",
         body: JSON.stringify({
-          sender_address: "10,10",
-          receiver_address: "50,50",
-          service_level: "standard",
-          weight: 1,
+          fromNodeId: estimateFromNodeId,
+          toNodeId: estimateToNodeId,
+          weightKg: 2,
+          dimensionsCm: { length: 20, width: 20, height: 10 },
+          deliveryType: "standard",
+          specialMarks: [],
         }),
       });
 
       expect(heavy.data.estimate.total_cost).toBeGreaterThan(
         light.data.estimate.total_cost
+      );
+      expect(heavy.data.estimate.weight_surcharge).toBeGreaterThan(
+        light.data.estimate.weight_surcharge
       );
     });
 
@@ -233,23 +276,28 @@ describe("包裹管理 (Package)", () => {
       const fragile = await apiRequest<any>("/api/packages/estimate", {
         method: "POST",
         body: JSON.stringify({
-          sender_address: "10,10",
-          receiver_address: "50,50",
-          service_level: "standard",
-          special_handling: ["fragile"],
+          fromNodeId: estimateFromNodeId,
+          toNodeId: estimateToNodeId,
+          weightKg: 2,
+          dimensionsCm: { length: 40, width: 30, height: 20 },
+          deliveryType: "standard",
+          specialMarks: ["fragile"],
         }),
       });
 
       const normal = await apiRequest<any>("/api/packages/estimate", {
         method: "POST",
         body: JSON.stringify({
-          sender_address: "10,10",
-          receiver_address: "50,50",
-          service_level: "standard",
+          fromNodeId: estimateFromNodeId,
+          toNodeId: estimateToNodeId,
+          weightKg: 2,
+          dimensionsCm: { length: 40, width: 30, height: 20 },
+          deliveryType: "standard",
+          specialMarks: [],
         }),
       });
 
-      expect(fragile.data.estimate.special_handling_surcharge).toBeGreaterThan(0);
+      expect(fragile.data.estimate.mark_fee).toBeGreaterThan(0);
       expect(fragile.data.estimate.total_cost).toBeGreaterThan(
         normal.data.estimate.total_cost
       );
@@ -259,9 +307,12 @@ describe("包裹管理 (Package)", () => {
       const { status, data } = await apiRequest<any>("/api/packages/estimate", {
         method: "POST",
         body: JSON.stringify({
-          sender_address: "10,10",
-          receiver_address: "50,50",
-          service_level: "standard",
+          fromNodeId: estimateFromNodeId,
+          toNodeId: estimateToNodeId,
+          weightKg: 2,
+          dimensionsCm: { length: 40, width: 30, height: 20 },
+          deliveryType: "standard",
+          specialMarks: [],
         }),
       });
 
@@ -275,9 +326,12 @@ describe("包裹管理 (Package)", () => {
       const { status } = await apiRequest<any>("/api/packages/estimate", {
         method: "POST",
         body: JSON.stringify({
-          sender_address: "10,10",
-          receiver_address: "50,50",
-          service_level: "standard",
+          fromNodeId: estimateFromNodeId,
+          toNodeId: estimateToNodeId,
+          weightKg: 2,
+          dimensionsCm: { length: 40, width: 30, height: 20 },
+          deliveryType: "standard",
+          specialMarks: [],
         }),
       });
 

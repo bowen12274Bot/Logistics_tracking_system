@@ -1061,9 +1061,12 @@ Authorization: Bearer <token>
   "email": "string",
   "password": "string",
   "phone_number": "string",
+  "address": "HUB_0 | REG_0 (optional)",
   "user_class": "customer_service | warehouse_staff | driver | admin"
 }
 ```
+
+> 備註：員工的 `address` 代表「工作地」（地圖節點 ID），例如配送中心 `HUB_0`、配送站 `REG_0`。
 
 #### 錯誤回應
 

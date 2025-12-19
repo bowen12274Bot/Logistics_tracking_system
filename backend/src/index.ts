@@ -20,12 +20,19 @@ import { ContractApplicationStatus } from "./endpoints/contractApplicationStatus
 import { TrackingPublic } from "./endpoints/trackingPublic";
 import { TrackingSearch } from "./endpoints/trackingSearch";
 import { DriverTaskList, DriverUpdateStatus } from "./endpoints/driverTasks";
+import { DriverTaskListV2, DriverTaskAccept, DriverTaskComplete } from "./endpoints/driverTaskPool";
 import { WarehouseBatchOperation } from "./endpoints/warehouseOperations";
+import { WarehouseDispatchNextTask } from "./endpoints/warehouseTaskDispatch";
 import { BillingBillList, BillingBillDetail } from "./endpoints/billingBills";
 import { BillingPaymentCreate, BillingPaymentList } from "./endpoints/billingPayments";
 import { AdminUserCreate } from "./endpoints/adminUsers";
 import { AdminContractList, AdminContractReview } from "./endpoints/adminContracts";
 import { AdminSystemErrors } from "./endpoints/adminErrors";
+import { VehicleMeGet, VehicleMeMove } from "./endpoints/vehiclesMe";
+import { DriverPackageExceptionCreate, DriverPackageExceptionList } from "./endpoints/driverPackageException";
+import { VehicleMeCargoList } from "./endpoints/vehiclesCargoMe";
+import { DriverTaskPickup, DriverTaskDropoff } from "./endpoints/driverTaskCargo";
+import { DriverTaskEnRoute } from "./endpoints/driverTaskEnRoute";
 
 type Bindings = {
   DB: D1Database;
@@ -241,6 +248,11 @@ openapi.get("/api/map", MapFetch);
 openapi.put("/api/map/edges/:id", MapEdgeUpdate);
 openapi.get("/api/map/route", MapRoute);
 
+// Vehicles APIs (driver only)
+openapi.get("/api/vehicles/me", VehicleMeGet);
+openapi.post("/api/vehicles/me/move", VehicleMeMove);
+openapi.get("/api/vehicles/me/cargo", VehicleMeCargoList);
+
 // Package APIs (T3 & T4)
 openapi.post("/api/packages", PackageCreate);
 openapi.post("/api/packages/estimate", PackageEstimate);
@@ -264,9 +276,17 @@ openapi.get("/api/tracking/search", TrackingSearch);
 openapi.get("/api/tracking/:trackingNumber", TrackingPublic);
 
 // Staff APIs
-openapi.get("/api/driver/tasks", DriverTaskList);
+openapi.get("/api/driver/tasks", DriverTaskListV2);
+openapi.post("/api/driver/tasks/:taskId/accept", DriverTaskAccept);
+openapi.post("/api/driver/tasks/:taskId/complete", DriverTaskComplete);
+openapi.post("/api/driver/tasks/:taskId/pickup", DriverTaskPickup);
+openapi.post("/api/driver/tasks/:taskId/dropoff", DriverTaskDropoff);
+openapi.post("/api/driver/tasks/:taskId/enroute", DriverTaskEnRoute);
 openapi.post("/api/driver/packages/:packageId/status", DriverUpdateStatus);
+openapi.post("/api/driver/packages/:packageId/exception", DriverPackageExceptionCreate);
+openapi.get("/api/driver/exceptions", DriverPackageExceptionList);
 openapi.post("/api/warehouse/batch-operation", WarehouseBatchOperation);
+openapi.post("/api/warehouse/packages/:packageId/dispatch-next", WarehouseDispatchNextTask);
 
 // Billing APIs
 openapi.get("/api/billing/bills", BillingBillList);

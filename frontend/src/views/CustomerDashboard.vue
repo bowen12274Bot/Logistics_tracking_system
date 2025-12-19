@@ -17,7 +17,7 @@ const auth = useAuthStore()
 
 const quickLinksBase: Link[] = [
   { title: '建立寄件', to: '/customer/send', description: '設定寄件人/收件人、配送速度與付款方式。' },
-  { title: '包裹追蹤', to: '/customer/track', description: '查看站點、車輛、物流中心的即時狀態。' },
+  { title: '包裹追蹤', to: '/customer/track', description: '配送中 / 配送歷史，並可用條件篩選。' },
   { title: '個人資料', to: '/customer/profile', description: '修改姓名、電話、地址與支付偏好。' },
   { title: '合約 / 月結', to: '/customer/contract', description: '申請成為合約客戶、查看帳期貨物。' },
   { title: '付款', to: '/customer/payment', description: '在付款清單付款、付款紀錄查詢。' },

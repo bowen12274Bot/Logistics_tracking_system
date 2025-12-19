@@ -2,23 +2,127 @@ import { OpenAPIRoute } from "chanfana";
 import { z } from "zod";
 import type { AppContext } from "../types";
 
-interface NodeData {
-  id: string;
-  x: number;
-  y: number;
-}
+type NodeData = { id: string };
+type EdgeData = { source: string; target: string; cost: number };
 
-interface EdgeData {
-  source: string;
-  target: string;
-  cost: number;
-}
+type RouteReason = "from_not_found" | "to_not_found" | "no_route";
 
-// GET /api/map/route - 路線成本計算 (Dijkstra)
+export type RouteResult =
+  | { ok: true; path: string[]; totalCost: number }
+  | {
+      ok: false;
+      reason: RouteReason;
+      debug?: { nodesCount: number; edgesCount: number; fromDegree: number; toDegree: number };
+    };
+
+export const computeRoute = async (
+  db: D1Database,
+  fromNodeId: string,
+  toNodeId: string,
+): Promise<RouteResult> => {
+  const fromId = String(fromNodeId).trim();
+  const toId = String(toNodeId).trim();
+
+  const fromExists = await db.prepare("SELECT 1 FROM nodes WHERE id = ?").bind(fromId).first();
+  if (!fromExists) return { ok: false, reason: "from_not_found" };
+  const toExists = await db.prepare("SELECT 1 FROM nodes WHERE id = ?").bind(toId).first();
+  if (!toExists) return { ok: false, reason: "to_not_found" };
+
+  const nodesResult = await db.prepare("SELECT id FROM nodes").all();
+  const edgesResult = await db.prepare("SELECT source, target, cost FROM edges").all();
+
+  const nodes = (nodesResult.results || []) as NodeData[];
+  const edges = (edgesResult.results || []) as EdgeData[];
+
+  const graph: Map<string, { neighbor: string; cost: number }[]> = new Map();
+  for (const node of nodes) graph.set(String(node.id).trim(), []);
+  if (!graph.has(fromId)) graph.set(fromId, []);
+  if (!graph.has(toId)) graph.set(toId, []);
+
+  for (const edge of edges) {
+    const cost = Number((edge as any).cost);
+    if (!Number.isFinite(cost)) continue;
+
+    const source = String(edge.source).trim();
+    const target = String(edge.target).trim();
+    if (!source || !target) continue;
+
+    if (!graph.has(source)) graph.set(source, []);
+    if (!graph.has(target)) graph.set(target, []);
+
+    graph.get(source)?.push({ neighbor: target, cost });
+    graph.get(target)?.push({ neighbor: source, cost });
+  }
+
+  const distances: Map<string, number> = new Map();
+  const previous: Map<string, string | null> = new Map();
+  const visited: Set<string> = new Set();
+  const pq: { node: string; distance: number }[] = [];
+
+  for (const node of nodes) {
+    const id = String(node.id).trim();
+    distances.set(id, Infinity);
+    previous.set(id, null);
+  }
+
+  distances.set(fromId, 0);
+  pq.push({ node: fromId, distance: 0 });
+
+  while (pq.length > 0) {
+    pq.sort((a, b) => a.distance - b.distance);
+    const current = pq.shift()!;
+    if (visited.has(current.node)) continue;
+    visited.add(current.node);
+    if (current.node === toId) break;
+
+    const neighbors = graph.get(current.node) || [];
+    for (const { neighbor, cost } of neighbors) {
+      if (visited.has(neighbor)) continue;
+      const currentDist = distances.get(current.node);
+      const newDist = (currentDist ?? Infinity) + cost;
+      if (newDist < (distances.get(neighbor) ?? Infinity)) {
+        distances.set(neighbor, newDist);
+        previous.set(neighbor, current.node);
+        pq.push({ node: neighbor, distance: newDist });
+      }
+    }
+  }
+
+  const totalCost = distances.get(toId);
+  if (totalCost === undefined || totalCost === Infinity) {
+    const fromDegree = (graph.get(fromId) ?? []).length;
+    const toDegree = (graph.get(toId) ?? []).length;
+    return {
+      ok: false,
+      reason: "no_route",
+      debug: { nodesCount: nodes.length, edgesCount: edges.length, fromDegree, toDegree },
+    };
+  }
+
+  const path: string[] = [];
+  let current: string | null = toId;
+  const seen = new Set<string>();
+  while (current !== null) {
+    if (seen.has(current)) {
+      return {
+        ok: false,
+        reason: "no_route",
+        debug: { nodesCount: nodes.length, edgesCount: edges.length, fromDegree: 0, toDegree: 0 },
+      };
+    }
+    seen.add(current);
+    path.unshift(current);
+    current = previous.get(current) || null;
+  }
+
+  return { ok: true, path, totalCost };
+};
+
+// GET /api/map/route - shortest path cost (Dijkstra)
 export class MapRoute extends OpenAPIRoute {
   schema = {
     tags: ["Map"],
-    summary: "計算兩點之間的路線成本",
+    summary: "Compute shortest route cost",
     request: {
       query: z.object({
         from: z.string(),
@@ -27,7 +131,7 @@ export class MapRoute extends OpenAPIRoute {
     },
     responses: {
       "200": {
-        description: "計算成功",
+        description: "OK",
         content: {
           "application/json": {
             schema: z.object({
@@ -42,125 +146,27 @@ export class MapRoute extends OpenAPIRoute {
           },
         },
       },
-      "400": {
-        description: "缺少 from 或 to 參數",
-      },
-      "404": {
-        description: "起點或終點節點不存在",
-      },
+      "400": { description: "Missing from/to" },
+      "404": { description: "Node or route not found" },
     },
   };
 
   async handle(c: AppContext) {
     const query = c.req.query();
+    if (!query.from || !query.to) return c.json({ error: "Missing from/to" }, 400);
 
-    if (!query.from || !query.to) {
-      return c.json({ error: "缺少 from 或 to 參數" }, 400);
-    }
-
-    const fromNode = query.from;
-    const toNode = query.to;
-
-    // 檢查節點是否存在
-    const fromExists = await c.env.DB.prepare(
-      "SELECT id FROM nodes WHERE id = ?"
-    ).bind(fromNode).first();
-
-    const toExists = await c.env.DB.prepare(
-      "SELECT id FROM nodes WHERE id = ?"
-    ).bind(toNode).first();
-
-    if (!fromExists) {
-      return c.json({ error: `起點節點 ${fromNode} 不存在` }, 404);
-    }
-
-    if (!toExists) {
-      return c.json({ error: `終點節點 ${toNode} 不存在` }, 404);
-    }
-
-    // 取得所有節點和邊
-    const nodesResult = await c.env.DB.prepare("SELECT id, x, y FROM nodes").all();
-    const edgesResult = await c.env.DB.prepare("SELECT source, target, cost FROM edges").all();
-
-    const nodes = (nodesResult.results || []) as NodeData[];
-    const edges = (edgesResult.results || []) as EdgeData[];
-
-    // 建立鄰接表
-    const graph: Map<string, { neighbor: string; cost: number }[]> = new Map();
-    
-    for (const node of nodes) {
-      graph.set(node.id, []);
-    }
-
-    for (const edge of edges) {
-      // 雙向邊
-      graph.get(edge.source)?.push({ neighbor: edge.target, cost: edge.cost });
-      graph.get(edge.target)?.push({ neighbor: edge.source, cost: edge.cost });
-    }
-
-    // Dijkstra 演算法
-    const distances: Map<string, number> = new Map();
-    const previous: Map<string, string | null> = new Map();
-    const visited: Set<string> = new Set();
-    const pq: { node: string; distance: number }[] = [];
-
-    for (const node of nodes) {
-      distances.set(node.id, Infinity);
-      previous.set(node.id, null);
-    }
-
-    distances.set(fromNode, 0);
-    pq.push({ node: fromNode, distance: 0 });
-
-    while (pq.length > 0) {
-      // 簡單排序取最小（實際應用可用 heap）
-      pq.sort((a, b) => a.distance - b.distance);
-      const current = pq.shift()!;
-
-      if (visited.has(current.node)) continue;
-      visited.add(current.node);
-
-      if (current.node === toNode) break;
-
-      const neighbors = graph.get(current.node) || [];
-      for (const { neighbor, cost } of neighbors) {
-        if (visited.has(neighbor)) continue;
-
-        const newDist = (distances.get(current.node) || Infinity) + cost;
-        if (newDist < (distances.get(neighbor) || Infinity)) {
-          distances.set(neighbor, newDist);
-          previous.set(neighbor, current.node);
-          pq.push({ node: neighbor, distance: newDist });
-        }
-      }
-    }
-
-    // 重建路徑
-    const path: string[] = [];
-    let current: string | null = toNode;
-    
-    while (current !== null) {
-      path.unshift(current);
-      current = previous.get(current) || null;
-    }
-
-    const totalCost = distances.get(toNode);
-
-    if (totalCost === Infinity) {
-      return c.json({ 
-        error: "無法找到從起點到終點的路線",
-        from: fromNode,
-        to: toNode,
-      }, 404);
+    const route = await computeRoute(c.env.DB, String(query.from).trim(), String(query.to).trim());
+    if (route.ok === false) {
+      return c.json({ error: "Route not found", from: query.from, to: query.to }, 404);
     }
 
     return c.json({
       success: true,
       route: {
-        from: fromNode,
-        to: toNode,
-        path,
-        total_cost: totalCost,
+        from: query.from,
+        to: query.to,
+        path: route.path,
+        total_cost: route.totalCost,
       },
     });
   }

@@ -51,6 +51,7 @@ export const Package = z.object({
 	declared_value: z.number().int().optional(),
 	contents_description: Str({ required: false }),
 	description_json: z.any().optional(),
+	estimated_delivery: Str({ required: false }),
 	final_billing_date: Str({ required: false }),
 	route_path: Str({ required: false }),
 	pickup_date: Str({ required: false }),
