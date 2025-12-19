@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS package_events (
     'out_for_delivery',
     'delivered',
     'exception',
+    'exception_resolved',
     'route_decided',
     'sorting_started',
     'sorting_completed',
@@ -57,6 +58,10 @@ BEGIN
       WHEN 'out_for_delivery' THEN 'out_for_delivery'
       WHEN 'delivered' THEN 'delivered'
       WHEN 'exception' THEN 'exception'
+      WHEN 'exception_resolved' THEN CASE
+        WHEN NEW.location LIKE 'HUB_%' OR NEW.location LIKE 'REG_%' THEN 'warehouse_in'
+        ELSE 'in_transit'
+      END
 
       -- Extended operational events -> stage mapping
       WHEN 'enroute_pickup' THEN 'in_transit'

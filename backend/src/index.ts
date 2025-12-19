@@ -33,6 +33,7 @@ import { DriverPackageExceptionCreate, DriverPackageExceptionList } from "./endp
 import { VehicleMeCargoList } from "./endpoints/vehiclesCargoMe";
 import { DriverTaskPickup, DriverTaskDropoff } from "./endpoints/driverTaskCargo";
 import { DriverTaskEnRoute } from "./endpoints/driverTaskEnRoute";
+import { CustomerServiceExceptionHandle, CustomerServiceExceptionList } from "./endpoints/csExceptions";
 
 type Bindings = {
   DB: D1Database;
@@ -285,6 +286,8 @@ openapi.post("/api/driver/tasks/:taskId/enroute", DriverTaskEnRoute);
 openapi.post("/api/driver/packages/:packageId/status", DriverUpdateStatus);
 openapi.post("/api/driver/packages/:packageId/exception", DriverPackageExceptionCreate);
 openapi.get("/api/driver/exceptions", DriverPackageExceptionList);
+openapi.get("/api/cs/exceptions", CustomerServiceExceptionList);
+openapi.post("/api/cs/exceptions/:exceptionId/handle", CustomerServiceExceptionHandle);
 openapi.post("/api/warehouse/batch-operation", WarehouseBatchOperation);
 openapi.post("/api/warehouse/packages/:packageId/dispatch-next", WarehouseDispatchNextTask);
 

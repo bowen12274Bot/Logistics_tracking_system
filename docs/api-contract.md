@@ -335,7 +335,7 @@ Authorization: Bearer <token>
 
 ```json
 {
-  "status": "picked_up | out_for_delivery | delivered | exception",
+  "status": "picked_up | out_for_delivery | delivered",
   "signature": "base64_image",
   "notes": "string",
   "cod_amount": 500
@@ -346,7 +346,7 @@ Authorization: Bearer <token>
 
 | 狀態碼 | 說明 |
 |--------|------|
-| 400 | exception 狀態必須提供 notes |
+| 400 | 不支援 exception，請改用異常申報 API |
 | 401 | 未認證 |
 | 403 | 非 driver 角色 |
 | 404 | 包裹不存在 |
@@ -690,6 +690,7 @@ Authorization: Bearer <token>
 | `out_for_delivery` | 末端外送中（明確標示最後一哩） | `out_for_delivery` |
 | `delivered` | 已投遞/簽收完成 | `delivered` |
 | `exception` | 異常事件 | `exception` |
+| `exception_resolved` | 異常已處理/解除（依 location 推導恢復階段） | `warehouse_in` / `in_transit` |
 | `enroute_pickup` | 司機前往取件點（可選通知事件） | `in_transit` |
 | `arrived_pickup` | 司機抵達取件點（可選事件） | `in_transit` |
 | `payment_collected_prepaid` | 現金預付收款完成（可選事件） | `in_transit` |
@@ -1193,12 +1194,69 @@ Authorization: Bearer <token>
 | **認證** | ✅ 需要 Token |
 | **權限** | `customer_service` |
 
+#### 輸入格式 (Query Parameters)
+
+| 參數 | 類型 | 必填 | 說明 |
+|------|------|------|------|
+| `handled` | boolean | ❌ | 是否已處理；不帶時預設只列未處理（handled=0） |
+| `limit` | number | ❌ | 預設 50，最大 200 |
+
+#### 輸出格式 (Success Response - 200)
+
+```json
+{
+  "success": true,
+  "exceptions": [
+    {
+      "id": "uuid",
+      "package_id": "uuid",
+      "tracking_number": "TRK-xxxx",
+      "package_status": "exception",
+      "reason_code": "string|null",
+      "description": "string",
+      "reported_by": "user_id",
+      "reported_role": "driver|warehouse_staff|customer_service",
+      "reported_at": "2025-12-10T00:30:00Z",
+      "handled": 0,
+      "handled_by": null,
+      "handled_at": null,
+      "handling_report": null
+    }
+  ]
+}
+```
+
 | 項目 | 說明 |
 |------|------|
 | **位置** | `POST /api/cs/exceptions/:exceptionId/handle` |
 | **功能** | 將異常標示已處理並填寫處理報告 |
 | **認證** | ✅ 需要 Token |
 | **權限** | `customer_service` |
+
+#### 輸入格式
+
+**Path Parameters:**
+- `exceptionId` (string): 異常紀錄 ID（`package_exceptions.id`）
+
+**Request Body:**
+```json
+{
+  "action": "resume | cancel",
+  "handling_report": "string",
+  "location": "HUB_0 | REG_1 | TRUCK_0 | END_HOME_1"
+}
+```
+
+| 欄位 | 類型 | 必填 | 說明 |
+|------|------|------|------|
+| `action` | string | ✅ | `resume`=解除異常並恢復配送流程（後續由倉儲重新派送任務）；`cancel`=取消委託（同時取消所有 active 任務段） |
+| `handling_report` | string | ✅ | 處理報告 |
+| `location` | string | ❌ | 用於事件定位與客戶追蹤圖顯示（建議填 HUB/REG 表示回到站點） |
+
+#### 行為說明
+- 會將 `package_exceptions.handled` 設為 1 並寫入 `handling_report`。
+- 會新增一筆 `package_events`：`delivery_status='exception_resolved'`。
+- 若 `action='cancel'`：會把該包裹所有 active 任務段（`pending/accepted/in_progress`）標記為 `canceled`，讓司機/倉儲清單立即消失。
 
 ### 7.2 異常申報（司機/倉儲）
 
@@ -1209,12 +1267,62 @@ Authorization: Bearer <token>
 | **認證** | ✅ 需要 Token |
 | **權限** | `driver` |
 
+#### 輸入格式 (Request Body)
+```json
+{
+  "reason_code": "string",
+  "description": "string",
+  "location": "TRUCK_0 | END_HOME_1 | REG_1 | HUB_0"
+}
+```
+
+| 欄位 | 類型 | 必填 | 說明 |
+|------|------|------|------|
+| `description` | string | ✅ | 異常描述（會寫入異常池與事件） |
+| `reason_code` | string | ❌ | 異常代碼（建議由系統/客服補填；司機可不填） |
+| `location` | string | ❌ | 異常發生位置：節點 ID（點異常）或 `TRUCK_*`（線異常） |
+
+#### reason_code 建議值（輕量規範）
+
+> `reason_code` 主要用於統計與客服分類；不應增加司機申報負擔。建議由 UI 以「選單」呈現，或允許司機略過，後續由客服補填/修正。
+
+| reason_code | 說明 |
+|------------|------|
+| `damaged` | 包裹破損 |
+| `lost` | 遺失 |
+| `delayed` | 延誤 |
+| `address_issue` | 地址/收件資料問題 |
+| `payment_dispute` | 付款爭議（到付/預付） |
+| `refused` | 收件人拒收 |
+| `misroute` | 配送路徑/節點錯誤 |
+| `vehicle_issue` | 車輛/設備問題 |
+| `other` | 其他（搭配 description 詳細說明） |
+
+**格式建議**
+- 使用小寫 snake_case（例如 `address_issue`）。
+- 若未知/不適用：不填即可，改以 `description` 描述。
+
+#### 行為說明（重要）
+- 異常必須同時建立：
+  - `package_exceptions` 一筆（異常池）
+  - `package_events` 一筆：`delivery_status='exception'`
+- 異常申報後，系統會把該包裹的 active 任務段（`pending/accepted/in_progress`）取消，讓任務從司機/倉儲清單消失。
+
 | 項目 | 說明 |
 |------|------|
 | **位置** | `POST /api/warehouse/packages/:packageId/exception` |
 | **功能** | 倉儲異常申報：建立異常紀錄並將包裹狀態更新為 `exception`（同時寫入事件） |
 | **認證** | ✅ 需要 Token |
 | **權限** | `warehouse_staff` |
+
+#### 異常事件規範（客戶追蹤圖相容）
+- `delivery_status='exception'`：
+  - `delivery_details` 必須有可讀描述（對應 `description`）。
+  - `location` 建議必填：
+    - 節點 ID（`END_*/REG_*/HUB_*`）→ 前端標記「點」異常
+    - `TRUCK_*` + `delivery_details` 含目的地（`前往 XXX`/`下一站 XXX`）→ 前端標記「線」異常
+- `delivery_status='exception_resolved'`：
+  - 僅應由客服處理端點產生（`POST /api/cs/exceptions/:exceptionId/handle`），避免「解除事件」與異常池狀態不一致。
 
 ### 7.3 司機任務與車輛移動
 
@@ -1260,10 +1368,17 @@ Authorization: Bearer <token>
 ## 附錄：客戶顯示 Stage 狀態機
 
 ```
-created → picked_up → in_transit → sorting → warehouse_in 
-    → warehouse_out → out_for_delivery → delivered
-                                      ↘ exception
-（規劃中：分揀轉運處理/待貨車轉運 等轉運狀態會再擴充）
+Stage 為「客戶顯示用的大階段」，可能在配送站/轉運中心之間重複循環（多段轉運）。
+
+created → picked_up → in_transit → warehouse_in → sorting → warehouse_out → in_transit → … → delivered
+
+末端配送（最後一哩）：
+warehouse_out → out_for_delivery → delivered
+
+異常（可從任意 stage 發生）：
+ANY → exception
+exception --(客服處理 exception_resolved, action=resume)--> warehouse_in / in_transit
+exception --(客服處理 action=cancel)-->（取消委託；不再派發任務段）
 ```
 
 ---

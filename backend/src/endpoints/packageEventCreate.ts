@@ -13,6 +13,7 @@ const DeliveryStatusEnum = z.enum([
 	"out_for_delivery",
 	"delivered",
 	"exception",
+	"exception_resolved",
 	"route_decided",
 	"sorting_started",
 	"sorting_completed",
@@ -74,6 +75,24 @@ export class PackageEventCreate extends OpenAPIRoute {
 		const data = await this.getValidatedData<typeof this.schema>();
 		const { packageId } = data.params;
 		const { delivery_status, delivery_details, location } = data.body;
+
+		// Keep exception flow consistent: exception events must always have a corresponding package_exceptions record.
+		// Use dedicated endpoints instead of the generic event endpoint.
+		if (delivery_status === "exception") {
+			return c.json(
+				{
+					success: false,
+					error: "請使用 /api/driver/packages/:packageId/exception（或未來的倉儲/客服異常端點）建立異常，避免事件與異常池不一致",
+				},
+				400,
+			);
+		}
+		if (delivery_status === "exception_resolved") {
+			return c.json(
+				{ success: false, error: "請使用 /api/cs/exceptions/:exceptionId/handle 處理異常並寫入解除事件" },
+				400,
+			);
+		}
 
 		if (
 			delivery_status === "in_transit" &&
