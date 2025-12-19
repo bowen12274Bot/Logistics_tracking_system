@@ -164,12 +164,9 @@ export class DriverUpdateStatus extends OpenAPIRoute {
       return c.json({ error: "僅駕駛員可使用此功能" }, 403);
     }
 
-    const { packageId } = c.req.param() as { packageId: string };
-    const body = await c.req.json<{
-      status: string;
-      note?: string;
-      location?: string;
-    }>();
+    const data = await this.getValidatedData<typeof this.schema>();
+    const { packageId } = data.params as { packageId: string };
+    const body = data.body as { status: string; note?: string; location?: string };
 
     // 檢查包裹是否存在
     const pkg = await c.env.DB.prepare(
@@ -179,11 +176,6 @@ export class DriverUpdateStatus extends OpenAPIRoute {
     if (!pkg) {
       return c.json({ error: "包裹不存在" }, 404);
     }
-
-    // 更新包裹狀態
-    await c.env.DB.prepare(
-      "UPDATE packages SET status = ? WHERE id = ?"
-    ).bind(body.status, packageId).run();
 
     // 新增事件記錄
     const eventId = crypto.randomUUID();

@@ -366,7 +366,7 @@ Authorization: Bearer <token>
 
 ```json
 {
-  "operation": "warehouse_in | warehouse_out | sort",
+  "operation": "warehouse_in | warehouse_out | sorting",
   "package_ids": ["uuid1", "uuid2", "uuid3"],
   "destination": "TRUCK_001",
   "notes": "string"
@@ -654,17 +654,76 @@ Authorization: Bearer <token>
 
 #### 事件狀態類型
 
-| status | 說明 |
-|--------|------|
-| `created` | 包裹已建立 |
-| `picked_up` | 起運地收件 |
-| `in_transit` | 運輸中 |
-| `sorting` | 分揀/轉運中 |
-| `warehouse_in` | 入庫 |
-| `warehouse_out` | 出庫 |
-| `out_for_delivery` | 外送中 |
+本系統同時有兩種「狀態」概念：
+
+1. **客戶顯示階段（Stage）**：用於 `packages.status` / API 的 `current_status`，屬於穩定、可用來查詢/篩選的「大階段」。
+2. **事件狀態（Event）**：用於 `package_events.delivery_status`，代表真實營運互動/流程事件，可更細緻；系統會把 Event 映射成 Stage 快取。
+
+**Stage（`packages.status` / `current_status`）**
+
+| stage | 說明 |
+|------|------|
+| `created` | 已建立託運單（等待取件/等待司機） |
+| `picked_up` | 已取件上車 |
+| `in_transit` | 運輸中（含前往取件/前往站點/站點間運輸） |
+| `sorting` | 分揀/轉運處理中 |
+| `warehouse_in` | 已入庫/到站 |
+| `warehouse_out` | 已出庫/離站 |
+| `out_for_delivery` | 末端外送中 |
 | `delivered` | 已投遞/簽收 |
 | `exception` | 異常（遺失/延誤/損毀） |
+
+**Event（`package_events.delivery_status`）**
+
+> 客戶前端路徑圖的「線段在途」顯示，依賴 `delivery_status='in_transit'` 且 `delivery_details` 可解析目的地（例如：`前往 HUB_0` / `下一站 REG_1`）。
+
+| event | 說明 | 映射到 stage |
+|------|------|-------------|
+| `created` | 託運單已建立 | `created` |
+| `in_transit` | 在途（貨車上/前往下一節點） | `in_transit` |
+| `picked_up` | 司機取件上車 | `picked_up` |
+| `warehouse_in` | 到站/入庫（司機卸貨完成） | `warehouse_in` |
+| `warehouse_received` | 倉儲員確認接收（可選事件） | `warehouse_in` |
+| `sorting` | 分揀/轉運處理中 | `sorting` |
+| `route_decided` | 倉儲決定下一配送節點/路徑（可選事件） | `sorting` |
+| `warehouse_out` | 出庫/離站交接給司機 | `warehouse_out` |
+| `out_for_delivery` | 末端外送中（明確標示最後一哩） | `out_for_delivery` |
+| `delivered` | 已投遞/簽收完成 | `delivered` |
+| `exception` | 異常事件 | `exception` |
+| `enroute_pickup` | 司機前往取件點（可選通知事件） | `in_transit` |
+| `arrived_pickup` | 司機抵達取件點（可選事件） | `in_transit` |
+| `payment_collected_prepaid` | 現金預付收款完成（可選事件） | `in_transit` |
+| `enroute_delivery` | 司機前往目的地（可選通知事件） | `out_for_delivery` |
+| `arrived_delivery` | 司機抵達目的地（可選事件） | `out_for_delivery` |
+| `payment_collected_cod` | 現金到付收款完成（可選事件） | `out_for_delivery` |
+
+#### 客戶追蹤圖渲染規則（點/線判定）
+
+> 本節描述「客戶包裹追蹤圖」如何由 `packages.route_path` + `package_events` 推導出節點進度與線段在途狀態（對齊目前前端實作邏輯）。
+
+**輸入資料**
+- 節點序列：`packages.route_path`（節點 ID 陣列或以逗號分隔的字串），代表「貨車出發後」的配送路徑（例如：`END_* → REG_* → ... → END_*`）。
+- 事件序列：`GET /api/packages/:id/status` 回傳的 `events[]`（依 `events_at ASC` 排序）。
+
+**點（Node）到達判定**
+- 若某筆事件的 `location` 是路徑中的節點 ID（`route_path` 內），視為「到達該節點」。
+- 同一節點可能被多次經過：到達時間以該節點的 **最早** `events_at` 為準（避免後續 pass-by 覆蓋節點時間軸）。
+
+**取件前（出發地）時間軸**
+- 若路徑第一個節點（通常是寄件人 `END_*`）在「取件前事件」出現，會用它當作「貨車出發/起點時間」之一的來源。
+- 取件前事件判定（相容值）：`delivery_status` 為 `created`/`task_created`/`queued`/`pending_pickup`/`waiting_pickup`，或 `delivery_details` 含類似「託運單已建立/等待司機取件」等字樣。
+
+**線（Segment）在途判定**
+- 線段在途只認 `delivery_status='in_transit'` 的事件。
+- 該事件需同時滿足：
+  - `location` 是 `TRUCK_*`（用於顯示「在路上」的貨車標示）
+  - `delivery_details` 可解析出目的地節點 ID（例如：`前往 HUB_0` 或 `下一站 REG_1`）
+- 解析到的目的地節點如果在路徑節點序列中，會把該 `TRUCK_*` 綁到「目的地前一段線段」上，作為在途顯示依據。
+
+**異常（Exception）顯示**
+- 若事件的 `delivery_status` 為 `exception`（相容值：`abnormal`/`error`/`failed`），前端會將：
+  - `location` 若是節點 ID → 標記該節點（點）為異常。
+  - `location` 若是 `TRUCK_*` 且 `delivery_details` 可解析目的地 → 標記對應線段（線）為異常。
 
 #### 錯誤回應
 
@@ -1198,7 +1257,7 @@ Authorization: Bearer <token>
 
 ---
 
-## 附錄：Package 狀態機
+## 附錄：客戶顯示 Stage 狀態機
 
 ```
 created → picked_up → in_transit → sorting → warehouse_in 

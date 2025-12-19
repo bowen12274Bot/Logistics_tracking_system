@@ -185,8 +185,6 @@ export class DriverTaskPickup extends OpenAPIRoute {
       return c.json({ error: "Cargo already loaded", detail: String(e?.message ?? e) }, 409);
     }
 
-    await c.env.DB.prepare("UPDATE packages SET status = ? WHERE id = ?").bind("picked_up", task.package_id).run();
-
     const eventId = crypto.randomUUID();
     await c.env.DB.prepare(
       `
@@ -271,8 +269,6 @@ export class DriverTaskDropoff extends OpenAPIRoute {
       nowIso: now,
     });
     await c.env.DB.prepare("UPDATE vehicle_cargo SET unloaded_at = ? WHERE id = ?").bind(now, cargo.id).run();
-
-    await c.env.DB.prepare("UPDATE packages SET status = ? WHERE id = ?").bind(nextStatus, task.package_id).run();
 
     const eventId = crypto.randomUUID();
     await c.env.DB.prepare(

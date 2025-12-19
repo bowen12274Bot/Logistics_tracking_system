@@ -93,8 +93,6 @@ export class DriverPackageExceptionCreate extends OpenAPIRoute {
       )
       .run();
 
-    await c.env.DB.prepare("UPDATE packages SET status = ? WHERE id = ?").bind("exception", packageId).run();
-
     // If exception is reported before pickup starts, cancel the current task segment so it won't block the driver list.
     // If exception happens after pickup, task stays active but will be shown in a separate "exception" list in UI.
     await c.env.DB.prepare(
