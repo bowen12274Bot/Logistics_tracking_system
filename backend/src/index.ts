@@ -29,7 +29,7 @@ import { AdminUserCreate } from "./endpoints/adminUsers";
 import { AdminContractList, AdminContractReview } from "./endpoints/adminContracts";
 import { AdminSystemErrors } from "./endpoints/adminErrors";
 import { VehicleMeGet, VehicleMeMove } from "./endpoints/vehiclesMe";
-import { DriverPackageExceptionCreate } from "./endpoints/driverPackageException";
+import { DriverPackageExceptionCreate, DriverPackageExceptionList } from "./endpoints/driverPackageException";
 import { VehicleMeCargoList } from "./endpoints/vehiclesCargoMe";
 import { DriverTaskPickup, DriverTaskDropoff } from "./endpoints/driverTaskCargo";
 import { DriverTaskEnRoute } from "./endpoints/driverTaskEnRoute";
@@ -284,6 +284,7 @@ openapi.post("/api/driver/tasks/:taskId/dropoff", DriverTaskDropoff);
 openapi.post("/api/driver/tasks/:taskId/enroute", DriverTaskEnRoute);
 openapi.post("/api/driver/packages/:packageId/status", DriverUpdateStatus);
 openapi.post("/api/driver/packages/:packageId/exception", DriverPackageExceptionCreate);
+openapi.get("/api/driver/exceptions", DriverPackageExceptionList);
 openapi.post("/api/warehouse/batch-operation", WarehouseBatchOperation);
 openapi.post("/api/warehouse/packages/:packageId/dispatch-next", WarehouseDispatchNextTask);
 

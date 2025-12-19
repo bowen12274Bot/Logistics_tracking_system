@@ -263,12 +263,17 @@ watch(
   },
 );
 
-const routeModel = (pkg: any) => {
-  const baseNodes = parseRoutePath(pkg.route_path ?? null);
-  const nodes =
-    baseNodes.length && baseNodes[0] !== TRUCK_ORIGIN_NODE_ID ? [TRUCK_ORIGIN_NODE_ID, ...baseNodes] : [...baseNodes];
-  const details = detailByPackageId.value[pkg.id];
-  const events = details?.events ?? [];
+	const routeModel = (pkg: any) => {
+	  const baseNodes = parseRoutePath(pkg.route_path ?? null);
+	  const nodes =
+	    baseNodes.length && baseNodes[0] !== TRUCK_ORIGIN_NODE_ID ? [TRUCK_ORIGIN_NODE_ID, ...baseNodes] : [...baseNodes];
+	  const details = detailByPackageId.value[pkg.id];
+	  const events = details?.events ?? [];
+
+	  const extractDestination = (text: string) => {
+	    const m = String(text ?? "").match(/(?:\u524d\u5f80|\u4e0b\u4e00\u7ad9)\s*([A-Z0-9_]+)/i);
+	    return m?.[1] ? String(m[1]).trim() : "";
+	  };
 
   const nodeTimeById = new Map<string, string>();
   let originAtFromEvent: string | null = null;
@@ -333,12 +338,14 @@ const routeModel = (pkg: any) => {
         : progressNode;
   const displayStage = displayNode ? nodeStageLabel(displayNode) : null;
 
-  const segmentTruckIds = nodes.length > 1 ? nodes.slice(0, -1).map(() => null as string | null) : [];
+	  const segmentTruckIds = nodes.length > 1 ? nodes.slice(0, -1).map(() => null as string | null) : [];
+	  const segmentExceptionFlags = segmentTruckIds.map(() => false);
+	  const nodeExceptions: Record<string, true> = {};
 
   // Line (in_transit) state: assign truck id to the segment that matches the destination in event details.
   // This keeps segment tooltips stable across refreshes and after arrival events (picked_up/warehouse_in/etc).
-  if (events.length && segmentTruckIds.length) {
-    for (const evt of events) {
+	  if (events.length && segmentTruckIds.length) {
+	    for (const evt of events) {
       const status = String(evt.delivery_status ?? "").trim().toLowerCase();
       if (status !== "in_transit") continue;
 
@@ -347,7 +354,7 @@ const routeModel = (pkg: any) => {
 
       const details = String(evt.delivery_details ?? "").trim();
       const match = details.match(/(?:前往|下一站)\s*([A-Z0-9_]+)/i);
-      const destination = match?.[1] ? String(match[1]).trim() : "";
+	      const destination = extractDestination(details);
       if (!destination) continue;
 
       const destIndex = nodes.findIndex((n) => n === destination);
@@ -356,33 +363,69 @@ const routeModel = (pkg: any) => {
       const segIndex = destIndex - 1;
       if (segIndex < 0 || segIndex >= segmentTruckIds.length) continue;
       segmentTruckIds[segIndex] = truckId;
-    }
-  }
+	    }
+	  }
 
-  return {
-    nodes,
-    nodeTimes,
-    currentIndex,
-    currentNode: progressNode,
-    stage: progressStage,
-    displayNode,
-    displayStage,
-    segmentTruckIds,
-  };
-};
+	  // Exception states:
+	  // - location is a nodeId -> mark that node as exception (point)
+	  // - location is a truckId + details has destination -> mark that segment as exception (line)
+	  if (events.length) {
+	    for (const evt of events) {
+	      const status = String(evt.delivery_status ?? "").trim().toLowerCase();
+	      if (!["exception", "abnormal", "error", "failed"].includes(status)) continue;
 
-const routeNodeState = (pkg: any, index: number) => {
-  const model = routeModel(pkg);
-  if (index <= model.currentIndex) return pkg.status === "exception" ? "exception" : "ok";
-  return "pending";
-};
+	      const loc = String(evt.location ?? "").trim();
+	      const details = String(evt.delivery_details ?? "").trim();
 
-const routeSegState = (pkg: any, segmentIndex: number) => {
-  const model = routeModel(pkg);
-  if (model.segmentTruckIds[segmentIndex]) return pkg.status === "exception" ? "exception" : "ok";
-  if (segmentIndex < model.currentIndex) return pkg.status === "exception" ? "exception" : "ok";
-  return "pending";
-};
+		      if (loc && baseNodes.includes(loc)) {
+		        const nodeIndex = nodes.findIndex((n) => n === loc);
+		        if (nodeIndex >= currentIndex) nodeExceptions[loc] = true;
+		      }
+
+	      const destination = extractDestination(details);
+	      if (!destination) continue;
+
+	      const destIndex = nodes.findIndex((n) => n === destination);
+	      if (destIndex <= 0) continue;
+
+		      const segIndex = destIndex - 1;
+		      if (segIndex < 0 || segIndex >= segmentExceptionFlags.length) continue;
+		      if (segIndex >= currentIndex) segmentExceptionFlags[segIndex] = true;
+		      if (loc && /^TRUCK_/i.test(loc) && !segmentTruckIds[segIndex]) segmentTruckIds[segIndex] = loc;
+		    }
+		  }
+
+	  return {
+	    nodes,
+	    nodeTimes,
+	    currentIndex,
+	    currentNode: progressNode,
+	    stage: progressStage,
+	    displayNode,
+	    displayStage,
+	    segmentTruckIds,
+	    segmentExceptionFlags,
+	    nodeExceptions,
+	  };
+	};
+
+	const routeNodeState = (pkg: any, index: number) => {
+	  const model = routeModel(pkg);
+	  if (index <= model.currentIndex) {
+	    const nodeId = model.nodes?.[index] ? String(model.nodes[index]) : "";
+	    if (nodeId && model.nodeExceptions?.[nodeId]) return "exception";
+	    return "ok";
+	  }
+	  return "pending";
+	};
+
+	const routeSegState = (pkg: any, segmentIndex: number) => {
+	  const model = routeModel(pkg);
+	  if (model.segmentExceptionFlags?.[segmentIndex]) return "exception";
+	  if (model.segmentTruckIds[segmentIndex]) return "ok";
+	  if (segmentIndex < model.currentIndex) return "ok";
+	  return "pending";
+	};
 
 const togglePackage = (pkgId: string) => {
   const next = new Set(expandedIds.value);

@@ -1,4 +1,4 @@
-import { OpenAPIRoute } from "chanfana";
+﻿import { OpenAPIRoute } from "chanfana";
 import { z } from "zod";
 import type { AppContext } from "../types";
 
@@ -212,7 +212,10 @@ export class VehicleMeMove extends OpenAPIRoute {
       `
       SELECT vc.package_id AS package_id
       FROM vehicle_cargo vc
-      WHERE vc.vehicle_id = ? AND vc.unloaded_at IS NULL
+      JOIN packages p ON p.id = vc.package_id
+      WHERE vc.vehicle_id = ?
+        AND vc.unloaded_at IS NULL
+        AND COALESCE(p.status, '') != 'exception'
       `,
     )
       .bind(vehicle.id)
@@ -222,6 +225,41 @@ export class VehicleMeMove extends OpenAPIRoute {
     if (cargoPackageIds.length > 0) {
       const vehicleCode = String(vehicle.vehicle_code ?? "").trim();
       for (const packageId of cargoPackageIds) {
+        // Only add in_transit if there is an active segment in progress and this move heads to its destination
+        const activeTask = await c.env.DB.prepare(
+          `
+          SELECT to_location
+          FROM delivery_tasks
+          WHERE package_id = ?
+            AND assigned_driver_id = ?
+            AND status = 'in_progress'
+          ORDER BY COALESCE(updated_at, created_at, '') DESC
+          LIMIT 1
+          `,
+        )
+          .bind(packageId, auth.user.id)
+          .first<{ to_location: string | null }>();
+
+        const dest = String(activeTask?.to_location ?? "").trim();
+        if (!dest || dest !== toNodeId) continue;
+
+        // Avoid duplicate in_transit events for the same destination
+        const existing = await c.env.DB.prepare(
+          `
+          SELECT 1 AS ok
+          FROM package_events
+          WHERE package_id = ?
+            AND delivery_status = 'in_transit'
+            AND delivery_details = ?
+            AND location = ?
+          ORDER BY events_at DESC
+          LIMIT 1
+          `,
+        )
+          .bind(packageId, `in_transit ${toNodeId}`, vehicleCode || null)
+          .first();
+        if (existing) continue;
+
         await c.env.DB.prepare(
           "UPDATE packages SET status = 'in_transit' WHERE id = ? AND COALESCE(status,'') NOT IN ('delivered','exception')",
         )
@@ -235,7 +273,7 @@ export class VehicleMeMove extends OpenAPIRoute {
           VALUES (?, ?, 'in_transit', ?, ?, ?)
           `,
         )
-          .bind(eventId, packageId, `前往 ${toNodeId}`, updatedAt, vehicleCode || null)
+          .bind(eventId, packageId, `in_transit ${toNodeId}`, updatedAt, vehicleCode || null)
           .run();
       }
     }

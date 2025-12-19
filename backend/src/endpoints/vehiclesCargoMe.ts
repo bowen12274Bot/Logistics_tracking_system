@@ -95,6 +95,7 @@ export class VehicleMeCargoList extends OpenAPIRoute {
       SELECT
         vc.package_id,
         p.tracking_number,
+        p.status AS package_status,
         vc.loaded_at
       FROM vehicle_cargo vc
       JOIN packages p ON p.id = vc.package_id
@@ -108,4 +109,3 @@ export class VehicleMeCargoList extends OpenAPIRoute {
     return c.json({ success: true, vehicle_id: vehicle.id, cargo: rows.results ?? [] });
   }
 }
-

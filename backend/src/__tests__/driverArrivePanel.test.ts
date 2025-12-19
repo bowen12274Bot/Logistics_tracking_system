@@ -54,6 +54,12 @@ describe("Driver Arrive Panel APIs", () => {
     expect(report.status).toBe(200);
     expect(report.data.success).toBe(true);
 
+    // Since this exception happens before pickup starts, the pending/accepted task should be canceled
+    // and not appear in the assigned active list.
+    const assignedAfter = await authenticatedRequest<any>("/api/driver/tasks?scope=assigned", String(pickupDriverToken));
+    expect(assignedAfter.status).toBe(200);
+    expect((assignedAfter.data.tasks ?? []).some((t: any) => t.package_id === pkg.id)).toBe(false);
+
     const statusRes = await authenticatedRequest<any>(`/api/packages/${encodeURIComponent(pkg.id)}/status`, customerToken);
     expect(statusRes.status).toBe(200);
     expect(statusRes.data.success).toBe(true);
@@ -62,4 +68,3 @@ describe("Driver Arrive Panel APIs", () => {
     expect(events.some((e) => String(e.delivery_status) === "exception")).toBe(true);
   });
 });
-

@@ -95,6 +95,20 @@ export class DriverPackageExceptionCreate extends OpenAPIRoute {
 
     await c.env.DB.prepare("UPDATE packages SET status = ? WHERE id = ?").bind("exception", packageId).run();
 
+    // If exception is reported before pickup starts, cancel the current task segment so it won't block the driver list.
+    // If exception happens after pickup, task stays active but will be shown in a separate "exception" list in UI.
+    await c.env.DB.prepare(
+      `
+      UPDATE delivery_tasks
+      SET status = 'canceled', updated_at = ?
+      WHERE package_id = ?
+        AND assigned_driver_id = ?
+        AND status IN ('pending','accepted')
+      `,
+    )
+      .bind(now, packageId, auth.user.id)
+      .run();
+
     const eventId = crypto.randomUUID();
     await c.env.DB.prepare(
       `
@@ -109,3 +123,53 @@ export class DriverPackageExceptionCreate extends OpenAPIRoute {
   }
 }
 
+// GET /api/driver/exceptions - driver exception reports list
+export class DriverPackageExceptionList extends OpenAPIRoute {
+  schema = {
+    tags: ["Staff"],
+    summary: "Driver exception reports list",
+    security: [{ bearerAuth: [] }],
+    request: {
+      query: z.object({
+        limit: z.coerce.number().int().min(1).max(200).optional().default(50),
+      }),
+    },
+    responses: {
+      "200": { description: "OK" },
+      "401": { description: "Unauthorized" },
+      "403": { description: "Forbidden" },
+    },
+  };
+
+  async handle(c: AppContext) {
+    const auth = await requireDriver(c);
+    if (!auth.ok) return auth.res;
+
+    const data = await this.getValidatedData<typeof this.schema>();
+    const limit = data.query.limit;
+
+    const rows = await c.env.DB.prepare(
+      `
+      SELECT
+        pe.id,
+        pe.package_id,
+        p.tracking_number,
+        p.status AS package_status,
+        pe.reason_code,
+        pe.description,
+        pe.reported_at,
+        pe.handled,
+        pe.handled_at
+      FROM package_exceptions pe
+      JOIN packages p ON p.id = pe.package_id
+      WHERE pe.reported_by = ? AND pe.reported_role = 'driver'
+      ORDER BY COALESCE(pe.reported_at, '') DESC
+      LIMIT ?
+      `,
+    )
+      .bind(auth.user.id, limit)
+      .all();
+
+    return c.json({ success: true, exceptions: rows.results ?? [] });
+  }
+}

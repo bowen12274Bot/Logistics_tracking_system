@@ -1,4 +1,4 @@
-import { OpenAPIRoute } from "chanfana";
+﻿import { OpenAPIRoute } from "chanfana";
 import { z } from "zod";
 import type { AppContext } from "../types";
 
@@ -15,6 +15,8 @@ type TaskRow = {
   segment_index: number | null;
   created_at: string | null;
   updated_at: string | null;
+  payment_method?: string | null;
+  paid_at?: string | null;
 };
 
 type VehicleRow = {
@@ -163,13 +165,17 @@ export class DriverTaskListV2 extends OpenAPIRoute {
       SELECT
         t.*,
         p.tracking_number,
+        p.status AS package_status,
         p.sender_address,
         p.receiver_address,
         p.delivery_time,
         p.payment_type,
+        COALESCE(pmt.total_amount, p.declared_value) AS payment_amount,
+        pmt.paid_at,
         p.estimated_delivery
       FROM delivery_tasks t
       JOIN packages p ON p.id = t.package_id
+      LEFT JOIN payments pmt ON pmt.package_id = p.id
       ${whereClause}
       ORDER BY COALESCE(p.created_at, '') DESC, COALESCE(t.segment_index, 0) ASC, COALESCE(t.created_at, '') DESC
       LIMIT ?
@@ -185,6 +191,8 @@ export class DriverTaskListV2 extends OpenAPIRoute {
         receiver_address?: string | null;
         delivery_time?: string | null;
         payment_type?: string | null;
+        payment_amount?: number | null;
+        paid_at?: string | null;
         estimated_delivery?: string | null;
       }
     >;
@@ -342,3 +350,8 @@ export class DriverTaskComplete extends OpenAPIRoute {
     return c.json({ success: true });
   }
 }
+
+
+
+
+

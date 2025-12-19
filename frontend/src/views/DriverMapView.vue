@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed, onMounted, reactive, ref } from "vue";
 import { api, type DeliveryTaskRecord, type MapEdge, type MapNode, type VehicleRecord } from "../services/api";
 import { useFullscreen } from "../composables/useFullscreen";
@@ -179,7 +179,16 @@ const cargoPackageIds = computed(() => new Set(cargo.value.map((c) => String(c.p
 const tasksAtCurrentNode = computed(() => {
   const nodeId = currentNodeId.value;
   if (!nodeId) return [];
-  return assignedTasks.value.filter((t) => String(t.from_location ?? "").trim() === nodeId);
+  return assignedTasks.value.filter((t) => {
+    const from = String(t.from_location ?? "").trim();
+    const status = String(t.status ?? "").trim().toLowerCase();
+    const pkgStatus = String(t.package_status ?? "").trim().toLowerCase();
+    return (
+      from === nodeId &&
+      (status === "pending" || status === "accepted") &&
+      pkgStatus !== "exception"
+    );
+  });
 });
 
 const tasksEndingAtCurrentNode = computed(() => {
@@ -193,12 +202,75 @@ function canDropoffTask(task: DeliveryTaskRecord) {
   return cargoPackageIds.value.has(String(task.package_id));
 }
 
+function taskRouteLabel(task: DeliveryTaskRecord) {
+  const to = task.to_location ?? "-";
+  const status = String(task.status ?? "").trim().toLowerCase();
+  if (status === "in_progress") {
+    const from = currentNodeId.value ?? task.from_location ?? "-";
+    return `${from} → ${to}`;
+  }
+  const from = task.from_location ?? "-";
+  return `${from} → ${to}`;
+}
+
+function paymentLabel(task: DeliveryTaskRecord) {
+  const raw = String(task.payment_method ?? task.payment_type ?? "").trim();
+  const key = raw.toLowerCase();
+  const methodLabel =
+    key === "cod"
+      ? "貨到付款"
+      : key === "cash"
+        ? "現金"
+        : key === "prepaid"
+          ? "預付"
+          : key === "credit_card"
+            ? "信用卡"
+            : key === "bank_transfer"
+            ? "銀行轉帳"
+            : raw || "未設定";
+
+  // 是否已付款：僅以 paid_at 判斷，預付但未付款也顯示未付款
+  const paidFlag = Boolean(task.paid_at);
+  const paid = paidFlag ? "已付款" : "未付款";
+
+  const needCash = !paidFlag && /cash|cod|貨到|現金/i.test(key);
+  const cashHint = needCash ? " · 需收現金" : "";
+
+  const amount =
+    !paidFlag && task.payment_amount != null && !Number.isNaN(Number(task.payment_amount))
+      ? ` · 需付款 ${task.payment_amount}`
+      : "";
+
+  return `付款：${methodLabel} · ${paid}${amount}${cashHint}`;
+}
+
+function paymentDueAmount(task: DeliveryTaskRecord) {
+  if (task.paid_at) return null;
+  const amount = Number(task.payment_amount);
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+  return amount;
+}
+
+function paymentDueDisplay(task: DeliveryTaskRecord) {
+  const amount = paymentDueAmount(task);
+  return amount == null ? "" : ` · 應收款：${amount}`;
+}
+
 const droppableTasksEndingAtCurrentNode = computed(() => tasksEndingAtCurrentNode.value.filter(canDropoffTask));
 
 const otherAssignedTasks = computed(() => {
   const nodeId = currentNodeId.value;
-  if (!nodeId) return assignedTasks.value;
-  return assignedTasks.value.filter((t) => String(t.from_location ?? "").trim() !== nodeId);
+  return assignedTasks.value.filter((t) => {
+    const from = String(t.from_location ?? "").trim();
+    const status = String(t.status ?? "").trim().toLowerCase();
+    const pkgStatus = String(t.package_status ?? "").trim().toLowerCase();
+    if (pkgStatus === "exception") return false;
+    if (status === "completed" || status === "canceled") return false;
+    if (status === "in_progress") return true; // 取件後的持續任務要繼續顯示
+    // pending / accepted：只顯示非當前節點的待取件任務
+    if (nodeId && from === nodeId) return false;
+    return true;
+  });
 });
 
 const handoffAtCurrentNode = computed(() => {
@@ -656,7 +728,7 @@ async function animateMoveTo(targetId: string) {
     currentNodeId.value = targetId;
     if (vehicle.value) vehicle.value.current_node_id = targetId;
   } catch (e: any) {
-    error.value = `更新車輛位置失敗：${String(e?.message ?? e)}`;
+    error.value = `?湔頠?雿蔭憭望?嚗?{String(e?.message ?? e)}`;
     truckPos.x = fromX;
     truckPos.y = fromY;
   } finally {
@@ -726,7 +798,7 @@ onMounted(async () => {
       <div>
         <p class="eyebrow">員工 · 司機</p>
         <h1>司機地圖</h1>
-        <p class="lede">只顯示自己的貨車，並可在相鄰節點間移動。</p>
+        <p class="lede">顯示自己的貨車，並可在對應節點移動地圖。</p>
       </div>
     </header>
 
@@ -889,7 +961,7 @@ onMounted(async () => {
         </svg>
 
         <div class="card map-overlay" role="complementary" aria-label="driver map panel">
-          <p class="eyebrow">狀態</p>
+          <p class="eyebrow">司機資訊</p>
           <div class="hint">
             <div><strong>貨車編號：</strong>{{ vehicle?.vehicle_code ?? "未串接" }}</div>
             <div><strong>目前位置：</strong>{{ currentNodeId ?? "-" }}</div>
@@ -906,7 +978,6 @@ onMounted(async () => {
             <div>
               <p class="eyebrow">抵達面板</p>
               <p class="hint" style="margin: 0"><strong>節點：</strong>{{ currentNodeId ?? "-" }}</p>
-              <p class="hint" style="margin: 6px 0 0"><strong>車上貨物：</strong>{{ cargo.length }}</p>
             </div>
             <div class="arrive-header-actions">
               <button class="ghost-btn" type="button" :disabled="arriveBusy" @click="refreshArriveData">重新整理</button>
@@ -937,18 +1008,19 @@ onMounted(async () => {
 
           <div v-if="arrivePanelTab === 'actions'" class="arrive-body">
             <div v-if="tasksAtCurrentNode.length === 0 && tasksEndingAtCurrentNode.length === 0" class="hint">
-              此節點沒有可執行任務。
+              此節點沒有可執行的任務。
             </div>
 
             <div v-if="tasksAtCurrentNode.length > 0">
-              <p class="eyebrow">起點作業（上車/開始）</p>
+              <p class="eyebrow">起點作業（取件上車）</p>
               <ul class="arrive-task-list">
                 <li v-for="t in tasksAtCurrentNode" :key="t.id" class="arrive-task">
                   <div class="arrive-task-top">
                     <strong>{{ t.tracking_number ?? t.package_id }}</strong>
                     <span class="hint">{{ t.task_type }} · #{{ t.segment_index ?? "-" }} · {{ t.status }}</span>
                   </div>
-                  <div class="hint">{{ t.from_location }} → {{ t.to_location }}</div>
+                  <div class="hint">{{ taskRouteLabel(t) }}</div>
+                  <div class="hint">配送時效：{{ t.delivery_time ?? "未設定" }} · {{ paymentLabel(t) }}{{ paymentDueDisplay(t) }}</div>
                   <div class="arrive-task-actions">
                     <button
                       v-if="String(t.status ?? '').trim().toLowerCase() !== 'in_progress'"
@@ -977,17 +1049,18 @@ onMounted(async () => {
             </div>
 
             <div v-if="droppableTasksEndingAtCurrentNode.length > 0" style="margin-top: 12px">
-              <p class="eyebrow">終點作業（卸貨/完成）</p>
+              <p class="eyebrow">終點作業（卸貨完成）</p>
               <ul class="arrive-task-list">
                 <li v-for="t in droppableTasksEndingAtCurrentNode" :key="t.id" class="arrive-task">
                   <div class="arrive-task-top">
                     <strong>{{ t.tracking_number ?? t.package_id }}</strong>
                     <span class="hint">{{ t.task_type }} · #{{ t.segment_index ?? "-" }} · {{ t.status }}</span>
                   </div>
-                  <div class="hint">{{ t.from_location }} → {{ t.to_location }}</div>
+                  <div class="hint">{{ taskRouteLabel(t) }}</div>
+                  <div class="hint">配送時效：{{ t.delivery_time ?? "未設定" }} · {{ paymentLabel(t) }}{{ paymentDueDisplay(t) }}</div>
                   <div class="arrive-task-actions">
                     <button class="primary-btn small-btn" type="button" :disabled="arriveBusy" @click="dropoffTask(t)">
-                      卸貨到站
+                      卸貨完成
                     </button>
                     <button class="ghost-btn small-btn" type="button" :disabled="arriveBusy" @click="startException(t)">
                       申報異常
@@ -998,14 +1071,17 @@ onMounted(async () => {
             </div>
 
             <details v-if="otherAssignedTasks.length > 0" class="arrive-details">
-              <summary class="hint">其他節點任務（{{ otherAssignedTasks.length }}）</summary>
+              <summary class="hint">待繼續執行任務：{{ otherAssignedTasks.length }}</summary>
               <ul class="arrive-task-list" style="margin-top: 10px">
                 <li v-for="t in otherAssignedTasks" :key="t.id" class="arrive-task compact">
                   <div class="arrive-task-top">
                     <strong>{{ t.tracking_number ?? t.package_id }}</strong>
                     <span class="hint">{{ t.task_type }} · #{{ t.segment_index ?? "-" }}</span>
                   </div>
-                  <div class="hint">{{ t.from_location }} → {{ t.to_location }}</div>
+                  <div class="hint">{{ taskRouteLabel(t) }}</div>
+                  <div class="hint">
+                    配送時效：{{ t.delivery_time ?? "未設定" }} · {{ paymentLabel(t) }}{{ paymentDueDisplay(t) }}
+                  </div>
                   <div class="arrive-task-actions" style="margin-top: 8px">
                     <button class="ghost-btn small-btn" type="button" :disabled="arriveBusy" @click="enrouteTask(t)">
                       正在前往
@@ -1024,7 +1100,7 @@ onMounted(async () => {
                   <strong>{{ t.tracking_number ?? t.package_id }}</strong>
                   <span class="hint">{{ t.task_type }} · #{{ t.segment_index ?? "-" }}</span>
                 </div>
-                <div class="hint">{{ t.from_location }} → {{ t.to_location }}</div>
+                <div class="hint">{{ taskRouteLabel(t) }}</div>
                 <div class="arrive-task-actions">
                   <button class="primary-btn small-btn" type="button" :disabled="arriveBusy" @click="takeOverTask(t.id)">
                     接手任務
@@ -1049,7 +1125,7 @@ onMounted(async () => {
                 <input v-model="exceptionForm.reason_code" class="text-input" placeholder="damaged / lost / ..." />
               </label>
               <label class="hint" style="display: grid; gap: 6px; margin-top: 10px">
-                描述（必填）
+                說明（必填）
                 <textarea v-model="exceptionForm.description" class="text-input" rows="3" placeholder="請描述異常狀況…" />
               </label>
 
@@ -1060,8 +1136,8 @@ onMounted(async () => {
             </div>
           </div>
         </div>
-      </div>
-    </div>
+      </div> <!-- map-stage -->
+    </div> <!-- map-canvas -->
   </section>
 </template>
 
@@ -1427,3 +1503,6 @@ onMounted(async () => {
   background: rgba(255, 255, 255, 0.96);
 }
 </style>
+
+
+

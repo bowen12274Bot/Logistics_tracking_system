@@ -255,11 +255,27 @@ export type DeliveryTaskRecord = {
   created_at?: string | null;
   updated_at?: string | null;
   tracking_number?: string | null;
+  package_status?: string | null;
   sender_address?: string | null;
   receiver_address?: string | null;
   delivery_time?: string | null;
   payment_type?: string | null;
+  payment_amount?: number | null;
+  payment_method?: string | null;
+  paid_at?: string | null;
   estimated_delivery?: string | null;
+};
+
+export type DriverExceptionRecord = {
+  id: string;
+  package_id: string;
+  tracking_number?: string | null;
+  package_status?: string | null;
+  reason_code?: string | null;
+  description?: string | null;
+  reported_at?: string | null;
+  handled?: number | null;
+  handled_at?: string | null;
 };
 
 export type DriverTasksResponse = {
@@ -361,10 +377,16 @@ export const api = {
       method: "GET",
     }),
   getVehicleCargoMe: () =>
-    request<{ success: boolean; vehicle_id: string; cargo: Array<{ package_id: string; tracking_number: string | null; loaded_at: string | null }> }>(
-      "/api/vehicles/me/cargo",
-      { method: "GET" },
-    ),
+    request<{
+      success: boolean;
+      vehicle_id: string;
+      cargo: Array<{
+        package_id: string;
+        tracking_number: string | null;
+        package_status?: string | null;
+        loaded_at: string | null;
+      }>;
+    }>("/api/vehicles/me/cargo", { method: "GET" }),
   moveVehicleMe: (payload: VehicleMovePayload) =>
     request<VehicleMoveResponse>("/api/vehicles/me/move", {
       method: "POST",
@@ -407,6 +429,13 @@ export const api = {
       `/api/driver/packages/${encodeURIComponent(packageId)}/exception`,
       { method: "POST", body: JSON.stringify(payload) },
     ),
+  getDriverExceptionReports: (limit = 50) => {
+    const qs = new URLSearchParams({ limit: String(limit) });
+    return request<{ success: boolean; exceptions: DriverExceptionRecord[] }>(
+      `/api/driver/exceptions?${qs.toString()}`,
+      { method: "GET" },
+    );
+  },
   getMe: () =>
     request<{ success: boolean; user: User }>("/api/auth/me", {
       method: "GET",
