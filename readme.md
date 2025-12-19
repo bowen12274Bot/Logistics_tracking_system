@@ -179,6 +179,55 @@ logistics-system/               # Repo 根目錄
 
 ---
 
+## Remote D1 操作（--remote）
+
+> 注意：`--remote` 會操作線上的 Cloudflare D1，執行期間 DB 可能短暫不可用；請確認你正在操作正確的資料庫。
+
+### 套用 migrations（不清空資料）
+
+在 `backend/` 目錄下執行：
+
+- `npx wrangler d1 migrations apply DB --remote`
+
+### 手動重設 Remote DB（清空 + 重建）
+
+在 repo 根目錄執行（Windows PowerShell）：
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File ".\backend\scripts\reset-remote-db.ps1" -Yes`
+
+### 只清空 Remote DB（讓 GitHub Actions 之後自動重建）
+
+本 repo 的 GitHub Actions 會在部署時跑 `npx wrangler d1 migrations apply DB --remote`。
+如果你想「先手動清空 remote，push 之後讓 action 自動建新表」，需要同時清掉 D1 的 migration 記錄表，否則 action 可能會以為 migration 已跑過而跳過。
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File ".\backend\scripts\reset-remote-db.ps1" -Yes -DropOnly -DropMigrationHistory`
+
+（如果你的 D1 binding 不是 `DB`，可以加 `-DatabaseBinding <你的binding>`）
+
+---
+
+## 🧹 本地資料庫清空/重建（D1 --local）
+
+本專案後端在本地開發時，D1 會落地成 sqlite 檔案在：
+`backend/.wrangler/state/v3/d1/miniflare-D1DatabaseObject/*.sqlite`
+
+### 清空本地 DB（刪除 sqlite）
+
+1. 先停止本地 worker（避免檔案被鎖定）
+   - `npm --prefix backend run dev:clean`
+   - 或：`powershell -NoProfile -ExecutionPolicy Bypass -File backend/scripts/stop-local-workers.ps1 -Port 8787`
+2. 刪除本地 sqlite 檔
+   - `Remove-Item -Force backend\.wrangler\state\v3\d1\miniflare-D1DatabaseObject\*.sqlite`
+
+### 清空 + 重建本地 DB（重新套用 migrations）
+
+在做完「清空本地 DB」後，執行：
+
+- `cd backend`
+- `npx wrangler d1 migrations apply DB --local`
+
+---
+
 ## 🛠️ 技術細節 (Tech Stack Details)
 
 | 層級 | 技術 | 說明 |
