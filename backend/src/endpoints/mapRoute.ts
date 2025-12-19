@@ -5,18 +5,28 @@ import type { AppContext } from "../types";
 type NodeData = { id: string };
 type EdgeData = { source: string; target: string; cost: number };
 
+type RouteReason = "from_not_found" | "to_not_found" | "no_route";
+
+export type RouteResult =
+  | { ok: true; path: string[]; totalCost: number }
+  | {
+      ok: false;
+      reason: RouteReason;
+      debug?: { nodesCount: number; edgesCount: number; fromDegree: number; toDegree: number };
+    };
+
 export const computeRoute = async (
   db: D1Database,
   fromNodeId: string,
   toNodeId: string,
-): Promise<{ path: string[]; totalCost: number } | null> => {
+): Promise<RouteResult> => {
   const fromId = String(fromNodeId).trim();
   const toId = String(toNodeId).trim();
 
   const fromExists = await db.prepare("SELECT 1 FROM nodes WHERE id = ?").bind(fromId).first();
-  if (!fromExists) return null;
+  if (!fromExists) return { ok: false, reason: "from_not_found" };
   const toExists = await db.prepare("SELECT 1 FROM nodes WHERE id = ?").bind(toId).first();
-  if (!toExists) return null;
+  if (!toExists) return { ok: false, reason: "to_not_found" };
 
   const nodesResult = await db.prepare("SELECT id FROM nodes").all();
   const edgesResult = await db.prepare("SELECT source, target, cost FROM edges").all();
@@ -79,19 +89,33 @@ export const computeRoute = async (
   }
 
   const totalCost = distances.get(toId);
-  if (totalCost === undefined || totalCost === Infinity) return null;
+  if (totalCost === undefined || totalCost === Infinity) {
+    const fromDegree = (graph.get(fromId) ?? []).length;
+    const toDegree = (graph.get(toId) ?? []).length;
+    return {
+      ok: false,
+      reason: "no_route",
+      debug: { nodesCount: nodes.length, edgesCount: edges.length, fromDegree, toDegree },
+    };
+  }
 
   const path: string[] = [];
   let current: string | null = toId;
   const seen = new Set<string>();
   while (current !== null) {
-    if (seen.has(current)) return null;
+    if (seen.has(current)) {
+      return {
+        ok: false,
+        reason: "no_route",
+        debug: { nodesCount: nodes.length, edgesCount: edges.length, fromDegree: 0, toDegree: 0 },
+      };
+    }
     seen.add(current);
     path.unshift(current);
     current = previous.get(current) || null;
   }
 
-  return { path, totalCost };
+  return { ok: true, path, totalCost };
 };
 
 // GET /api/map/route - shortest path cost (Dijkstra)
@@ -132,7 +156,7 @@ export class MapRoute extends OpenAPIRoute {
     if (!query.from || !query.to) return c.json({ error: "Missing from/to" }, 400);
 
     const route = await computeRoute(c.env.DB, String(query.from).trim(), String(query.to).trim());
-    if (!route) {
+    if (route.ok === false) {
       return c.json({ error: "Route not found", from: query.from, to: query.to }, 404);
     }
 

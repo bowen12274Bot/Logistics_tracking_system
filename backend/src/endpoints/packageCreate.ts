@@ -544,7 +544,7 @@ export class PackageCreate extends OpenAPIRoute {
 				if (!pickupTo) {
 					// Fallback to shortest path next hop if direct adjacency isn't found.
 					const route = await computeRoute(c.env.DB, normalizedSenderAddress, normalizedReceiverAddress);
-					if (!route || !Array.isArray(route.path) || route.path.length < 2) {
+					if (route.ok === false || route.path.length < 2) {
 						throw new Error("Route not found");
 					}
 					const nextHop = String(route.path[1]).trim();
