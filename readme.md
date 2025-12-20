@@ -200,9 +200,13 @@ logistics-system/               # Repo 根目錄
 本 repo 的 GitHub Actions 會在部署時跑 `npx wrangler d1 migrations apply DB --remote`。
 如果你想「先手動清空 remote，push 之後讓 action 自動建新表」，需要同時清掉 D1 的 migration 記錄表，否則 action 可能會以為 migration 已跑過而跳過。
 
-- `powershell -NoProfile -ExecutionPolicy Bypass -File ".\backend\scripts\reset-remote-db.ps1" -Yes -DropOnly -DropMigrationHistory`
+在 VSCode 終端機直接貼下面這行（Windows PowerShell / CMD 都可）：
 
-（如果你的 D1 binding 不是 `DB`，可以加 `-DatabaseBinding <你的binding>`）
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File ".\backend\scripts\reset-remote-db.ps1" -Yes -DropOnly
+```
+
+（如果你的 D1 binding 不是 `DB`，可以加 `-DatabaseBinding <你的binding>`；若要指定 wrangler 設定檔可加 `-ConfigPath backend/wrangler.jsonc`）
 
 ---
 

@@ -2,8 +2,9 @@ Param(
   [string]$DatabaseBinding = "DB",
   [switch]$Yes,
   [switch]$DropOnly,
-  [switch]$DropMigrationHistory,
-  [string[]]$ExtraDropTables = @()
+  [switch]$KeepMigrationHistory,
+  [string[]]$ExtraDropTables = @(),
+  [string]$ConfigPath = ""
 )
 
 # Drops application tables on the remote D1 database and (optionally) reapplies every SQL migration.
@@ -37,7 +38,8 @@ $tables = @(
 
 if (-not $Yes) {
   $actionText = if ($DropOnly) { "DROP tables only" } else { "DROP tables and REAPPLY migrations" }
-  $confirm = Read-Host "This will $actionText on the remote D1 database '$DatabaseBinding'. Type DROP to continue"
+  $historyText = if ($KeepMigrationHistory) { " (keeping migration history)" } else { " (dropping migration history)" }
+  $confirm = Read-Host "This will $actionText$historyText on the remote D1 database '$DatabaseBinding'. Type DROP to continue"
   if ($confirm -ne "DROP") {
     Write-Host "Aborted."
     exit 1
@@ -47,7 +49,7 @@ if (-not $Yes) {
 $dropSqlLines = @("PRAGMA foreign_keys=OFF;")
 $dropSqlLines += $indexes | ForEach-Object { "DROP INDEX IF EXISTS [$($_)];" }
 $dropSqlLines += $tables | ForEach-Object { "DROP TABLE IF EXISTS [$($_)];" }
-if ($DropMigrationHistory) {
+if (-not $KeepMigrationHistory) {
   $dropSqlLines += "DROP TABLE IF EXISTS [d1_migrations];"
   $dropSqlLines += "DROP TABLE IF EXISTS [d1_migrations_lock];"
 }
@@ -61,7 +63,9 @@ Write-Host "Dropping remote tables..."
 $tempDropFile = Join-Path ([System.IO.Path]::GetTempPath()) ("d1-drop-" + [Guid]::NewGuid().ToString() + ".sql")
 Set-Content -Path $tempDropFile -Value $dropSql -Encoding UTF8
 try {
-  & npx wrangler d1 execute $DatabaseBinding --remote --file $tempDropFile
+  $wranglerArgs = @()
+  if ($ConfigPath) { $wranglerArgs += @("--config", $ConfigPath) }
+  & npx wrangler @wranglerArgs d1 execute $DatabaseBinding --remote --file $tempDropFile
   if ($LASTEXITCODE -ne 0) {
     throw "Dropping remote tables failed."
   }
@@ -75,7 +79,9 @@ if ($DropOnly) {
 }
 
 Write-Host "Applying D1 migrations (remote)..."
-& npx wrangler d1 migrations apply $DatabaseBinding --remote
+$wranglerArgs = @()
+if ($ConfigPath) { $wranglerArgs += @("--config", $ConfigPath) }
+& npx wrangler @wranglerArgs d1 migrations apply $DatabaseBinding --remote
 if ($LASTEXITCODE -ne 0) {
   throw "Remote migration apply failed."
 }
