@@ -215,7 +215,7 @@ export class VehicleMeMove extends OpenAPIRoute {
       JOIN packages p ON p.id = vc.package_id
       WHERE vc.vehicle_id = ?
         AND vc.unloaded_at IS NULL
-        AND COALESCE(p.status, '') != 'exception'
+        AND COALESCE(p.status, '') NOT IN ('exception','delivered')
       `,
     )
       .bind(vehicle.id)
@@ -256,15 +256,9 @@ export class VehicleMeMove extends OpenAPIRoute {
           LIMIT 1
           `,
         )
-          .bind(packageId, `in_transit ${toNodeId}`, vehicleCode || null)
+          .bind(packageId, `前往 ${toNodeId}`, vehicleCode || null)
           .first();
         if (existing) continue;
-
-        await c.env.DB.prepare(
-          "UPDATE packages SET status = 'in_transit' WHERE id = ? AND COALESCE(status,'') NOT IN ('delivered','exception')",
-        )
-          .bind(packageId)
-          .run();
 
         const eventId = crypto.randomUUID();
         await c.env.DB.prepare(
@@ -273,7 +267,7 @@ export class VehicleMeMove extends OpenAPIRoute {
           VALUES (?, ?, 'in_transit', ?, ?, ?)
           `,
         )
-          .bind(eventId, packageId, `in_transit ${toNodeId}`, updatedAt, vehicleCode || null)
+          .bind(eventId, packageId, `前往 ${toNodeId}`, updatedAt, vehicleCode || null)
           .run();
       }
     }

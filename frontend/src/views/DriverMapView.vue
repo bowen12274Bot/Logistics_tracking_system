@@ -281,7 +281,15 @@ const handoffAtCurrentNode = computed(() => {
 
 const exceptionModalOpen = ref(false);
 const exceptionTarget = ref<{ packageId: string; taskId?: string } | null>(null);
-const exceptionForm = reactive({ reason_code: "", description: "" });
+const exceptionReasons = [
+  { code: "damaged", label: "貨損 / 包裝破損" },
+  { code: "lost", label: "貨件遺失 / 找不到包裹" },
+  { code: "delay", label: "延遲送達 / 塞車" },
+  { code: "refused", label: "收件人拒收 / 無法收件" },
+  { code: "wrong_address", label: "地址錯誤 / 無人應門" },
+  { code: "other", label: "其他（請詳述）" },
+];
+const exceptionForm = reactive({ reason_code: "", description: "", location: "" });
 
 const hoveredNode = computed(() => {
   const id = hoveredNodeId.value;
@@ -431,12 +439,17 @@ function startException(task: DeliveryTaskRecord) {
   exceptionTarget.value = { packageId: task.package_id, taskId: task.id };
   exceptionForm.reason_code = "";
   exceptionForm.description = "";
+  exceptionForm.location = currentNodeId.value ?? "";
   exceptionModalOpen.value = true;
 }
 
 async function submitException() {
   if (!exceptionTarget.value) return;
   if (arriveBusy.value) return;
+  if (!exceptionForm.reason_code.trim()) {
+    arriveError.value = "請選擇異常原因";
+    return;
+  }
   if (!exceptionForm.description.trim()) {
     arriveError.value = "請填寫異常描述";
     return;
@@ -447,7 +460,7 @@ async function submitException() {
     await api.driverReportPackageException(exceptionTarget.value.packageId, {
       reason_code: exceptionForm.reason_code.trim() || undefined,
       description: exceptionForm.description.trim(),
-      location: currentNodeId.value ?? undefined,
+      location: (exceptionForm.location || currentNodeId.value || "").trim() || undefined,
     });
     exceptionModalOpen.value = false;
     exceptionTarget.value = null;
@@ -728,7 +741,7 @@ async function animateMoveTo(targetId: string) {
     currentNodeId.value = targetId;
     if (vehicle.value) vehicle.value.current_node_id = targetId;
   } catch (e: any) {
-    error.value = `?湔頠?雿蔭憭望?嚗?{String(e?.message ?? e)}`;
+    error.value = `移動失敗，請稍後再試：${String(e?.message ?? e)}`;
     truckPos.x = fromX;
     truckPos.y = fromY;
   } finally {
@@ -1121,12 +1134,24 @@ onMounted(async () => {
               </div>
 
               <label class="hint" style="display: grid; gap: 6px; margin-top: 10px">
-                原因代碼（選填）
-                <input v-model="exceptionForm.reason_code" class="text-input" placeholder="damaged / lost / ..." />
+                異常原因（請選擇）
+                <select v-model="exceptionForm.reason_code" class="text-input">
+                  <option value="" disabled>請選擇異常原因</option>
+                  <option v-for="r in exceptionReasons" :key="r.code" :value="r.code">{{ r.label }}</option>
+                </select>
               </label>
               <label class="hint" style="display: grid; gap: 6px; margin-top: 10px">
-                說明（必填）
-                <textarea v-model="exceptionForm.description" class="text-input" rows="3" placeholder="請描述異常狀況…" />
+                發生位置（預設為當前節點，可修改）
+                <input v-model="exceptionForm.location" class="text-input" placeholder="REG_12 / HUB_3 / END_HOME_5" />
+              </label>
+              <label class="hint" style="display: grid; gap: 6px; margin-top: 10px">
+                說明（必填，請描述狀況與處理）
+                <textarea
+                  v-model="exceptionForm.description"
+                  class="text-input"
+                  rows="3"
+                  placeholder="例：收件人拒收，原因：貨件外箱破損；已拍照並聯絡客服。"
+                />
               </label>
 
               <div class="arrive-task-actions" style="margin-top: 12px">

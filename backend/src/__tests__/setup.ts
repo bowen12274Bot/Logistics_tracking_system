@@ -39,13 +39,42 @@ const splitSqlStatements = (sql: string) => {
   const normalized = sql.replace(/\r\n/g, "\n");
   const withoutBlockComments = normalized.replace(/\/\*[\s\S]*?\*\//g, "");
   const withoutComments = withoutBlockComments.replace(/^\s*--.*$/gm, "");
-  return withoutComments
-    .split(/;/)
-    .map((part) => part.trim())
-    .filter((part) => !part.startsWith("--"))
-    .map((part) => part.replace(/;+$/, "").trim())
-    .filter((part) => /[A-Za-z]/.test(part))
-    .map((part) => `${part};`);
+
+  const statements: string[] = [];
+  let buffer = "";
+  let inTrigger = false;
+
+  const pushStatement = () => {
+    const trimmed = buffer.trim();
+    buffer = "";
+    inTrigger = false;
+    if (!trimmed) return;
+    if (!/[A-Za-z]/.test(trimmed)) return;
+    statements.push(trimmed.endsWith(";") ? trimmed : `${trimmed};`);
+  };
+
+  for (let i = 0; i < withoutComments.length; i++) {
+    const ch = withoutComments[i];
+    buffer += ch;
+
+    if (!inTrigger && /^\s*CREATE\s+TRIGGER\b/i.test(buffer)) {
+      inTrigger = true;
+    }
+
+    if (ch !== ";") continue;
+
+    if (inTrigger) {
+      if (/\bEND\s*;$/i.test(buffer.trimEnd())) {
+        pushStatement();
+      }
+      continue;
+    }
+
+    pushStatement();
+  }
+
+  pushStatement();
+  return statements;
 };
 
 beforeAll(async () => {

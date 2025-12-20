@@ -93,20 +93,17 @@ export class DriverPackageExceptionCreate extends OpenAPIRoute {
       )
       .run();
 
-    await c.env.DB.prepare("UPDATE packages SET status = ? WHERE id = ?").bind("exception", packageId).run();
-
-    // If exception is reported before pickup starts, cancel the current task segment so it won't block the driver list.
-    // If exception happens after pickup, task stays active but will be shown in a separate "exception" list in UI.
+    // Remove this package from driver task lists immediately after exception is reported.
+    // We cancel all active segments for this package (regardless of assignee) so it won't keep showing up.
     await c.env.DB.prepare(
       `
       UPDATE delivery_tasks
       SET status = 'canceled', updated_at = ?
       WHERE package_id = ?
-        AND assigned_driver_id = ?
-        AND status IN ('pending','accepted')
+        AND status IN ('pending','accepted','in_progress')
       `,
     )
-      .bind(now, packageId, auth.user.id)
+      .bind(now, packageId)
       .run();
 
     const eventId = crypto.randomUUID();

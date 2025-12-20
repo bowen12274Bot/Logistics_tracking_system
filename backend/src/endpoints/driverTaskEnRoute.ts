@@ -126,11 +126,13 @@ export class DriverTaskEnRoute extends OpenAPIRoute {
     }
 
     const now = new Date().toISOString();
-    await c.env.DB.prepare(
-      "UPDATE packages SET status = 'in_transit' WHERE id = ? AND COALESCE(status,'') NOT IN ('delivered','exception')",
-    )
+    const pkg = await c.env.DB.prepare("SELECT status FROM packages WHERE id = ? LIMIT 1")
       .bind(String(task.package_id))
-      .run();
+      .first<{ status: string | null }>();
+    const currentStatus = String(pkg?.status ?? "").trim().toLowerCase();
+    if (currentStatus && ["delivered", "exception"].includes(currentStatus)) {
+      return c.json({ error: "Package not eligible", status: currentStatus }, 409);
+    }
 
     const vehicleCodeRow = await c.env.DB.prepare("SELECT vehicle_code FROM vehicles WHERE id = ? LIMIT 1")
       .bind(vehicle.id)

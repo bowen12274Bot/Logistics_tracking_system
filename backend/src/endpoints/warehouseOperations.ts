@@ -59,12 +59,13 @@ export class WarehouseBatchOperation extends OpenAPIRoute {
       return c.json({ error: "僅倉儲人員可使用此功能" }, 403);
     }
 
-    const body = await c.req.json<{
-      operation: string;
+    const data = await this.getValidatedData<typeof this.schema>();
+    const body = data.body as {
+      operation: "warehouse_in" | "warehouse_out" | "sorting";
       package_ids: string[];
       location_id: string;
       note?: string;
-    }>();
+    };
 
     if (!body.package_ids || body.package_ids.length === 0) {
       return c.json({ error: "請提供至少一個包裹 ID" }, 400);
@@ -89,11 +90,6 @@ export class WarehouseBatchOperation extends OpenAPIRoute {
       }
 
       try {
-        // 更新包裹狀態
-        await c.env.DB.prepare(
-          "UPDATE packages SET status = ? WHERE id = ?"
-        ).bind(body.operation, pkg.id).run();
-
         // 新增事件記錄
         const eventId = crypto.randomUUID();
         await c.env.DB.prepare(`
