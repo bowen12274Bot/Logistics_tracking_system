@@ -22,6 +22,8 @@ import { TrackingSearch } from "./endpoints/trackingSearch";
 import { DriverTaskList, DriverUpdateStatus } from "./endpoints/driverTasks";
 import { DriverTaskListV2, DriverTaskAccept, DriverTaskComplete } from "./endpoints/driverTaskPool";
 import { WarehouseBatchOperation } from "./endpoints/warehouseOperations";
+import { WarehousePackagesList } from "./endpoints/warehousePackages";
+import { WarehousePackagesReceive } from "./endpoints/warehouseReceive";
 import { WarehouseDispatchNextTask } from "./endpoints/warehouseTaskDispatch";
 import { BillingBillList, BillingBillDetail } from "./endpoints/billingBills";
 import { BillingPaymentCreate, BillingPaymentList } from "./endpoints/billingPayments";
@@ -288,6 +290,8 @@ openapi.post("/api/driver/packages/:packageId/exception", DriverPackageException
 openapi.get("/api/driver/exceptions", DriverPackageExceptionList);
 openapi.get("/api/cs/exceptions", CustomerServiceExceptionList);
 openapi.post("/api/cs/exceptions/:exceptionId/handle", CustomerServiceExceptionHandle);
+openapi.get("/api/warehouse/packages", WarehousePackagesList);
+openapi.post("/api/warehouse/packages/receive", WarehousePackagesReceive);
 openapi.post("/api/warehouse/batch-operation", WarehouseBatchOperation);
 openapi.post("/api/warehouse/packages/:packageId/dispatch-next", WarehouseDispatchNextTask);
 

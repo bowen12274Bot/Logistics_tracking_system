@@ -285,6 +285,41 @@ export type DriverTasksResponse = {
   tasks: DeliveryTaskRecord[];
 };
 
+export type WarehousePackageRecord = {
+  id: string;
+  tracking_number: string | null;
+  sender_address: string | null;
+  receiver_address: string | null;
+  delivery_time: string | null;
+  estimated_delivery: string | null;
+  payment_type: string | null;
+  route_path: string | null;
+  latest_event: {
+    delivery_status: string | null;
+    delivery_details: string | null;
+    events_at: string | null;
+    location: string | null;
+  };
+  ui_state: "await_receive" | "sorting" | "dispatched";
+  suggested_to_node_id: string | null;
+  suggested_total_cost: number | null;
+};
+
+export type WarehousePackagesResponse = {
+  success: boolean;
+  warehouse_node_id: string;
+  neighbors: string[];
+  packages: WarehousePackageRecord[];
+};
+
+export type WarehouseReceiveResponse = {
+  success: boolean;
+  warehouse_node_id: string;
+  processed: number;
+  failed: number;
+  details: { success: string[]; failed: Array<{ id: string; reason: string }> };
+};
+
 export type DeliveryType = "overnight" | "two_day" | "standard" | "economy";
 export type SpecialMark = "fragile" | "dangerous" | "international";
 
@@ -436,6 +471,20 @@ export const api = {
       { method: "GET" },
     );
   },
+  getWarehousePackages: (limit = 200) => {
+    const qs = new URLSearchParams({ limit: String(limit) });
+    return request<WarehousePackagesResponse>(`/api/warehouse/packages?${qs.toString()}`, { method: "GET" });
+  },
+  receiveWarehousePackages: (package_ids: string[]) =>
+    request<WarehouseReceiveResponse>("/api/warehouse/packages/receive", {
+      method: "POST",
+      body: JSON.stringify({ package_ids }),
+    }),
+  dispatchWarehouseNext: (packageId: string, payload: { toNodeId: string }) =>
+    request<{ success: boolean; task_id: string; assigned_driver_id: string | null; segment_index: number }>(
+      `/api/warehouse/packages/${encodeURIComponent(packageId)}/dispatch-next`,
+      { method: "POST", body: JSON.stringify(payload) },
+    ),
   getMe: () =>
     request<{ success: boolean; user: User }>("/api/auth/me", {
       method: "GET",
