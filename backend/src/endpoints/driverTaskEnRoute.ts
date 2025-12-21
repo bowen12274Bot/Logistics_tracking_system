@@ -1,6 +1,7 @@
 import { OpenAPIRoute } from "chanfana";
 import { z } from "zod";
 import type { AppContext } from "../types";
+import { getTerminalStatus, hasActiveException } from "../lib/packageGuards";
 
 type AuthUser = { id: string; user_class: string; address: string | null };
 type VehicleRow = { id: string; driver_user_id: string; current_node_id: string | null };
@@ -126,12 +127,11 @@ export class DriverTaskEnRoute extends OpenAPIRoute {
     }
 
     const now = new Date().toISOString();
-    const pkg = await c.env.DB.prepare("SELECT status FROM packages WHERE id = ? LIMIT 1")
-      .bind(String(task.package_id))
-      .first<{ status: string | null }>();
-    const currentStatus = String(pkg?.status ?? "").trim().toLowerCase();
-    if (currentStatus && ["delivered", "exception"].includes(currentStatus)) {
-      return c.json({ error: "Package not eligible", status: currentStatus }, 409);
+    const packageId = String(task.package_id);
+    const terminal = await getTerminalStatus(c.env.DB, packageId);
+    if (terminal) return c.json({ error: "Package is terminal", status: terminal }, 409);
+    if (await hasActiveException(c.env.DB, packageId)) {
+      return c.json({ error: "Package has active exception" }, 409);
     }
 
     const vehicleCodeRow = await c.env.DB.prepare("SELECT vehicle_code FROM vehicles WHERE id = ? LIMIT 1")

@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS package_events (
     'warehouse_out',
     'out_for_delivery',
     'delivered',
+    'delivery_failed',
     'exception',
     'exception_resolved',
     'route_decided',
@@ -57,6 +58,7 @@ BEGIN
       WHEN 'warehouse_out' THEN 'warehouse_out'
       WHEN 'out_for_delivery' THEN 'out_for_delivery'
       WHEN 'delivered' THEN 'delivered'
+      WHEN 'delivery_failed' THEN 'delivery_failed'
       WHEN 'exception' THEN 'exception'
       WHEN 'exception_resolved' THEN CASE
         WHEN NEW.location LIKE 'HUB_%' OR NEW.location LIKE 'REG_%' THEN 'warehouse_in'

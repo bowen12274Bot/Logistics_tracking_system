@@ -1,6 +1,7 @@
 import { OpenAPIRoute } from "chanfana";
 import { z } from "zod";
 import type { AppContext } from "../types";
+import { getTerminalStatus, hasActiveException } from "../lib/packageGuards";
 
 // POST /api/warehouse/batch-operation - 倉儲批次操作
 export class WarehouseBatchOperation extends OpenAPIRoute {
@@ -86,6 +87,16 @@ export class WarehouseBatchOperation extends OpenAPIRoute {
 
       if (!pkg) {
         results.failed.push({ id: pkgId, reason: "包裹不存在" });
+        continue;
+      }
+
+      const terminal = await getTerminalStatus(c.env.DB, String(pkg.id));
+      if (terminal) {
+        results.failed.push({ id: pkgId, reason: `Package is terminal (${terminal})` });
+        continue;
+      }
+      if (await hasActiveException(c.env.DB, String(pkg.id))) {
+        results.failed.push({ id: pkgId, reason: "Package has active exception" });
         continue;
       }
 

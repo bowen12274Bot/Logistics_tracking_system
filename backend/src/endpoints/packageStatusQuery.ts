@@ -1,6 +1,7 @@
 import { OpenAPIRoute, Str } from "chanfana";
 import { z } from "zod";
 import { type AppContext, Package, PackageEvent } from "../types";
+import { getActiveException } from "../lib/packageGuards";
 
 async function requireUser(c: AppContext) {
 	const authHeader = c.req.header("Authorization");
@@ -46,6 +47,16 @@ export class PackageStatusQuery extends OpenAPIRoute {
 							success: z.boolean(),
 							package: Package,
 							events: z.array(PackageEvent),
+							active_exception: z
+								.object({
+									id: z.string(),
+									reason_code: z.string().nullable(),
+									description: z.string().nullable(),
+									reported_role: z.string(),
+									reported_at: z.string().nullable(),
+									location: z.string().nullable(),
+								})
+								.nullable(),
 							vehicle: z
 								.object({
 									id: z.string(),
@@ -90,6 +101,19 @@ export class PackageStatusQuery extends OpenAPIRoute {
 		)
 			.bind(pkg.id)
 			.all();
+
+		const activeException = await getActiveException(c.env.DB, pkg.id);
+		const activeExceptionForUser =
+			activeException && auth.user.user_type === "customer"
+				? {
+						id: activeException.id,
+						reason_code: activeException.reason_code,
+						description: null,
+						reported_role: activeException.reported_role,
+						reported_at: activeException.reported_at,
+						location: activeException.location,
+					}
+				: activeException;
 
 		let vehicle = await c.env.DB.prepare(
 			`
@@ -156,6 +180,7 @@ export class PackageStatusQuery extends OpenAPIRoute {
 			success: true,
 			package: parsedPackage,
 			events: events.results,
+			active_exception: activeExceptionForUser ?? null,
 			vehicle: vehicle ? { id: String(vehicle.id), vehicle_code: String(vehicle.vehicle_code) } : null,
 		};
 	}

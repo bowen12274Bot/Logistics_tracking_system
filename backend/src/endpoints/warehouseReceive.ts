@@ -1,6 +1,7 @@
 import { OpenAPIRoute } from "chanfana";
 import { z } from "zod";
 import type { AppContext } from "../types";
+import { getTerminalStatus, hasActiveException } from "../lib/packageGuards";
 
 type AuthUser = { id: string; user_class: string; address: string | null };
 type LatestEvent = { delivery_status: string | null; location: string | null; events_at: string | null };
@@ -94,6 +95,16 @@ export class WarehousePackagesReceive extends OpenAPIRoute {
         continue;
       }
 
+      const terminal = await getTerminalStatus(c.env.DB, packageId);
+      if (terminal) {
+        results.failed.push({ id: packageId, reason: `Package is terminal (${terminal})` });
+        continue;
+      }
+      if (await hasActiveException(c.env.DB, packageId)) {
+        results.failed.push({ id: packageId, reason: "Package has active exception" });
+        continue;
+      }
+
       const latest = await c.env.DB.prepare(
         "SELECT delivery_status, location, events_at FROM package_events WHERE package_id = ? ORDER BY events_at DESC LIMIT 1",
       )
@@ -155,4 +166,3 @@ export class WarehousePackagesReceive extends OpenAPIRoute {
     });
   }
 }
-

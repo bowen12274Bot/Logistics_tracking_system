@@ -1,6 +1,7 @@
 import { OpenAPIRoute } from "chanfana";
 import { z } from "zod";
 import type { AppContext } from "../types";
+import { getTerminalStatus, hasActiveException } from "../lib/packageGuards";
 
 // GET /api/driver/tasks - 駕駛員工作清單
 export class DriverTaskList extends OpenAPIRoute {
@@ -179,6 +180,14 @@ export class DriverUpdateStatus extends OpenAPIRoute {
 
     if (!pkg) {
       return c.json({ error: "包裹不存在" }, 404);
+    }
+
+    const terminal = await getTerminalStatus(c.env.DB, packageId);
+    if (terminal) {
+      return c.json({ error: "Package is terminal", status: terminal }, 409);
+    }
+    if (await hasActiveException(c.env.DB, packageId)) {
+      return c.json({ error: "Package has active exception" }, 409);
     }
 
     // 新增事件記錄

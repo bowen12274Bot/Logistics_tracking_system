@@ -1,6 +1,7 @@
 ﻿import { OpenAPIRoute } from "chanfana";
 import { z } from "zod";
 import type { AppContext } from "../types";
+import { getTerminalStatus, hasActiveException } from "../lib/packageGuards";
 
 type AuthUser = { id: string; user_type: string; user_class: string; address: string | null };
 
@@ -265,6 +266,13 @@ export class DriverTaskAccept extends OpenAPIRoute {
       }>();
 
     if (!candidate) return c.json({ error: "Task not found" }, 404);
+
+    const packageId = String(candidate.package_id);
+    const terminal = await getTerminalStatus(c.env.DB, packageId);
+    if (terminal) return c.json({ error: "Package is terminal", status: terminal }, 409);
+    if (await hasActiveException(c.env.DB, packageId)) {
+      return c.json({ error: "Package has active exception" }, 409);
+    }
 
     const from = String(candidate.from_location ?? "").trim();
     if (!from) return c.json({ error: "Task has no from_location" }, 409);

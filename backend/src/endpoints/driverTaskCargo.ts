@@ -1,6 +1,7 @@
 import { OpenAPIRoute } from "chanfana";
 import { z } from "zod";
 import type { AppContext } from "../types";
+import { getTerminalStatus, hasActiveException } from "../lib/packageGuards";
 
 type AuthUser = { id: string; user_class: string; address: string | null };
 type VehicleRow = { id: string; driver_user_id: string; vehicle_code: string; home_node_id: string | null; current_node_id: string | null; updated_at: string | null };
@@ -165,6 +166,13 @@ export class DriverTaskPickup extends OpenAPIRoute {
       return c.json({ error: "Not at pickup node", current_node_id: current, from_location: from }, 409);
     }
 
+    const packageId = String(task.package_id);
+    const terminal = await getTerminalStatus(c.env.DB, packageId);
+    if (terminal) return c.json({ error: "Package is terminal", status: terminal }, 409);
+    if (await hasActiveException(c.env.DB, packageId)) {
+      return c.json({ error: "Package has active exception" }, 409);
+    }
+
     const now = new Date().toISOString();
 
     // Backfill "in_transit" if driver arrived without pressing "en-route".
@@ -254,6 +262,13 @@ export class DriverTaskDropoff extends OpenAPIRoute {
       .bind(vehicle.id, task.package_id)
       .first<{ id: string }>();
     if (!cargo) return c.json({ error: "Cargo not found on this vehicle" }, 409);
+
+    const packageId = String(task.package_id);
+    const terminal = await getTerminalStatus(c.env.DB, packageId);
+    if (terminal) return c.json({ error: "Package is terminal", status: terminal }, 409);
+    if (await hasActiveException(c.env.DB, packageId)) {
+      return c.json({ error: "Package has active exception" }, 409);
+    }
 
     const nextStatus = /^REG_\d+$/i.test(to) || /^HUB_\d+$/i.test(to) ? "warehouse_in" : /^END_/i.test(to) ? "delivered" : "in_transit";
     const nextDetails =
