@@ -102,6 +102,8 @@ logistics-system/               # Repo 根目錄
 │      │      adminUsers.ts                # 員工帳號管理（admin）
 │      │      adminContracts.ts            # 合約審核（admin/cs）
 │      │      adminErrors.ts               # 系統錯誤查詢（admin）
+│      │      billingAdmin.ts              # 月結帳單管理（admin）
+│      │      billingCycle.ts              # 月循環結算（admin）
 │      │      customerUpdate.ts            # 客戶資料更新
 │      │      customerExists.ts            # 客戶查詢（輔助）
 │      │      task*.ts                     # 範例任務 API（示範用）
