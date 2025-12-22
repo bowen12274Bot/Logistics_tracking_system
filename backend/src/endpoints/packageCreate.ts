@@ -1,6 +1,7 @@
 import { OpenAPIRoute, Str } from "chanfana";
 import { z } from "zod";
 import { type AppContext, Package } from "../types";
+import { requireAuth } from "../utils/authUtils";
 import { computeRoute } from "./mapRoute";
 import {
   calculatePackagePrice,
@@ -78,6 +79,7 @@ export class PackageCreate extends OpenAPIRoute {
 		tags: ["Packages"],
 		summary: "Create package (T2)",
 		description: "Create a package draft and generate a tracking number.",
+		security: [{ bearerAuth: [] }],
 		request: {
 			body: {
 				content: {
@@ -136,6 +138,9 @@ export class PackageCreate extends OpenAPIRoute {
 	};
 
 	async handle(c: AppContext) {
+		const auth = await requireAuth(c);
+		if (!auth.ok) return (auth as any).res;
+
 		const data = await this.getValidatedData<typeof this.schema>();
 		const body = data.body;
 

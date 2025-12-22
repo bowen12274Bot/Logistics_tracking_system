@@ -2,6 +2,7 @@ import { OpenAPIRoute } from "chanfana";
 import { z } from "zod";
 import type { AppContext } from "../types";
 import { settleBillingCycle } from "../services/billingService";
+import { requireAdmin } from "../utils/authUtils";
 
 // POST /api/admin/billing/settle - 月結算
 export class BillingSettle extends OpenAPIRoute {
@@ -34,28 +35,8 @@ export class BillingSettle extends OpenAPIRoute {
   };
 
   async handle(c: AppContext) {
-    const authHeader = c.req.header("Authorization");
-    
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return c.json({ error: "Token 缺失" }, 401);
-    }
-
-    const token = authHeader.replace("Bearer ", "");
-    const tokenRecord = await c.env.DB.prepare(
-      "SELECT user_id FROM tokens WHERE id = ?"
-    ).bind(token).first<{ user_id: string }>();
-
-    if (!tokenRecord) {
-      return c.json({ error: "Token 無效" }, 401);
-    }
-
-    const user = await c.env.DB.prepare(
-      "SELECT user_type, user_class FROM users WHERE id = ?"
-    ).bind(tokenRecord.user_id).first<{ user_type: string; user_class: string }>();
-
-    if (!user || user.user_class !== "admin") {
-      return c.json({ error: "僅 admin 可使用此功能" }, 403);
-    }
+    const auth = await requireAdmin(c);
+    if (auth.ok === false) return (auth as any).res;
 
     const body = await c.req.json<{ cycle_year_month: string }>();
     const [yearStr, monthStr] = body.cycle_year_month.split("-");

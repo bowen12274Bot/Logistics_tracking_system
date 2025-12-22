@@ -115,7 +115,7 @@ export class VehicleMeGet extends OpenAPIRoute {
 
   async handle(c: AppContext) {
     const auth = await requireDriver(c);
-    if (!auth.ok) return auth.res;
+    if (!auth.ok) return (auth as any).res;
 
     try {
       const vehicle = await ensureVehicleForDriver(c.env.DB, auth.user);
@@ -155,7 +155,7 @@ export class VehicleMeMove extends OpenAPIRoute {
 
   async handle(c: AppContext) {
     const auth = await requireDriver(c);
-    if (!auth.ok) return auth.res;
+    if (!auth.ok) return (auth as any).res;
 
     const data = await this.getValidatedData<typeof this.schema>();
     const fromNodeId = String(data.body.fromNodeId ?? "").trim();
