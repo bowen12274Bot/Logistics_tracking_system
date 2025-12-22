@@ -12,7 +12,8 @@
 - [4. 地圖與路線模組 (Map & Routing)](#4-地圖與路線模組-map--routing)
 - [5. 金流模組 (Payment Module)](#5-金流模組-payment-module)
 - [6. 超級使用者管理模組 (Super User Management)](#6-超級使用者管理模組-super-user-management)
-- [7. 異常與任務模組（規劃中） (Exceptions & Tasks)](#7-異常與任務模組規劃中-exceptions--tasks)
+- [7. 異常與任務模組 (Exceptions & Tasks)](#7-異常與任務模組-exceptions--tasks)
+- [8. 待補齊 API (TODO)](#8-待補齊-api-todo)
 
 ---
 
@@ -372,6 +373,49 @@ Authorization: Bearer <token>
   "notes": "string"
 }
 ```
+
+> 詳細倉儲作業規範請參考 [warehouse-staff.md](file:///c:/Users/tange/OneDrive/Desktop/all%20project/py_for_SE_class/term_project/Logistics_tracking_system/docs/warehouse-staff.md)
+
+---
+
+### 1.9 倉儲人員 - 站內包裹清單 `[已實作]`
+
+| 項目 | 說明 |
+|------|------|
+| **位置** | `GET /api/warehouse/packages` |
+| **功能** | 取得本站所有站內包裹清單 |
+| **認證** | ✅ 需要 Token |
+| **權限** | `warehouse_staff` |
+
+#### 功能說明
+
+- 後端以 `users.address` 作為本站，回傳「站內包裹」（最新事件 location = 本站且處於站內階段）。
+- 不需前端傳遞 location 參數，強制綁定登入員工的工作站點。
+
+---
+
+### 1.10 倉儲人員 - 點收確認 `[已實作]`
+
+| 項目 | 說明 |
+|------|------|
+| **位置** | `POST /api/warehouse/packages/receive` |
+| **功能** | 對一筆或多筆包裹執行點收作業 |
+| **認證** | ✅ 需要 Token |
+| **權限** | `warehouse_staff` |
+
+#### 輸入格式 (Request Body)
+
+```json
+{
+  "package_ids": ["uuid1", "uuid2"]
+}
+```
+
+#### 行為說明
+
+- 每個包裹依序寫入 `warehouse_received` + `sorting` 兩筆事件。
+- 已點收的包裹會冪等處理（不重複寫入）。
+
 
 ## 2. 審核合約模組 (Review)
 
@@ -1341,9 +1385,14 @@ Authorization: Bearer <token>
 }
 ```
 
-## 7. 異常與任務模組 (Exceptions & Tasks) `[規劃中]`
+## 7. 異常與任務模組 (Exceptions & Tasks) `[大部分已實作]`
 
-> 本章節為配合 `todoList.md` 新增的「異常池 / 司機任務 / 司機車輛移動 / 倉儲改路徑」需求，先整理規劃中的 API 介面；落地後再補齊完整 request/response schema。
+> 本章節為配合 `todoList.md` 新增的「異常池 / 司機任務 / 司機車輛移動 / 倉儲改路徑」需求。大部分 API 已實作完成。
+>
+> **相關詳細規範文件**：
+> - [exception-handling.md](file:///c:/Users/tange/OneDrive/Desktop/all%20project/py_for_SE_class/term_project/Logistics_tracking_system/docs/exception-handling.md)：異常申報、封鎖規則、reason_code 定義
+> - [customer-service.md](file:///c:/Users/tange/OneDrive/Desktop/all%20project/py_for_SE_class/term_project/Logistics_tracking_system/docs/customer-service.md)：客服異常處理流程、客戶端狀態顯示規範
+
 
 ### 7.1 異常池（客服） `[已實作]`
 
