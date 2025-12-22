@@ -169,9 +169,9 @@ export class TrackingSearch extends OpenAPIRoute {
     // - history: completed deliveries only
     // - in_transit: everything not completed (including exception, which still needs follow-up)
     if (query.status_group === "history") {
-      sql += " AND p.status IN ('delivered')";
+      sql += " AND p.status IN ('delivered','delivery_failed')";
     } else if (query.status_group === "in_transit") {
-      sql += " AND (p.status IS NULL OR p.status NOT IN ('delivered'))";
+      sql += " AND (p.status IS NULL OR p.status NOT IN ('delivered','delivery_failed'))";
     }
 
     if (query.location_id) {

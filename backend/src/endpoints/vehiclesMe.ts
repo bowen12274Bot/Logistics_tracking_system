@@ -215,7 +215,7 @@ export class VehicleMeMove extends OpenAPIRoute {
       JOIN packages p ON p.id = vc.package_id
       WHERE vc.vehicle_id = ?
         AND vc.unloaded_at IS NULL
-        AND COALESCE(p.status, '') NOT IN ('exception','delivered')
+        AND COALESCE(p.status, '') NOT IN ('exception','delivered','delivery_failed')
       `,
     )
       .bind(vehicle.id)

@@ -62,14 +62,7 @@ describe("Driver tasks (segmented assignment + handoff)", () => {
     const sender = "END_HOME_1";
     const receiver = "END_HOME_2";
 
-    const handoffNode = "HUB_0";
     const adminToken = await getAdminToken();
-    const otherDriver = await createEmployeeUser(adminToken, "driver", { address: String(handoffNode) });
-    const otherDriverToken = otherDriver.token;
-
-    // Ensure vehicle exists at the driver's home node
-    const me = await authenticatedRequest<any>("/api/vehicles/me", otherDriverToken);
-    expect(me.status).toBe(200);
 
     const pkg = await createTestPackage(customerToken, { sender_address: sender, receiver_address: receiver });
 
@@ -95,7 +88,9 @@ describe("Driver tasks (segmented assignment + handoff)", () => {
     for (const hubId of hubs) {
       const token = hubId === "HUB_0" ? driverToken : await loginDriver(hubId);
       const assignedRes = await authenticatedRequest<any>("/api/driver/tasks?scope=assigned", token);
-      expect(assignedRes.status).toBe(200);
+      if (assignedRes.status !== 200) {
+        throw new Error(`GET /api/driver/tasks failed: status=${assignedRes.status} data=${JSON.stringify(assignedRes.data)}`);
+      }
       const hit = (assignedRes.data.tasks ?? []).find((t: any) => t.package_id === pkg.id);
       if (hit) {
         pickup = hit;
@@ -106,6 +101,16 @@ describe("Driver tasks (segmented assignment + handoff)", () => {
     expect(pickup).toBeTruthy();
     expect(pickupDriverToken).toBeTruthy();
 
+    const handoffNode = String(pickup.to_location ?? "").trim();
+    expect(handoffNode).toMatch(/^(HUB_|REG_)/i);
+
+    const otherDriver = await createEmployeeUser(adminToken, "driver", { address: String(handoffNode) });
+    const otherDriverToken = otherDriver.token;
+
+    // Ensure vehicle exists at the driver's home node
+    const me = await authenticatedRequest<any>("/api/vehicles/me", otherDriverToken);
+    expect(me.status).toBe(200);
+
     const complete = await authenticatedRequest<any>(
       `/api/driver/tasks/${encodeURIComponent(String(pickup.id))}/complete`,
       String(pickupDriverToken),
@@ -114,12 +119,44 @@ describe("Driver tasks (segmented assignment + handoff)", () => {
     expect(complete.status).toBe(200);
     expect(complete.data.success).toBe(true);
 
-    // Warehouse dispatches a next segment from HUB_0 so it's eligible for handoff there.
+    // Pick a valid adjacent next hop from this HUB/REG node.
+    const allEdges: any[] = mapRes.data.edges ?? [];
+    const nextHopCandidates = allEdges.flatMap((e: any) => {
+      const a = String(e.source ?? "").trim();
+      const b = String(e.target ?? "").trim();
+      if (a === handoffNode) return [b];
+      if (b === handoffNode) return [a];
+      return [];
+    });
+    const nextHop = nextHopCandidates.find((n) => n && n !== sender) ?? nextHopCandidates[0] ?? null;
+    expect(String(nextHop ?? "")).toBeTruthy();
+
+    // Warehouse receives and dispatches a next segment from this HUB/REG so it's eligible for handoff here.
     const warehouse = await createEmployeeUser(adminToken, "warehouse_staff", { address: String(handoffNode) });
+
+    // Simulate truck unloading at this node so warehouse can receive it.
+    const arrive = await apiRequest<any>(`/api/packages/${encodeURIComponent(pkg.id)}/events`, {
+      method: "POST",
+      body: JSON.stringify({ delivery_status: "warehouse_in", location: handoffNode }),
+    });
+    expect(arrive.status).toBe(200);
+    expect(arrive.data.success).toBe(true);
+
+    // Warehouse must receive the package into sorting area before dispatching next hop.
+    const receive = await authenticatedRequest<any>(
+      `/api/warehouse/packages/receive`,
+      warehouse.token,
+      { method: "POST", body: JSON.stringify({ package_ids: [pkg.id] }) },
+    );
+    expect(receive.status).toBe(200);
+    expect(receive.data.success).toBe(true);
+    expect(Number(receive.data.processed ?? 0)).toBe(1);
+    expect(Number(receive.data.failed ?? 0)).toBe(0);
+
     const dispatch = await authenticatedRequest<any>(
       `/api/warehouse/packages/${encodeURIComponent(pkg.id)}/dispatch-next`,
       warehouse.token,
-      { method: "POST", body: JSON.stringify({ toNodeId: "REG_17" }) },
+      { method: "POST", body: JSON.stringify({ toNodeId: nextHop }) },
     );
     expect(dispatch.status).toBe(200);
     expect(dispatch.data.success).toBe(true);
