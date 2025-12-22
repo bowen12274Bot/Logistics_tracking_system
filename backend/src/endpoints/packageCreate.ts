@@ -2,145 +2,75 @@ import { OpenAPIRoute, Str } from "chanfana";
 import { z } from "zod";
 import { type AppContext, Package } from "../types";
 import { computeRoute } from "./mapRoute";
-
-type DeliveryType = "overnight" | "two_day" | "standard" | "economy";
-type BoxType = "envelope" | "S" | "M" | "L";
-
-const ROUTE_COST_K = 5200;
-const ROUTE_COST_NORM_MIN = 0.3;
-const ROUTE_COST_NORM_MAX = 1.6;
-const INTERNATIONAL_MULTIPLIER = 1.8;
-
-const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
-const ceilInt = (value: number) => Math.ceil(value);
-
-const getServiceMultiplier = (deliveryType: DeliveryType) => {
-	const multipliers: Record<DeliveryType, number> = {
-		economy: 1.0,
-		standard: 1.25,
-		two_day: 1.55,
-		overnight: 2.0,
-	};
-	return multipliers[deliveryType];
-};
-
-const getBaseParams = (boxType: BoxType) => {
-	const params: Record<BoxType, { baseFee: number; ratePerCost: number }> = {
-		envelope: { baseFee: 30, ratePerCost: 90 },
-		S: { baseFee: 70, ratePerCost: 170 },
-		M: { baseFee: 110, ratePerCost: 260 },
-		L: { baseFee: 160, ratePerCost: 380 },
-	};
-	return params[boxType];
-};
-
-const getWeightSurchargeParams = (boxType: BoxType) => {
-	const params: Record<BoxType, { includedWeightKg: number; perKgFee: number }> = {
-		envelope: { includedWeightKg: 0.5, perKgFee: 0 },
-		S: { includedWeightKg: 3, perKgFee: 18 },
-		M: { includedWeightKg: 10, perKgFee: 15 },
-		L: { includedWeightKg: 25, perKgFee: 12 },
-	};
-	return params[boxType];
-};
-
-const getMinPrice = (boxType: BoxType, deliveryType: DeliveryType) => {
-	const table: Record<BoxType, Record<DeliveryType, number>> = {
-		envelope: { economy: 50, standard: 70, two_day: 90, overnight: 120 },
-		S: { economy: 120, standard: 160, two_day: 210, overnight: 280 },
-		M: { economy: 200, standard: 260, two_day: 340, overnight: 450 },
-		L: { economy: 320, standard: 420, two_day: 550, overnight: 750 },
-	};
-	return table[boxType][deliveryType];
-};
-
-const getMaxPrice = (boxType: BoxType, deliveryType: DeliveryType) => {
-	const table: Record<BoxType, Record<DeliveryType, number>> = {
-		envelope: { economy: 400, standard: 550, two_day: 700, overnight: 950 },
-		S: { economy: 900, standard: 1200, two_day: 1500, overnight: 1900 },
-		M: { economy: 1400, standard: 1850, two_day: 2350, overnight: 2900 },
-		L: { economy: 2200, standard: 2900, two_day: 3700, overnight: 4600 },
-	};
-	return table[boxType][deliveryType];
-};
-
-const computeMarkFee = (specialMarks: Array<"fragile" | "dangerous" | "international">) => {
-	let markFee = 0;
-	if (specialMarks.includes("dangerous")) markFee += 120;
-	if (specialMarks.includes("fragile")) markFee += 60;
-	return markFee;
-};
-
-const mapDeliveryTimeToType = (deliveryTime?: string | null): DeliveryType => {
-	const dt = String(deliveryTime ?? "").trim().toLowerCase();
-	if (dt === "overnight") return "overnight";
-	if (dt === "two_day") return "two_day";
-	if (dt === "economy") return "economy";
-	return "standard";
-};
-
-const mapSizeToBoxType = (size?: string | null): BoxType => {
-	const s = String(size ?? "").trim().toLowerCase();
-	if (!s) return "M";
-	if (["envelope", "env", "xs"].includes(s)) return "envelope";
-	if (["s", "small"].includes(s)) return "S";
-	if (["l", "large"].includes(s)) return "L";
-	return "M";
-};
+import {
+  calculatePackagePrice,
+  guessDimensionsFromBoxType,
+  mapDeliveryTimeToType,
+  type DeliveryType,
+  type BoxType
+} from "../utils/pricing";
 
 async function computeInitialPaymentAmount(
-	db: any,
-	fromNodeId: string,
-	toNodeId: string,
-	payload: {
-		weight?: number | null;
-		size?: string | null;
-		delivery_time?: string | null;
-		dangerous_materials?: boolean;
-		fragile_items?: boolean;
-		international_shipments?: boolean;
-	},
+  db: any,
+  fromNodeId: string,
+  toNodeId: string,
+  payload: {
+    weight?: number | null;
+    size?: string | null;
+    length?: number | null;
+    width?: number | null;
+    height?: number | null;
+    delivery_time?: string | null;
+    dangerous_materials?: boolean;
+    fragile_items?: boolean;
+    international_shipments?: boolean;
+  },
 ) {
-	// Route cost (fallback 0 if route missing)
-	const route = await computeRoute(db, fromNodeId, toNodeId);
-	const routeCost = route.ok ? route.totalCost : 0;
-	const routeCostNormRaw = routeCost / ROUTE_COST_K;
-	const routeCostNorm = clamp(routeCostNormRaw, ROUTE_COST_NORM_MIN, ROUTE_COST_NORM_MAX);
+  // Route cost (fallback 0 if route missing)
+  const route = await computeRoute(db, fromNodeId, toNodeId);
+  const routeCost = route.ok ? route.totalCost : 0;
+  
+  const deliveryType = mapDeliveryTimeToType(payload.delivery_time ?? null);
 
-	const deliveryType = mapDeliveryTimeToType(payload.delivery_time ?? null);
-	const boxType = mapSizeToBoxType(payload.size ?? null);
+  // Resolve dimensions: explicit > guess from size > default M
+  let dimensions = { length: 60, width: 40, height: 40 };
+  if (payload.length && payload.width && payload.height) {
+    dimensions = {
+      length: Number(payload.length),
+      width: Number(payload.width),
+      height: Number(payload.height)
+    };
+  } else if (payload.size) {
+    dimensions = guessDimensionsFromBoxType(payload.size);
+  }
 
-	const serviceMultiplier = getServiceMultiplier(deliveryType);
-	const { baseFee, ratePerCost } = getBaseParams(boxType);
-	const base = baseFee + routeCostNorm * ratePerCost;
-	const shipping = ceilInt(base * serviceMultiplier);
+  const weightKg = Number(payload.weight ?? 0);
+  const specialMarks: Array<"fragile" | "dangerous" | "international"> = [];
+  if (payload.dangerous_materials) specialMarks.push("dangerous");
+  if (payload.fragile_items) specialMarks.push("fragile");
+  if (payload.international_shipments) specialMarks.push("international");
 
-	const { includedWeightKg, perKgFee } = getWeightSurchargeParams(boxType);
-	const billableWeightKg = Math.max(0, Number(payload.weight ?? 0));
-	const extraKg = Math.max(0, ceilInt(billableWeightKg - includedWeightKg));
-	const weightSurcharge = extraKg * perKgFee;
+  const pricing = calculatePackagePrice(
+    routeCost,
+    weightKg,
+    dimensions,
+    deliveryType,
+    specialMarks
+  );
 
-	let subtotal = shipping + weightSurcharge;
-	const internationalMultiplierApplied = payload.international_shipments ? INTERNATIONAL_MULTIPLIER : 1;
-	if (internationalMultiplierApplied !== 1) {
-		subtotal = ceilInt(subtotal * internationalMultiplierApplied);
-	}
+  if ("error" in pricing) {
+    // If oversized, fallback to max cost to avoid blocking creation? 
+    // Or throw error? Standards say "Service not applicable"
+    // For now, let's just default to a high cost or throw.
+    // Given the existing code returns { totalCost, routeCost }, we should respect that signature.
+    // Let's fallback to max generic calculation if error, or throw.
+    throw new Error(pricing.error);
+  }
 
-	const marks: Array<"fragile" | "dangerous" | "international"> = [];
-	if (payload.dangerous_materials) marks.push("dangerous");
-	if (payload.fragile_items) marks.push("fragile");
-	if (payload.international_shipments) marks.push("international");
-	const markFee = computeMarkFee(marks);
-
-	const calculatedPrice = subtotal + markFee;
-	const minPrice = getMinPrice(boxType, deliveryType);
-	const maxPrice = getMaxPrice(boxType, deliveryType);
-	const totalCost = Math.min(Math.max(calculatedPrice, minPrice), maxPrice);
-
-	return {
-		totalCost,
-		routeCost,
-	};
+  return {
+    totalCost: pricing.totalCost,
+    routeCost,
+  };
 }
 
 export class PackageCreate extends OpenAPIRoute {
@@ -168,7 +98,10 @@ export class PackageCreate extends OpenAPIRoute {
 							receiver_address: Str({ required: false, description: "Receiver address" }),
 
 							weight: z.coerce.number().int().optional(),
-							size: Str({ required: false, description: "Package size or dimensions" }),
+							size: Str({ required: false, description: "Package size (legacy)" }),
+							length: z.coerce.number().positive().optional(),
+							width: z.coerce.number().positive().optional(),
+							height: z.coerce.number().positive().optional(),
 							delivery_time: Str({ required: false, description: "Delivery time tier" }),
 							payment_type: Str({ required: false, description: "Payment type (prepaid/cod)" }),
 							payment_method: Str({ required: false, description: "Payment method" }),
@@ -433,6 +366,9 @@ export class PackageCreate extends OpenAPIRoute {
 			const pricing = await computeInitialPaymentAmount(c.env.DB, normalizedSenderAddress, normalizedReceiverAddress, {
 				weight: body.weight ?? null,
 				size: body.size ?? null,
+				length: body.length ?? null,
+				width: body.width ?? null,
+				height: body.height ?? null,
 				delivery_time: body.delivery_time ?? null,
 				dangerous_materials: body.dangerous_materials,
 				fragile_items: body.fragile_items,
