@@ -1,6 +1,8 @@
+
 import { OpenAPIRoute } from "chanfana";
 import { z } from "zod";
 import type { AppContext } from "../types";
+import { getBillingCycle, createMonthlyBillForCustomer } from "../services/billingService";
 
 // GET /api/admin/contract-applications - 列出合約申請
 export class AdminContractList extends OpenAPIRoute {
@@ -191,11 +193,17 @@ export class AdminContractReview extends OpenAPIRoute {
       id
     ).run();
 
+
+
     // 如果核准，更新使用者為合約客戶
     if (body.status === "approved") {
       await c.env.DB.prepare(
         "UPDATE users SET user_class = 'contract_customer', billing_preference = 'monthly' WHERE id = ?"
       ).bind(application.customer_id).run();
+
+      // 為新合約客戶生成當月帳單
+      const { start, end } = getBillingCycle(new Date());
+      await createMonthlyBillForCustomer(c.env.DB, application.customer_id, start, end);
     }
 
     return c.json({

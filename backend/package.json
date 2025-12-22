@@ -13,8 +13,10 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@types/luxon": "^3.7.1",
     "chanfana": "^2.6.3",
     "hono": "^4.6.20",
+    "luxon": "^3.7.2",
     "zod": "^3.24.1"
   },
   "devDependencies": {

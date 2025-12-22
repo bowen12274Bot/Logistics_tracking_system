@@ -284,6 +284,19 @@ export class DriverTaskDropoff extends OpenAPIRoute {
       .bind(now, taskId)
       .run();
 
+    // 如果完成的是末端配送 (Delivered)，且是月結客戶，則加入當月帳單
+    if (nextStatus === "delivered") {
+      const pkg = await c.env.DB.prepare(
+        "SELECT customer_id, payment_type FROM packages WHERE id = ?"
+      ).bind(task.package_id).first<{ customer_id: string; payment_type: string }>();
+
+      if (pkg && pkg.payment_type === "monthly_billing" && pkg.customer_id) {
+        // dynamic import to avoid circular dep if any, though service is clean
+        const { addPackageToBill } = await import("../services/billingService");
+        await addPackageToBill(c.env.DB, pkg.customer_id, task.package_id, now);
+      }
+    }
+
     return c.json({ success: true, status: nextStatus });
   }
 }
