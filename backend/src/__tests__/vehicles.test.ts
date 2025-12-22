@@ -1,6 +1,7 @@
 // backend/src/__tests__/vehicles.test.ts
 import { describe, it, expect } from "vitest";
 import { apiRequest, authenticatedRequest } from "./helpers";
+import { describe401Tests } from "./authTestUtils";
 
 type LoginResponse = { user: { id: string; user_class: string }; token: string };
 

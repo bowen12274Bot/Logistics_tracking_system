@@ -8,6 +8,7 @@ import {
   createTestUser,
   getAdminToken,
 } from "./helpers";
+import { describe401Tests } from "./authTestUtils";
 
 describe("計費帳單 (Billing)", () => {
   let customerToken: string;
@@ -197,4 +198,12 @@ describe("計費帳單 (Billing)", () => {
       expect(settleRes.data.success).toBe(true);
     });
   });
+  describe401Tests([
+    { method: "GET", path: "/api/billing/bills" },
+    { method: "GET", path: "/api/billing/bills/123" },
+    { method: "POST", path: "/api/billing/payments", body: { bill_id: "123", payment_method: "credit_card", amount: 100 } },
+    { method: "GET", path: "/api/billing/payments" },
+    { method: "POST", path: "/api/admin/billing/settle", body: { cycle_year_month: "2023-01" } },
+    { method: "PATCH", path: "/api/admin/billing/bills/123", body: { total_amount: 100 } },
+  ]);
 });

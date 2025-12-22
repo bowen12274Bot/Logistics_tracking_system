@@ -8,6 +8,7 @@ import {
   createTestUser,
   createTestPackage,
 } from "./helpers";
+import { describe401Tests } from "./authTestUtils";
 
 describe("包裹管理 (Package)", () => {
   let customerToken: string;
@@ -417,4 +418,20 @@ describe("包裹管理 (Package)", () => {
       expect(status).toBe(404);
     });
   });
+  describe401Tests([
+    { 
+      method: "POST", 
+      path: "/api/packages", 
+      body: { 
+        customer_id: "test", 
+        sender: "s", 
+        receiver: "r",
+        size: "small",
+        delivery_time: "standard",
+        payment_type: "prepaid"
+      } 
+    },
+    { method: "GET", path: "/api/packages" },
+    { method: "GET", path: "/api/packages/123/status" },
+  ]);
 });
