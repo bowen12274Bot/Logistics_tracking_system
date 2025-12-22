@@ -1,35 +1,11 @@
 import { OpenAPIRoute } from "chanfana";
 import { z } from "zod";
 import type { AppContext } from "../types";
+import { getTerminalStatus, hasActiveException } from "../lib/packageGuards";
+import { requireDriver, type AuthUser } from "../utils/authUtils";
 
-type AuthUser = { id: string; user_class: string; address: string | null };
 type VehicleRow = { id: string; driver_user_id: string; vehicle_code: string; home_node_id: string | null; current_node_id: string | null; updated_at: string | null };
 
-async function requireDriver(c: AppContext) {
-  const authHeader = c.req.header("Authorization");
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return { ok: false as const, res: c.json({ error: "Token missing" }, 401) };
-  }
-
-  const token = authHeader.replace("Bearer ", "");
-  const tokenRecord = await c.env.DB.prepare("SELECT user_id FROM tokens WHERE id = ?")
-    .bind(token)
-    .first<{ user_id: string }>();
-
-  if (!tokenRecord) {
-    return { ok: false as const, res: c.json({ error: "Invalid token" }, 401) };
-  }
-
-  const user = await c.env.DB.prepare("SELECT id, user_class, address FROM users WHERE id = ?")
-    .bind(tokenRecord.user_id)
-    .first<AuthUser>();
-
-  if (!user || user.user_class !== "driver") {
-    return { ok: false as const, res: c.json({ error: "Forbidden" }, 403) };
-  }
-
-  return { ok: true as const, user };
-}
 
 async function ensureVehicleForDriver(db: D1Database, driver: AuthUser): Promise<VehicleRow> {
   const existing = await db
@@ -140,7 +116,7 @@ export class DriverTaskPickup extends OpenAPIRoute {
 
   async handle(c: AppContext) {
     const auth = await requireDriver(c);
-    if (!auth.ok) return auth.res;
+    if (!auth.ok) return (auth as any).res;
 
     const data = await this.getValidatedData<typeof this.schema>();
     const taskId = String(data.params.taskId).trim();
@@ -163,6 +139,13 @@ export class DriverTaskPickup extends OpenAPIRoute {
     const from = String(task.from_location ?? "").trim();
     if (!from || current !== from) {
       return c.json({ error: "Not at pickup node", current_node_id: current, from_location: from }, 409);
+    }
+
+    const packageId = String(task.package_id);
+    const terminal = await getTerminalStatus(c.env.DB, packageId);
+    if (terminal) return c.json({ error: "Package is terminal", status: terminal }, 409);
+    if (await hasActiveException(c.env.DB, packageId)) {
+      return c.json({ error: "Package has active exception" }, 409);
     }
 
     const now = new Date().toISOString();
@@ -222,7 +205,7 @@ export class DriverTaskDropoff extends OpenAPIRoute {
 
   async handle(c: AppContext) {
     const auth = await requireDriver(c);
-    if (!auth.ok) return auth.res;
+    if (!auth.ok) return (auth as any).res;
 
     const data = await this.getValidatedData<typeof this.schema>();
     const taskId = String(data.params.taskId).trim();
@@ -255,6 +238,13 @@ export class DriverTaskDropoff extends OpenAPIRoute {
       .first<{ id: string }>();
     if (!cargo) return c.json({ error: "Cargo not found on this vehicle" }, 409);
 
+    const packageId = String(task.package_id);
+    const terminal = await getTerminalStatus(c.env.DB, packageId);
+    if (terminal) return c.json({ error: "Package is terminal", status: terminal }, 409);
+    if (await hasActiveException(c.env.DB, packageId)) {
+      return c.json({ error: "Package has active exception" }, 409);
+    }
+
     const nextStatus = /^REG_\d+$/i.test(to) || /^HUB_\d+$/i.test(to) ? "warehouse_in" : /^END_/i.test(to) ? "delivered" : "in_transit";
     const nextDetails =
       nextStatus === "warehouse_in" ? "已送達配送站" : nextStatus === "delivered" ? "已送達目的地" : "已到達節點";
@@ -283,6 +273,19 @@ export class DriverTaskDropoff extends OpenAPIRoute {
     await c.env.DB.prepare("UPDATE delivery_tasks SET status = 'completed', updated_at = ? WHERE id = ?")
       .bind(now, taskId)
       .run();
+
+    // 如果完成的是末端配送 (Delivered)，且是月結客戶，則加入當月帳單
+    if (nextStatus === "delivered") {
+      const pkg = await c.env.DB.prepare(
+        "SELECT customer_id, payment_type FROM packages WHERE id = ?"
+      ).bind(task.package_id).first<{ customer_id: string; payment_type: string }>();
+
+      if (pkg && pkg.payment_type === "monthly_billing" && pkg.customer_id) {
+        // dynamic import to avoid circular dep if any, though service is clean
+        const { addPackageToBill } = await import("../services/billingService");
+        await addPackageToBill(c.env.DB, pkg.customer_id, task.package_id, now);
+      }
+    }
 
     return c.json({ success: true, status: nextStatus });
   }

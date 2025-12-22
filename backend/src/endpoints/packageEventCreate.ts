@@ -1,6 +1,7 @@
 import { OpenAPIRoute, Str } from "chanfana";
 import { z } from "zod";
 import { type AppContext, PackageEvent } from "../types";
+import { getTerminalStatus, hasActiveException } from "../lib/packageGuards";
 
 const DeliveryStatusEnum = z.enum([
 	"created",
@@ -12,6 +13,7 @@ const DeliveryStatusEnum = z.enum([
 	"warehouse_out",
 	"out_for_delivery",
 	"delivered",
+	"delivery_failed",
 	"exception",
 	"exception_resolved",
 	"route_decided",
@@ -93,6 +95,12 @@ export class PackageEventCreate extends OpenAPIRoute {
 				400,
 			);
 		}
+		if (delivery_status === "delivery_failed") {
+			return c.json(
+				{ success: false, error: "請使用 /api/cs/exceptions/:exceptionId/handle (cancel) 結案並寫入配送失敗" },
+				400,
+			);
+		}
 
 		if (
 			delivery_status === "in_transit" &&
@@ -112,6 +120,14 @@ export class PackageEventCreate extends OpenAPIRoute {
 
 		if (!pkg) {
 			return c.json({ success: false, error: "Package not found" }, 404);
+		}
+
+		const terminal = await getTerminalStatus(c.env.DB, packageId);
+		if (terminal) {
+			return c.json({ success: false, error: "Package is terminal", status: terminal }, 409);
+		}
+		if (await hasActiveException(c.env.DB, packageId)) {
+			return c.json({ success: false, error: "Package has active exception" }, 409);
 		}
 
 		const eventId = crypto.randomUUID();

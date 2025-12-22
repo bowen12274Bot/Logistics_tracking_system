@@ -22,6 +22,8 @@ import { TrackingSearch } from "./endpoints/trackingSearch";
 import { DriverTaskList, DriverUpdateStatus } from "./endpoints/driverTasks";
 import { DriverTaskListV2, DriverTaskAccept, DriverTaskComplete } from "./endpoints/driverTaskPool";
 import { WarehouseBatchOperation } from "./endpoints/warehouseOperations";
+import { WarehousePackagesList } from "./endpoints/warehousePackages";
+import { WarehousePackagesReceive } from "./endpoints/warehouseReceive";
 import { WarehouseDispatchNextTask } from "./endpoints/warehouseTaskDispatch";
 import { BillingBillList, BillingBillDetail } from "./endpoints/billingBills";
 import { BillingPaymentCreate, BillingPaymentList } from "./endpoints/billingPayments";
@@ -288,14 +290,27 @@ openapi.post("/api/driver/packages/:packageId/exception", DriverPackageException
 openapi.get("/api/driver/exceptions", DriverPackageExceptionList);
 openapi.get("/api/cs/exceptions", CustomerServiceExceptionList);
 openapi.post("/api/cs/exceptions/:exceptionId/handle", CustomerServiceExceptionHandle);
+openapi.get("/api/warehouse/packages", WarehousePackagesList);
+openapi.post("/api/warehouse/packages/receive", WarehousePackagesReceive);
 openapi.post("/api/warehouse/batch-operation", WarehouseBatchOperation);
 openapi.post("/api/warehouse/packages/:packageId/dispatch-next", WarehouseDispatchNextTask);
+
+import { BillingSettle } from "./endpoints/billingCycle";
+import { BillingAdminUpdate, BillingAdminAddItem, BillingAdminRemoveItem } from "./endpoints/billingAdmin";
+
+// ... existing code ...
 
 // Billing APIs
 openapi.get("/api/billing/bills", BillingBillList);
 openapi.get("/api/billing/bills/:billId", BillingBillDetail);
 openapi.post("/api/billing/payments", BillingPaymentCreate);
 openapi.get("/api/billing/payments", BillingPaymentList);
+
+// Admin Billing APIs
+openapi.post("/api/admin/billing/settle", BillingSettle);
+openapi.patch("/api/admin/billing/bills/:billId", BillingAdminUpdate);
+openapi.post("/api/admin/billing/bills/:billId/items", BillingAdminAddItem);
+openapi.delete("/api/admin/billing/bills/:billId/items/:itemId", BillingAdminRemoveItem);
 
 // Admin APIs
 openapi.post("/api/admin/users", AdminUserCreate);

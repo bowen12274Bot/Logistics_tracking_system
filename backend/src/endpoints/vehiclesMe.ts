@@ -115,7 +115,7 @@ export class VehicleMeGet extends OpenAPIRoute {
 
   async handle(c: AppContext) {
     const auth = await requireDriver(c);
-    if (!auth.ok) return auth.res;
+    if (!auth.ok) return (auth as any).res;
 
     try {
       const vehicle = await ensureVehicleForDriver(c.env.DB, auth.user);
@@ -155,7 +155,7 @@ export class VehicleMeMove extends OpenAPIRoute {
 
   async handle(c: AppContext) {
     const auth = await requireDriver(c);
-    if (!auth.ok) return auth.res;
+    if (!auth.ok) return (auth as any).res;
 
     const data = await this.getValidatedData<typeof this.schema>();
     const fromNodeId = String(data.body.fromNodeId ?? "").trim();
@@ -215,7 +215,7 @@ export class VehicleMeMove extends OpenAPIRoute {
       JOIN packages p ON p.id = vc.package_id
       WHERE vc.vehicle_id = ?
         AND vc.unloaded_at IS NULL
-        AND COALESCE(p.status, '') NOT IN ('exception','delivered')
+        AND COALESCE(p.status, '') NOT IN ('exception','delivered','delivery_failed')
       `,
     )
       .bind(vehicle.id)

@@ -2,34 +2,10 @@ import { OpenAPIRoute } from "chanfana";
 import { z } from "zod";
 import type { AppContext } from "../types";
 
-type AuthUser = { id: string; user_class: string; address: string | null };
+import { requireDriver, type AuthUser } from "../utils/authUtils";
+
 type VehicleRow = { id: string; driver_user_id: string; vehicle_code: string; home_node_id: string | null; current_node_id: string | null; updated_at: string | null };
 
-async function requireDriver(c: AppContext) {
-  const authHeader = c.req.header("Authorization");
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return { ok: false as const, res: c.json({ error: "Token missing" }, 401) };
-  }
-
-  const token = authHeader.replace("Bearer ", "");
-  const tokenRecord = await c.env.DB.prepare("SELECT user_id FROM tokens WHERE id = ?")
-    .bind(token)
-    .first<{ user_id: string }>();
-
-  if (!tokenRecord) {
-    return { ok: false as const, res: c.json({ error: "Invalid token" }, 401) };
-  }
-
-  const user = await c.env.DB.prepare("SELECT id, user_class, address FROM users WHERE id = ?")
-    .bind(tokenRecord.user_id)
-    .first<AuthUser>();
-
-  if (!user || user.user_class !== "driver") {
-    return { ok: false as const, res: c.json({ error: "Forbidden" }, 403) };
-  }
-
-  return { ok: true as const, user };
-}
 
 async function ensureVehicleForDriver(db: D1Database, driver: AuthUser): Promise<VehicleRow> {
   const existing = await db
@@ -81,7 +57,7 @@ export class VehicleMeCargoList extends OpenAPIRoute {
 
   async handle(c: AppContext) {
     const auth = await requireDriver(c);
-    if (!auth.ok) return auth.res;
+    if (!auth.ok) return (auth as any).res;
 
     let vehicle: VehicleRow;
     try {

@@ -32,6 +32,7 @@
 | `package_exceptions` | 異常池：異常申報與處理 | `backend/migrations/0012_package_exceptions.sql` |
 | `delivery_tasks` | 司機任務：取件/配送/轉運 | `backend/migrations/0013_delivery_tasks.sql` |
 | `vehicles` | 車輛與位置 | `backend/migrations/0014_vehicles.sql` |
+| `service_rules` | 運費規則 (規劃中) | `未建立` |
 
 ### Seed / 測試資料 migrations
 
@@ -50,7 +51,7 @@
 
 ## 2. 表格定義
 
-### 2.1 `users` - 使用者
+### 2.1 `users` - 使用者 `[已實作]`
 
 ```sql
 CREATE TABLE IF NOT EXISTS users (
@@ -74,7 +75,7 @@ CREATE TABLE IF NOT EXISTS users (
 
 ---
 
-### 2.2 `packages` - 包裹主檔
+### 2.2 `packages` - 包裹主檔 `[已實作]`
 
 ```sql
 CREATE TABLE IF NOT EXISTS packages (
@@ -105,7 +106,7 @@ CREATE TABLE IF NOT EXISTS packages (
 
 ---
 
-### 2.3 `package_events` - 包裹事件
+### 2.3 `package_events` - 包裹事件 `[已實作]`
 
 ```sql
 CREATE TABLE IF NOT EXISTS package_events (
@@ -120,7 +121,7 @@ CREATE TABLE IF NOT EXISTS package_events (
 
 ---
 
-### 2.4 `payments` - 付款紀錄
+### 2.4 `payments` - 付款紀錄 `[已實作]`
 
 ```sql
 CREATE TABLE IF NOT EXISTS payments (
@@ -139,7 +140,7 @@ CREATE TABLE IF NOT EXISTS payments (
 
 ---
 
-### 2.5 `monthly_billing` - 月結帳單主檔
+### 2.5 `monthly_billing` - 月結帳單主檔 `[已實作]`
 
 ```sql
 CREATE TABLE IF NOT EXISTS monthly_billing (
@@ -158,7 +159,7 @@ CREATE TABLE IF NOT EXISTS monthly_billing (
 
 ---
 
-### 2.6 `monthly_billing_items` - 月結帳單明細
+### 2.6 `monthly_billing_items` - 月結帳單明細 `[已實作]`
 
 ```sql
 CREATE TABLE IF NOT EXISTS monthly_billing_items (
@@ -170,7 +171,7 @@ CREATE TABLE IF NOT EXISTS monthly_billing_items (
 
 ---
 
-### 2.7 `nodes` / `edges` - 虛擬地圖
+### 2.7 `nodes` / `edges` - 虛擬地圖 `[已實作]`
 
 `backend/migrations/0006_virtual_map_schema.sql` 建立 `nodes`、`edges` 與索引；`backend/migrations/0007_virtual_map_seed.sql` 會重建表並寫入 seed 資料（節點/道路）。
 
@@ -198,7 +199,7 @@ CREATE TABLE edges (
 
 ---
 
-### 2.8 `contract_applications` - 合約客戶申請
+### 2.8 `contract_applications` - 合約客戶申請 `[已實作]`
 
 ```sql
 CREATE TABLE IF NOT EXISTS contract_applications (
@@ -221,7 +222,7 @@ CREATE TABLE IF NOT EXISTS contract_applications (
 
 ---
 
-### 2.9 `tokens` - 認證 Token
+### 2.9 `tokens` - 認證 Token `[已實作]`
 
 ```sql
 CREATE TABLE IF NOT EXISTS tokens (
@@ -234,7 +235,7 @@ CREATE TABLE IF NOT EXISTS tokens (
 
 ---
 
-### 2.10 `system_errors` - 系統錯誤
+### 2.10 `system_errors` - 系統錯誤 `[已實作]`
 
 ```sql
 CREATE TABLE IF NOT EXISTS system_errors (
@@ -252,7 +253,7 @@ CREATE TABLE IF NOT EXISTS system_errors (
 
 ---
 
-### 2.11 `package_exceptions` - 異常池
+### 2.11 `package_exceptions` - 異常池 `[規劃中]`
 
 用途：當司機/倉儲在作業中將包裹狀態改為 `exception` 時，建立異常紀錄供客服在異常池處理；客服 MVP 先做到「標示已處理 + 處理報告」。
 
@@ -276,7 +277,7 @@ CREATE INDEX idx_package_exceptions_package_id ON package_exceptions(package_id)
 
 ---
 
-### 2.12 `delivery_tasks` - 司機任務
+### 2.12 `delivery_tasks` - 司機任務 `[規劃中]`
 
 用途：將「待取件/待配送/待轉運」抽象成任務，支援單一司機的工作清單與任務狀態（接受/進行中/完成）。
 
@@ -299,7 +300,7 @@ CREATE INDEX idx_delivery_tasks_package_segment ON delivery_tasks(package_id, se
 
 ---
 
-### 2.13 `vehicles` - 車輛/位置
+### 2.13 `vehicles` - 車輛/位置 `[規劃中]`
 
 用途：支援司機「貨車起始點=司機工作地點」與「地圖上點選相鄰節點移動」；包裹上車後所在地可記錄為 `vehicle_code`。
 

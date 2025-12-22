@@ -1,6 +1,8 @@
 import { OpenAPIRoute } from "chanfana";
 import { z } from "zod";
 import type { AppContext } from "../types";
+import { requireWarehouse } from "../utils/authUtils";
+import { getTerminalStatus, hasActiveException } from "../lib/packageGuards";
 
 // POST /api/warehouse/batch-operation - 倉儲批次操作
 export class WarehouseBatchOperation extends OpenAPIRoute {
@@ -36,28 +38,8 @@ export class WarehouseBatchOperation extends OpenAPIRoute {
   };
 
   async handle(c: AppContext) {
-    const authHeader = c.req.header("Authorization");
-    
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return c.json({ error: "Token 缺失" }, 401);
-    }
-
-    const token = authHeader.replace("Bearer ", "");
-    const tokenRecord = await c.env.DB.prepare(
-      "SELECT user_id FROM tokens WHERE id = ?"
-    ).bind(token).first<{ user_id: string }>();
-
-    if (!tokenRecord) {
-      return c.json({ error: "Token 無效" }, 401);
-    }
-
-    const user = await c.env.DB.prepare(
-      "SELECT user_type, user_class FROM users WHERE id = ?"
-    ).bind(tokenRecord.user_id).first<{ user_type: string; user_class: string }>();
-
-    if (!user || user.user_class !== "warehouse_staff") {
-      return c.json({ error: "僅倉儲人員可使用此功能" }, 403);
-    }
+    const auth = await requireWarehouse(c);
+    if (auth.ok === false) return (auth as any).res;
 
     const data = await this.getValidatedData<typeof this.schema>();
     const body = data.body as {
@@ -86,6 +68,16 @@ export class WarehouseBatchOperation extends OpenAPIRoute {
 
       if (!pkg) {
         results.failed.push({ id: pkgId, reason: "包裹不存在" });
+        continue;
+      }
+
+      const terminal = await getTerminalStatus(c.env.DB, String(pkg.id));
+      if (terminal) {
+        results.failed.push({ id: pkgId, reason: `Package is terminal (${terminal})` });
+        continue;
+      }
+      if (await hasActiveException(c.env.DB, String(pkg.id))) {
+        results.failed.push({ id: pkgId, reason: "Package has active exception" });
         continue;
       }
 

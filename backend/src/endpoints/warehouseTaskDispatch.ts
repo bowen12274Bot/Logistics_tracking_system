@@ -1,10 +1,12 @@
 import { OpenAPIRoute } from "chanfana";
 import { z } from "zod";
 import type { AppContext } from "../types";
+import { getTerminalStatus, hasActiveException } from "../lib/packageGuards";
 
 type AuthUser = { id: string; user_class: string; address: string | null };
 type NodeRow = { id: string; level: number };
 type EdgeRow = { source: string; target: string };
+type LatestEvent = { delivery_status: string | null; location: string | null; events_at: string | null };
 
 async function requireWarehouse(c: AppContext) {
   const authHeader = c.req.header("Authorization");
@@ -81,6 +83,16 @@ function findRootHub(startNodeId: string, graph: { adj: Map<string, string[]>; l
   return null;
 }
 
+async function getLatestPackageEvent(db: D1Database, packageId: string): Promise<LatestEvent | null> {
+  const row = await db
+    .prepare(
+      "SELECT delivery_status, location, events_at FROM package_events WHERE package_id = ? ORDER BY events_at DESC LIMIT 1",
+    )
+    .bind(packageId)
+    .first<LatestEvent>();
+  return row ?? null;
+}
+
 export class WarehouseDispatchNextTask extends OpenAPIRoute {
   schema = {
     tags: ["Staff"],
@@ -110,7 +122,7 @@ export class WarehouseDispatchNextTask extends OpenAPIRoute {
 
   async handle(c: AppContext) {
     const auth = await requireWarehouse(c);
-    if (!auth.ok) return auth.res;
+    if (!auth.ok) return (auth as any).res;
 
     const data = await this.getValidatedData<typeof this.schema>();
     const packageId = String(data.params.packageId).trim();
@@ -123,6 +135,29 @@ export class WarehouseDispatchNextTask extends OpenAPIRoute {
 
     const pkg = await c.env.DB.prepare("SELECT id FROM packages WHERE id = ? LIMIT 1").bind(packageId).first();
     if (!pkg) return c.json({ error: "Package not found" }, 404);
+
+    const terminal = await getTerminalStatus(c.env.DB, packageId);
+    if (terminal) return c.json({ error: "Package is terminal", status: terminal }, 409);
+    if (await hasActiveException(c.env.DB, packageId)) {
+      return c.json({ error: "Package has active exception" }, 409);
+    }
+
+    // Require package to be at this warehouse node, and already received (warehouse_received) into sorting area.
+    const latest = await getLatestPackageEvent(c.env.DB, packageId);
+    const latestLoc = String(latest?.location ?? "").trim().toUpperCase();
+    const latestStatus = String(latest?.delivery_status ?? "").trim().toLowerCase();
+    if (!latest || !latestLoc || !latestStatus) {
+      return c.json({ error: "Package has no latest event" }, 409);
+    }
+    if (latestLoc !== fromNodeId) {
+      return c.json({ error: "Package not at this warehouse node", latest_location: latestLoc }, 409);
+    }
+    if (latestStatus === "warehouse_in") {
+      return c.json({ error: "Package not received yet (warehouse_received required)" }, 409);
+    }
+    if (!["warehouse_received", "sorting"].includes(latestStatus)) {
+      return c.json({ error: "Package not in sorting area", latest_status: latestStatus }, 409);
+    }
 
     // Disallow creating next tasks if there's still an active task for this package.
     const active = await c.env.DB.prepare(
@@ -172,7 +207,18 @@ export class WarehouseDispatchNextTask extends OpenAPIRoute {
       .bind(id, packageId, fromNodeId, toNodeId, assignedDriverId, nextIndex, now, now)
       .run();
 
+    // Record route decision so warehouse UI can mark it as dispatched (and for tracking history).
+    // NOTE: packages.status will remain at stage "sorting" per trigger mapping.
+    const evtId = crypto.randomUUID();
+    await c.env.DB.prepare(
+      `
+      INSERT INTO package_events (id, package_id, delivery_status, delivery_details, events_at, location)
+      VALUES (?, ?, 'route_decided', ?, ?, ?)
+      `,
+    )
+      .bind(evtId, packageId, `next=${toNodeId}`, now, fromNodeId)
+      .run();
+
     return c.json({ success: true, task_id: id, assigned_driver_id: assignedDriverId, segment_index: nextIndex });
   }
 }
-

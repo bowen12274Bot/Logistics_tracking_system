@@ -1,33 +1,11 @@
 import { OpenAPIRoute } from "chanfana";
 import { z } from "zod";
 import type { AppContext } from "../types";
+import { getTerminalStatus, hasActiveException } from "../lib/packageGuards";
+import { requireDriver, type AuthUser } from "../utils/authUtils";
 
-type AuthUser = { id: string; user_class: string; address: string | null };
 type VehicleRow = { id: string; driver_user_id: string; current_node_id: string | null };
 
-async function requireDriver(c: AppContext) {
-  const authHeader = c.req.header("Authorization");
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return { ok: false as const, res: c.json({ error: "Token missing" }, 401) };
-  }
-
-  const token = authHeader.replace("Bearer ", "");
-  const tokenRecord = await c.env.DB.prepare("SELECT user_id FROM tokens WHERE id = ?")
-    .bind(token)
-    .first<{ user_id: string }>();
-
-  if (!tokenRecord) return { ok: false as const, res: c.json({ error: "Invalid token" }, 401) };
-
-  const user = await c.env.DB.prepare("SELECT id, user_class, address FROM users WHERE id = ?")
-    .bind(tokenRecord.user_id)
-    .first<AuthUser>();
-
-  if (!user || user.user_class !== "driver") {
-    return { ok: false as const, res: c.json({ error: "Forbidden" }, 403) };
-  }
-
-  return { ok: true as const, user };
-}
 
 async function ensureVehicleForDriver(db: D1Database, driver: AuthUser): Promise<VehicleRow> {
   const vehicle = await db.prepare("SELECT id, driver_user_id, current_node_id FROM vehicles WHERE driver_user_id = ? LIMIT 1")
@@ -91,7 +69,7 @@ export class DriverTaskEnRoute extends OpenAPIRoute {
 
   async handle(c: AppContext) {
     const auth = await requireDriver(c);
-    if (!auth.ok) return auth.res;
+    if (!auth.ok) return (auth as any).res;
 
     const data = await this.getValidatedData<typeof this.schema>();
     const taskId = String(data.params.taskId).trim();
@@ -126,12 +104,11 @@ export class DriverTaskEnRoute extends OpenAPIRoute {
     }
 
     const now = new Date().toISOString();
-    const pkg = await c.env.DB.prepare("SELECT status FROM packages WHERE id = ? LIMIT 1")
-      .bind(String(task.package_id))
-      .first<{ status: string | null }>();
-    const currentStatus = String(pkg?.status ?? "").trim().toLowerCase();
-    if (currentStatus && ["delivered", "exception"].includes(currentStatus)) {
-      return c.json({ error: "Package not eligible", status: currentStatus }, 409);
+    const packageId = String(task.package_id);
+    const terminal = await getTerminalStatus(c.env.DB, packageId);
+    if (terminal) return c.json({ error: "Package is terminal", status: terminal }, 409);
+    if (await hasActiveException(c.env.DB, packageId)) {
+      return c.json({ error: "Package has active exception" }, 409);
     }
 
     const vehicleCodeRow = await c.env.DB.prepare("SELECT vehicle_code FROM vehicles WHERE id = ? LIMIT 1")

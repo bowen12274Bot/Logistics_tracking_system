@@ -1,8 +1,8 @@
 ﻿import { OpenAPIRoute } from "chanfana";
 import { z } from "zod";
 import type { AppContext } from "../types";
-
-type AuthUser = { id: string; user_type: string; user_class: string; address: string | null };
+import { getTerminalStatus, hasActiveException } from "../lib/packageGuards";
+import { requireDriver, type AuthUser } from "../utils/authUtils";
 
 type TaskRow = {
   id: string;
@@ -28,31 +28,6 @@ type VehicleRow = {
   updated_at: string | null;
 };
 
-async function requireDriver(c: AppContext) {
-  const authHeader = c.req.header("Authorization");
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return { ok: false as const, res: c.json({ error: "Token missing" }, 401) };
-  }
-
-  const token = authHeader.replace("Bearer ", "");
-  const tokenRecord = await c.env.DB.prepare("SELECT user_id FROM tokens WHERE id = ?")
-    .bind(token)
-    .first<{ user_id: string }>();
-
-  if (!tokenRecord) {
-    return { ok: false as const, res: c.json({ error: "Invalid token" }, 401) };
-  }
-
-  const user = await c.env.DB.prepare("SELECT id, user_type, user_class, address FROM users WHERE id = ?")
-    .bind(tokenRecord.user_id)
-    .first<AuthUser>();
-
-  if (!user || user.user_class !== "driver") {
-    return { ok: false as const, res: c.json({ error: "Forbidden" }, 403) };
-  }
-
-  return { ok: true as const, user };
-}
 
 async function ensureVehicleForDriver(db: D1Database, driver: AuthUser): Promise<VehicleRow> {
   const existing = await db
@@ -120,7 +95,7 @@ export class DriverTaskListV2 extends OpenAPIRoute {
 
   async handle(c: AppContext) {
     const auth = await requireDriver(c);
-    if (!auth.ok) return auth.res;
+    if (!auth.ok) return (auth as any).res;
 
     const data = await this.getValidatedData<typeof this.schema>();
     const { scope, status, limit } = data.query;
@@ -232,7 +207,7 @@ export class DriverTaskAccept extends OpenAPIRoute {
 
   async handle(c: AppContext) {
     const auth = await requireDriver(c);
-    if (!auth.ok) return auth.res;
+    if (!auth.ok) return (auth as any).res;
 
     const data = await this.getValidatedData<typeof this.schema>();
     const taskId = String(data.params.taskId).trim();
@@ -265,6 +240,13 @@ export class DriverTaskAccept extends OpenAPIRoute {
       }>();
 
     if (!candidate) return c.json({ error: "Task not found" }, 404);
+
+    const packageId = String(candidate.package_id);
+    const terminal = await getTerminalStatus(c.env.DB, packageId);
+    if (terminal) return c.json({ error: "Package is terminal", status: terminal }, 409);
+    if (await hasActiveException(c.env.DB, packageId)) {
+      return c.json({ error: "Package has active exception" }, 409);
+    }
 
     const from = String(candidate.from_location ?? "").trim();
     if (!from) return c.json({ error: "Task has no from_location" }, 409);
@@ -322,7 +304,7 @@ export class DriverTaskComplete extends OpenAPIRoute {
 
   async handle(c: AppContext) {
     const auth = await requireDriver(c);
-    if (!auth.ok) return auth.res;
+    if (!auth.ok) return (auth as any).res;
 
     const data = await this.getValidatedData<typeof this.schema>();
     const taskId = String(data.params.taskId).trim();
