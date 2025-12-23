@@ -313,6 +313,15 @@ Authorization: Bearer <token>
 |------|------|------|------|
 | `date` | string | ❌ | 日期（預設今天） |
 | `type` | string | ❌ | `pickup`(取件)、`delivery`(配送)、`all` |
+| `scope` | string | ❌ | `assigned`(指派給自己的任務)、`handoff`(可接手的任務，以目前車輛位置為條件)；預設 `assigned` |
+
+#### scope 說明
+
+- `scope=assigned`：回傳指派給當前司機的任務段
+- `scope=handoff`：回傳可被當前司機接手的任務段，條件為：
+  - `from_location` 為 `HUB_*` 或 `REG_*`（物流站）
+  - 任務狀態為 `pending` 或 `accepted`
+  - `from_location` 等於司機目前車輛所在節點 (`vehicles.current_node_id`)
 
 #### 錯誤回應
 
@@ -415,6 +424,64 @@ Authorization: Bearer <token>
 
 - 每個包裹依序寫入 `warehouse_received` + `sorting` 兩筆事件。
 - 已點收的包裹會冪等處理（不重複寫入）。
+
+---
+
+### 1.11 倉儲人員 - 派發下一段 `[已實作]`
+
+| 項目 | 說明 |
+|------|------|
+| **位置** | `POST /api/warehouse/packages/:packageId/dispatch-next` |
+| **功能** | 派發包裹到下一個相鄰節點（建立新的分段任務） |
+| **認證** | ✅ 需要 Token |
+| **權限** | `warehouse_staff` |
+
+#### 輸入格式 (Request Body)
+
+```json
+{
+  "toNodeId": "REG_3"
+}
+```
+
+#### 輸入說明
+
+| 欄位 | 類型 | 必填 | 說明 |
+|------|------|------|------|
+| `toNodeId` | string | ✅ | 下一個目的地節點 ID，必須與本站相鄰（`edges` 存在） |
+
+> ⚠️ **站點綁定**：`fromNodeId` 固定為 `users.address`（倉儲員工作站點），後端不接受前端傳入。
+
+#### 輸出格式 (Success Response - 200)
+
+```json
+{
+  "success": true,
+  "task": {
+    "id": "uuid",
+    "package_id": "uuid",
+    "from_location": "REG_1",
+    "to_location": "REG_3",
+    "segment_index": 2,
+    "status": "pending"
+  }
+}
+```
+
+#### 行為說明
+
+- 建立 `delivery_tasks` 新 segment：`from_location` = 本站、`to_location` = 相鄰節點
+- 同時寫入 `package_events`：`delivery_status='route_decided'`
+
+#### 錯誤回應
+
+| 狀態碼 | 說明 |
+|--------|------|
+| 400 | toNodeId 缺失、非相鄰節點 |
+| 401 | 未認證 |
+| 403 | 非 warehouse_staff 角色 |
+| 404 | 包裹不存在 |
+| 409 | 包裹不在本站、或已有進行中的任務段 |
 
 
 ## 2. 審核合約模組 (Review)
@@ -648,7 +715,25 @@ Authorization: Bearer <token>
     "payment_status": "paid",
     "cost": 180,
     "created_at": "2025-12-10T00:30:00Z",
-    "estimated_delivery": "2025-12-13"
+    "estimated_delivery": "2025-12-13",
+    "active_exception": null
+  }
+}
+```
+
+#### active_exception 欄位（異常狀態時）
+
+當 `status === 'exception'` 時，會額外回傳最新一筆未結案的異常資訊：
+
+```json
+{
+  "active_exception": {
+    "id": "uuid",
+    "reason_code": "damaged",
+    "description": "包裹外箱破損",
+    "reported_role": "driver",
+    "reported_at": "2025-12-10T10:30:00Z",
+    "location": "TRUCK_001"
   }
 }
 ```
