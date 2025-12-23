@@ -82,7 +82,7 @@ CREATE TABLE IF NOT EXISTS users (
 | `suspended_reason` | 帳號停用原因 |
 | `deleted_at` | 帳號刪除時間（軟刪除） |
 
-> 新增欄位來源：`backend/migrations/0015_users_status.sql`（規劃中）
+> 新增欄位來源：`backend/migrations/0016_users_status.sql`
 > 測試帳號/員工工作地 seed：`backend/migrations/0011_seed_test_users.sql`
 
 ---
