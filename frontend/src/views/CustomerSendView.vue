@@ -50,6 +50,10 @@ const form = reactive({
 
 const confirmation = ref('')
 const errorMessage = ref('')
+const estimateMessage = ref('')
+const estimateError = ref('')
+const estimateRoutePath = ref<string[]>([])
+const isEstimating = ref(false)
 const isSubmitting = ref(false)
 const auth = useAuthStore()
 const router = useRouter()
@@ -74,6 +78,77 @@ function isEndHomeAddress(value: string) {
 
 function isEndStoreAddress(value: string) {
   return /^END_STORE_\d+$/.test(normalizeAddress(value))
+}
+
+function buildSpecialMarks() {
+  const marks: Array<'dangerous' | 'fragile' | 'international'> = []
+  if (form.dangerousMaterials) marks.push('dangerous')
+  if (form.fragileItems) marks.push('fragile')
+  if (form.internationalShipments) marks.push('international')
+  return marks
+}
+
+const requestEstimate = async () => {
+  estimateMessage.value = ''
+  estimateError.value = ''
+  estimateRoutePath.value = []
+  errorMessage.value = ''
+
+  if (
+    !requiredTrimmed(form.senderAddress) ||
+    !requiredTrimmed(form.receiverAddress) ||
+    !form.weight ||
+    !form.length ||
+    !form.width ||
+    !form.height
+  ) {
+    estimateError.value = '請先填入起點/目的地、重量、長寬高後再進行運費試算。'
+    return
+  }
+
+  const fromNodeId = normalizeAddress(form.senderAddress)
+  const toNodeId = normalizeAddress(form.receiverAddress)
+
+  if (form.pickupType === 'home' && !isEndHomeAddress(fromNodeId)) {
+    estimateError.value = '起點（寄件地址）需為 END_HOME_x 格式。'
+    return
+  }
+  if (form.pickupType === 'store' && !isEndStoreAddress(fromNodeId)) {
+    estimateError.value = '起點（寄件門市）需為 END_STORE_x 格式。'
+    return
+  }
+  if (form.destinationType === 'home' && !isEndHomeAddress(toNodeId)) {
+    estimateError.value = '目的地（收件地址）需為 END_HOME_x 格式。'
+    return
+  }
+  if (form.destinationType === 'store' && !isEndStoreAddress(toNodeId)) {
+    estimateError.value = '目的地（收件門市）需為 END_STORE_x 格式。'
+    return
+  }
+
+  isEstimating.value = true
+  try {
+    const res = await api.estimatePackage({
+      fromNodeId,
+      toNodeId,
+      weightKg: form.weight,
+      dimensionsCm: {
+        length: form.length,
+        width: form.width,
+        height: form.height,
+      },
+      deliveryType: form.deliveryTime,
+      specialMarks: buildSpecialMarks(),
+    })
+
+    const formatter = new Intl.NumberFormat('zh-TW')
+    estimateMessage.value = `預估運費：${formatter.format(res.estimate.total_cost)} 元（箱型 ${res.estimate.box_type}、routeCost ${formatter.format(res.estimate.route_cost)}）`
+    estimateRoutePath.value = res.estimate.route_path ?? []
+  } catch (err: any) {
+    estimateError.value = err?.message || '運費試算失敗，請稍後再試。'
+  } finally {
+    isEstimating.value = false
+  }
 }
 
 watch(
@@ -174,6 +249,8 @@ watch(
 const submitPackage = async () => {
   confirmation.value = ''
   errorMessage.value = ''
+  estimateMessage.value = ''
+  estimateError.value = ''
   lastCreatedPackageId.value = null
 
   if (!form.pickupType) {
@@ -237,6 +314,28 @@ const submitPackage = async () => {
 
   isSubmitting.value = true
   try {
+    let routePathToSend = estimateRoutePath.value
+    if (!routePathToSend?.length) {
+      try {
+        const res = await api.estimatePackage({
+          fromNodeId: normalizedSenderAddress,
+          toNodeId: normalizedReceiverAddress,
+          weightKg: form.weight,
+          dimensionsCm: {
+            length: form.length,
+            width: form.width,
+            height: form.height,
+          },
+          deliveryType: form.deliveryTime,
+          specialMarks: buildSpecialMarks(),
+        })
+        routePathToSend = res.estimate.route_path ?? []
+        estimateRoutePath.value = routePathToSend
+      } catch {
+        routePathToSend = []
+      }
+    }
+
     const response = await api.createPackage({
       customer_id: auth.user?.id,
       sender: form.senderName,
@@ -258,6 +357,7 @@ const submitPackage = async () => {
       pickup_date: form.pickupType === 'home' ? form.pickupDate : undefined,
       pickup_time_window: form.pickupType === 'home' ? form.pickupTimeWindow : undefined,
       pickup_notes: form.pickupType === 'home' ? form.pickupNotes : undefined,
+      route_path: routePathToSend.length ? JSON.stringify(routePathToSend) : undefined,
       metadata: {
         created_at: new Date().toISOString(),
         delivery_time_label: deliveryLabel[form.deliveryTime],
@@ -501,6 +601,8 @@ const goToPayment = async () => {
         </section>
 
         <p v-if="errorMessage" class="hint send-message error">{{ errorMessage }}</p>
+        <p v-if="estimateError" class="hint send-message error">{{ estimateError }}</p>
+        <p v-if="estimateMessage" class="hint send-message success">{{ estimateMessage }}</p>
         <p v-if="confirmation" class="hint send-message success">{{ confirmation }}</p>
 
         <div class="send-actions">
@@ -509,7 +611,9 @@ const goToPayment = async () => {
           </div>
           <p v-if="lastCreatedPackageId" style="color:brown;">用戶尚未付款，請盡快前往付款。</p>
           <div class="send-actions-right">
-            <button class="ghost-btn" type="button">詢價</button>
+            <button class="ghost-btn" type="button" :disabled="isEstimating" @click="requestEstimate">
+              {{ isEstimating ? '試算中…' : '運費試算' }}
+            </button>
             <button class="primary-btn" type="submit" :disabled="isSubmitting">
               {{ isSubmitting ? '建立中…' : '建立託運單' }}
             </button>

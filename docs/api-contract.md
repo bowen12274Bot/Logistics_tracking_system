@@ -12,6 +12,8 @@
 - [4. 地圖與路線模組 (Map & Routing)](#4-地圖與路線模組-map--routing)
 - [5. 金流模組 (Payment Module)](#5-金流模組-payment-module)
 - [6. 超級使用者管理模組 (Super User Management)](#6-超級使用者管理模組-super-user-management)
+- [7. 異常與任務模組 (Exceptions & Tasks)](#7-異常與任務模組-exceptions--tasks)
+- [8. 待補齊 API (TODO)](#8-待補齊-api-todo)
 
 ---
 
@@ -39,13 +41,14 @@ Authorization: Bearer <token>
 
 ### 使用者角色
 
-| 角色 | user_type | 說明 |
-|------|-----------|------|
-| 客戶 | `customer` | 一般寄件/收件客戶 |
-| 客服人員 | `customer_service` | 處理客戶問題、手動更新貨態、回應合約申請 |
-| 倉儲人員 | `warehouse` | 入庫/出庫/分揀操作 |
-| 駕駛員 | `driver` | 取件/配送/貨態更新 |
-| 管理員 | `admin` | 系統管理、帳號管理 |
+| 角色 | user_type | user_class | 說明 |
+|------|-----------|------------|------|
+| 客戶（非合約） | `customer` | `non_contract_customer` | 一般寄件/收件客戶 |
+| 客戶（合約/月結） | `customer` | `contract_customer` | 月結客戶 |
+| 客服人員 | `employee` | `customer_service` | 處理異常池、協助查詢/更正貨態、回應合約申請 |
+| 倉儲人員 | `employee` | `warehouse_staff` | 入站/分揀/轉運作業、改路徑、異常申報 |
+| 駕駛員 | `employee` | `driver` | 取件/配送、貨態更新、到付收款、異常申報 |
+| 管理員 | `employee` | `admin` | 系統管理、帳號管理 |
 
 ### 角色類型 (user_class)
 
@@ -54,14 +57,14 @@ Authorization: Bearer <token>
 | `non_contract_customer` | 非合約客戶 |
 | `contract_customer` | 合約客戶 |
 | `customer_service` | 客服人員 |
-| `warehouse` | 倉儲人員 |
+| `warehouse_staff` | 倉儲人員 |
 | `driver` | 駕駛員 |
 | `admin` | 管理員 |
 ---
 
 ## 1. 使用者管理模組 (User Module)
 
-### 1.1 客戶註冊
+### 1.1 客戶註冊 `[已實作]`
 
 | 項目 | 說明 |
 |------|------|
@@ -120,7 +123,7 @@ Authorization: Bearer <token>
 
 ---
 
-### 1.2 使用者登入
+### 1.2 使用者登入 `[已實作]`
 
 | 項目 | 說明 |
 |------|------|
@@ -171,7 +174,7 @@ Authorization: Bearer <token>
 
 ---
 
-### 1.3 取得當前使用者資訊
+### 1.3 取得當前使用者資訊 `[已實作]`
 
 | 項目 | 說明 |
 |------|------|
@@ -205,7 +208,7 @@ Authorization: Bearer <token>
 
 ---
 
-### 1.4 更新客戶資料
+### 1.4 更新客戶資料 `[已實作]`
 
 | 項目 | 說明 |
 |------|------|
@@ -243,7 +246,7 @@ Authorization: Bearer <token>
 
 ---
 
-### 1.5 申請成為合約客戶
+### 1.5 申請成為合約客戶 `[已實作]`
 
 | 項目 | 說明 |
 |------|------|
@@ -295,7 +298,7 @@ Authorization: Bearer <token>
 
 ---
 
-### 1.6 駕駛員 - 取得今日工作清單
+### 1.6 駕駛員 - 取得今日工作清單 `[已實作]`
 
 | 項目 | 說明 |
 |------|------|
@@ -320,7 +323,7 @@ Authorization: Bearer <token>
 
 ---
 
-### 1.7 駕駛員 - 更新配送狀態
+### 1.7 駕駛員 - 更新配送狀態 `[已實作]`
 
 | 項目 | 說明 |
 |------|------|
@@ -333,7 +336,7 @@ Authorization: Bearer <token>
 
 ```json
 {
-  "status": "picked_up | out_for_delivery | delivered | exception",
+  "status": "picked_up | out_for_delivery | delivered",
   "signature": "base64_image",
   "notes": "string",
   "cod_amount": 500
@@ -344,36 +347,79 @@ Authorization: Bearer <token>
 
 | 狀態碼 | 說明 |
 |--------|------|
-| 400 | exception 狀態必須提供 notes |
+| 400 | 不支援 exception，請改用異常申報 API |
 | 401 | 未認證 |
 | 403 | 非 driver 角色 |
 | 404 | 包裹不存在 |
 
 ---
 
-### 1.8 倉儲人員 - 批次入庫/出庫
+### 1.8 倉儲人員 - 批次入庫/出庫 `[已實作]`
 
 | 項目 | 說明 |
 |------|------|
 | **位置** | `POST /api/warehouse/batch-operation` |
 | **功能** | 批次處理入庫/出庫/分揀 |
 | **認證** | ✅ 需要 Token |
-| **權限** | `warehouse` |
+| **權限** | `warehouse_staff` |
 
 #### 輸入格式 (Request Body)
 
 ```json
 {
-  "operation": "warehouse_in | warehouse_out | sort",
+  "operation": "warehouse_in | warehouse_out | sorting",
   "package_ids": ["uuid1", "uuid2", "uuid3"],
   "destination": "TRUCK_001",
   "notes": "string"
 }
 ```
 
+> 詳細倉儲作業規範請參考 [warehouse-staff.md](file:///c:/Users/tange/OneDrive/Desktop/all%20project/py_for_SE_class/term_project/Logistics_tracking_system/docs/warehouse-staff.md)
+
+---
+
+### 1.9 倉儲人員 - 站內包裹清單 `[已實作]`
+
+| 項目 | 說明 |
+|------|------|
+| **位置** | `GET /api/warehouse/packages` |
+| **功能** | 取得本站所有站內包裹清單 |
+| **認證** | ✅ 需要 Token |
+| **權限** | `warehouse_staff` |
+
+#### 功能說明
+
+- 後端以 `users.address` 作為本站，回傳「站內包裹」（最新事件 location = 本站且處於站內階段）。
+- 不需前端傳遞 location 參數，強制綁定登入員工的工作站點。
+
+---
+
+### 1.10 倉儲人員 - 點收確認 `[已實作]`
+
+| 項目 | 說明 |
+|------|------|
+| **位置** | `POST /api/warehouse/packages/receive` |
+| **功能** | 對一筆或多筆包裹執行點收作業 |
+| **認證** | ✅ 需要 Token |
+| **權限** | `warehouse_staff` |
+
+#### 輸入格式 (Request Body)
+
+```json
+{
+  "package_ids": ["uuid1", "uuid2"]
+}
+```
+
+#### 行為說明
+
+- 每個包裹依序寫入 `warehouse_received` + `sorting` 兩筆事件。
+- 已點收的包裹會冪等處理（不重複寫入）。
+
+
 ## 2. 審核合約模組 (Review)
 
-### 2.1 審核合約申請
+### 2.1 審核合約申請 `[已實作]`
 
 | 項目 | 說明 |
 |------|------|
@@ -405,7 +451,7 @@ Authorization: Bearer <token>
 
 ## 3. 包裹管理模組 (Package Module)
 
-### 3.1 建立包裹/寄件
+### 3.1 建立包裹/寄件 `[已實作]`
 
 | 項目 | 說明 |
 |------|------|
@@ -485,7 +531,7 @@ Authorization: Bearer <token>
 
 ---
 
-### 3.2 運費試算
+### 3.2 運費試算 `[已實作]`
 
 | 項目 | 說明 |
 |------|------|
@@ -528,7 +574,7 @@ Authorization: Bearer <token>
 
 ---
 
-### 3.3 客戶查詢包裹列表
+### 3.3 客戶查詢包裹列表 `[已實作]`
 
 | 項目 | 說明 |
 |------|------|
@@ -569,7 +615,7 @@ Authorization: Bearer <token>
 
 ---
 
-### 3.4 查詢單一包裹詳情
+### 3.4 查詢單一包裹詳情 `[已實作]`
 
 | 項目 | 說明 |
 |------|------|
@@ -617,7 +663,7 @@ Authorization: Bearer <token>
 
 ---
 
-### 3.5 公開追蹤查詢
+### 3.5 公開追蹤查詢 `[已實作]`
 
 | 項目 | 說明 |
 |------|------|
@@ -652,17 +698,77 @@ Authorization: Bearer <token>
 
 #### 事件狀態類型
 
-| status | 說明 |
-|--------|------|
-| `created` | 包裹已建立 |
-| `picked_up` | 起運地收件 |
-| `in_transit` | 運輸中 |
-| `sorting` | 分揀/轉運中 |
-| `warehouse_in` | 入庫 |
-| `warehouse_out` | 出庫 |
-| `out_for_delivery` | 外送中 |
+本系統同時有兩種「狀態」概念：
+
+1. **客戶顯示階段（Stage）**：用於 `packages.status` / API 的 `current_status`，屬於穩定、可用來查詢/篩選的「大階段」。
+2. **事件狀態（Event）**：用於 `package_events.delivery_status`，代表真實營運互動/流程事件，可更細緻；系統會把 Event 映射成 Stage 快取。
+
+**Stage（`packages.status` / `current_status`）**
+
+| stage | 說明 |
+|------|------|
+| `created` | 已建立託運單（等待取件/等待司機） |
+| `picked_up` | 已取件上車 |
+| `in_transit` | 運輸中（含前往取件/前往站點/站點間運輸） |
+| `sorting` | 分揀/轉運處理中 |
+| `warehouse_in` | 已入庫/到站 |
+| `warehouse_out` | 已出庫/離站 |
+| `out_for_delivery` | 末端外送中 |
 | `delivered` | 已投遞/簽收 |
 | `exception` | 異常（遺失/延誤/損毀） |
+
+**Event（`package_events.delivery_status`）**
+
+> 客戶前端路徑圖的「線段在途」顯示，依賴 `delivery_status='in_transit'` 且 `delivery_details` 可解析目的地（例如：`前往 HUB_0` / `下一站 REG_1`）。
+
+| event | 說明 | 映射到 stage |
+|------|------|-------------|
+| `created` | 託運單已建立 | `created` |
+| `in_transit` | 在途（貨車上/前往下一節點） | `in_transit` |
+| `picked_up` | 司機取件上車 | `picked_up` |
+| `warehouse_in` | 到站/入庫（司機卸貨完成） | `warehouse_in` |
+| `warehouse_received` | 倉儲員確認接收（可選事件） | `warehouse_in` |
+| `sorting` | 分揀/轉運處理中 | `sorting` |
+| `route_decided` | 倉儲決定下一配送節點/路徑（可選事件） | `sorting` |
+| `warehouse_out` | 出庫/離站交接給司機 | `warehouse_out` |
+| `out_for_delivery` | 末端外送中（明確標示最後一哩） | `out_for_delivery` |
+| `delivered` | 已投遞/簽收完成 | `delivered` |
+| `exception` | 異常事件 | `exception` |
+| `exception_resolved` | 異常已處理/解除（依 location 推導恢復階段） | `warehouse_in` / `in_transit` |
+| `enroute_pickup` | 司機前往取件點（可選通知事件） | `in_transit` |
+| `arrived_pickup` | 司機抵達取件點（可選事件） | `in_transit` |
+| `payment_collected_prepaid` | 現金預付收款完成（可選事件） | `in_transit` |
+| `enroute_delivery` | 司機前往目的地（可選通知事件） | `out_for_delivery` |
+| `arrived_delivery` | 司機抵達目的地（可選事件） | `out_for_delivery` |
+| `payment_collected_cod` | 現金到付收款完成（可選事件） | `out_for_delivery` |
+
+#### 客戶追蹤圖渲染規則（點/線判定）
+
+> 本節描述「客戶包裹追蹤圖」如何由 `packages.route_path` + `package_events` 推導出節點進度與線段在途狀態（對齊目前前端實作邏輯）。
+
+**輸入資料**
+- 節點序列：`packages.route_path`（節點 ID 陣列或以逗號分隔的字串），代表「貨車出發後」的配送路徑（例如：`END_* → REG_* → ... → END_*`）。
+- 事件序列：`GET /api/packages/:id/status` 回傳的 `events[]`（依 `events_at ASC` 排序）。
+
+**點（Node）到達判定**
+- 若某筆事件的 `location` 是路徑中的節點 ID（`route_path` 內），視為「到達該節點」。
+- 同一節點可能被多次經過：到達時間以該節點的 **最早** `events_at` 為準（避免後續 pass-by 覆蓋節點時間軸）。
+
+**取件前（出發地）時間軸**
+- 若路徑第一個節點（通常是寄件人 `END_*`）在「取件前事件」出現，會用它當作「貨車出發/起點時間」之一的來源。
+- 取件前事件判定（相容值）：`delivery_status` 為 `created`/`task_created`/`queued`/`pending_pickup`/`waiting_pickup`，或 `delivery_details` 含類似「託運單已建立/等待司機取件」等字樣。
+
+**線（Segment）在途判定**
+- 線段在途只認 `delivery_status='in_transit'` 的事件。
+- 該事件需同時滿足：
+  - `location` 是 `TRUCK_*`（用於顯示「在路上」的貨車標示）
+  - `delivery_details` 可解析出目的地節點 ID（例如：`前往 HUB_0` 或 `下一站 REG_1`）
+- 解析到的目的地節點如果在路徑節點序列中，會把該 `TRUCK_*` 綁到「目的地前一段線段」上，作為在途顯示依據。
+
+**異常（Exception）顯示**
+- 若事件的 `delivery_status` 為 `exception`（相容值：`abnormal`/`error`/`failed`），前端會將：
+  - `location` 若是節點 ID → 標記該節點（點）為異常。
+  - `location` 若是 `TRUCK_*` 且 `delivery_details` 可解析目的地 → 標記對應線段（線）為異常。
 
 #### 錯誤回應
 
@@ -672,14 +778,14 @@ Authorization: Bearer <token>
 
 ---
 
-### 3.6 建立貨態事件（內部 API）
+### 3.6 建立貨態事件（內部 API） `[已實作]`
 
 | 項目 | 說明 |
 |------|------|
 | **位置** | `POST /api/packages/:packageId/events` |
 | **功能** | 新增包裹追蹤事件（供員工/系統使用） |
 | **認證** | ✅ 需要 Token |
-| **權限** | `driver`、`warehouse`、`customer_service`、`admin` |
+| **權限** | `driver`、`warehouse_staff`、`customer_service`、`admin` |
 
 #### 輸入格式
 
@@ -732,14 +838,14 @@ Authorization: Bearer <token>
 
 ---
 
-### 3.7 進階追蹤查詢（員工用）
+### 3.7 進階追蹤查詢（員工用） `[已實作]`
 
 | 項目 | 說明 |
 |------|------|
 | **位置** | `GET /api/tracking/search` |
 | **功能** | 多條件搜尋包裹（員工用） |
 | **認證** | ✅ 需要 Token |
-| **權限** | `customer_service`、`warehouse`、`admin` |
+| **權限** | `customer_service`、`warehouse_staff`、`admin` |
 
 #### 輸入格式 (Query Parameters)
 
@@ -764,7 +870,7 @@ Authorization: Bearer <token>
 
 ## 4. 地圖與路線模組 (Map & Routing)
 
-### 4.1 取得地圖節點與邊
+### 4.1 取得地圖節點與邊 `[已實作]`
 
 | 項目 | 說明 |
 |------|------|
@@ -811,7 +917,7 @@ Authorization: Bearer <token>
 
 ---
 
-### 4.2 路線成本計算
+### 4.2 路線成本計算 `[已實作]`
 
 | 項目 | 說明 |
 |------|------|
@@ -849,7 +955,7 @@ Authorization: Bearer <token>
 
 ---
 
-### 4.3 更新地圖邊資料
+### 4.3 更新地圖邊資料 `[已實作]`
 
 | 項目 | 說明 |
 |------|------|
@@ -880,7 +986,7 @@ Authorization: Bearer <token>
 
 > 此模組主要服務合約客戶（月結），非合約客戶使用預付或貨到付款。
 
-### 5.1 查詢帳單列表
+### 5.1 查詢帳單列表 `[已實作]`
 
 | 項目 | 說明 |
 |------|------|
@@ -928,7 +1034,7 @@ Authorization: Bearer <token>
 
 ---
 
-### 5.2 查詢帳單明細
+### 5.2 查詢帳單明細 `[已實作]`
 
 | 項目 | 說明 |
 |------|------|
@@ -972,7 +1078,7 @@ Authorization: Bearer <token>
 
 ---
 
-### 5.3 付款
+### 5.3 付款 `[已實作]`
 
 | 項目 | 說明 |
 |------|------|
@@ -1013,7 +1119,7 @@ Authorization: Bearer <token>
 
 ---
 
-### 5.4 查詢付款紀錄
+### 5.4 查詢付款紀錄 `[已實作]`
 
 | 項目 | 說明 |
 |------|------|
@@ -1039,10 +1145,170 @@ Authorization: Bearer <token>
 
 ---
 
+### 5.5 月循環結算 (Admin) `[已實作]`
+
+| 項目 | 說明 |
+|------|------|
+| **位置** | `POST /api/admin/billing/settle` |
+| **功能** | 執行月底結算，設定帳單繳費期限 |
+| **認證** | ✅ 需要 Token |
+| **權限** | `admin` |
+
+#### 輸入格式 (Request Body)
+
+```json
+{
+  "cycle_year_month": "2025-12"
+}
+```
+
+#### 輸入說明
+
+| 欄位 | 類型 | 必填 | 說明 |
+|------|------|------|------|
+| `cycle_year_month` | string | ✅ | 要結算的月份，格式 `YYYY-MM` |
+
+#### 輸出格式 (Success Response - 200)
+
+```json
+{
+  "success": true,
+  "result": "已結算 2025-12 帳單，設定繳費期限為 2026-01-15"
+}
+```
+
+#### 錯誤回應
+
+| 狀態碼 | 說明 |
+|--------|------|
+| 400 | 日期格式錯誤 |
+| 401 | 未認證 |
+| 403 | 非 admin 角色 |
+| 500 | 結算失敗 |
+
+---
+
+### 5.6 手動調整帳單 (Admin) `[已實作]`
+
+| 項目 | 說明 |
+|------|------|
+| **位置** | `PATCH /api/admin/billing/bills/:billId` |
+| **功能** | 管理員手動調整帳單金額、狀態或繳費期限 |
+| **認證** | ✅ 需要 Token |
+| **權限** | `admin` |
+
+#### 輸入格式 (Request Body)
+
+```json
+{
+  "total_amount": 12000,
+  "status": "paid",
+  "due_date": "2025-01-15"
+}
+```
+
+#### 輸入說明
+
+| 欄位 | 類型 | 必填 | 說明 |
+|------|------|------|------|
+| `total_amount` | number | ❌ | 調整後的帳單金額 |
+| `status` | string | ❌ | `pending`、`paid`、`overdue` |
+| `due_date` | string | ❌ | 繳費期限（ISO 日期） |
+
+#### 輸出格式 (Success Response - 200)
+
+```json
+{
+  "success": true,
+  "message": "帳單已更新"
+}
+```
+
+#### 錯誤回應
+
+| 狀態碼 | 說明 |
+|--------|------|
+| 401 | 未認證 |
+| 403 | 非 admin 角色 |
+| 404 | 帳單不存在 |
+
+---
+
+### 5.7 手動新增帳單項目 (Admin) `[已實作]`
+
+| 項目 | 說明 |
+|------|------|
+| **位置** | `POST /api/admin/billing/bills/:billId/items` |
+| **功能** | 管理員手動將包裹加入帳單 |
+| **認證** | ✅ 需要 Token |
+| **權限** | `admin` |
+
+#### 輸入格式 (Request Body)
+
+```json
+{
+  "package_id": "uuid"
+}
+```
+
+#### 輸入說明
+
+| 欄位 | 類型 | 必填 | 說明 |
+|------|------|------|------|
+| `package_id` | string | ✅ | 要加入帳單的包裹 ID |
+
+#### 輸出格式 (Success Response - 200)
+
+```json
+{
+  "success": true,
+  "item_id": "uuid",
+  "amount_added": 150
+}
+```
+
+#### 錯誤回應
+
+| 狀態碼 | 說明 |
+|--------|------|
+| 400 | package_id 缺失 |
+| 401 | 未認證 |
+| 403 | 非 admin 角色 |
+| 404 | 帳單不存在 |
+
+---
+
+### 5.8 手動移除帳單項目 (Admin) `[已實作]`
+
+| 項目 | 說明 |
+|------|------|
+| **位置** | `DELETE /api/admin/billing/bills/:billId/items/:itemId` |
+| **功能** | 管理員手動從帳單移除包裹項目（並扣減金額） |
+| **認證** | ✅ 需要 Token |
+| **權限** | `admin` |
+
+#### 輸出格式 (Success Response - 200)
+
+```json
+{
+  "success": true,
+  "amount_deducted": 150
+}
+```
+
+#### 錯誤回應
+
+| 狀態碼 | 說明 |
+|--------|------|
+| 401 | 未認證 |
+| 403 | 非 admin 角色 |
+| 404 | 帳單或項目不存在 |
+
+---
 
 ## 6. 超級使用者管理模組 (Super User Management)
 
-### 6.1 建立員工帳號
+### 6.1 建立員工帳號 `[已實作]`
 
 | 項目 | 說明 |
 |------|------|
@@ -1059,9 +1325,12 @@ Authorization: Bearer <token>
   "email": "string",
   "password": "string",
   "phone_number": "string",
-  "user_type": "customer_service | warehouse | driver | admin"
+  "address": "HUB_0 | REG_0 (optional)",
+  "user_class": "customer_service | warehouse_staff | driver | admin"
 }
 ```
+
+> 備註：員工的 `address` 代表「工作地」（地圖節點 ID），例如配送中心 `HUB_0`、配送站 `REG_0`。
 
 #### 錯誤回應
 
@@ -1074,7 +1343,7 @@ Authorization: Bearer <token>
 
 ---
 
-### 6.2 處理系統異常
+### 6.2 處理系統異常 `[已實作]`
 
 | 項目 | 說明 |
 |------|------|
@@ -1116,12 +1385,209 @@ Authorization: Bearer <token>
 }
 ```
 
-## 附錄：Package 狀態機
+## 7. 異常與任務模組 (Exceptions & Tasks) `[大部分已實作]`
+
+> 本章節為配合 `todoList.md` 新增的「異常池 / 司機任務 / 司機車輛移動 / 倉儲改路徑」需求。大部分 API 已實作完成。
+>
+> **相關詳細規範文件**：
+> - [exception-handling.md](file:///c:/Users/tange/OneDrive/Desktop/all%20project/py_for_SE_class/term_project/Logistics_tracking_system/docs/exception-handling.md)：異常申報、封鎖規則、reason_code 定義
+> - [customer-service.md](file:///c:/Users/tange/OneDrive/Desktop/all%20project/py_for_SE_class/term_project/Logistics_tracking_system/docs/customer-service.md)：客服異常處理流程、客戶端狀態顯示規範
+
+
+### 7.1 異常池（客服） `[已實作]`
+
+| 項目 | 說明 |
+|------|------|
+| **位置** | `GET /api/cs/exceptions` |
+| **功能** | 異常池列表（未處理/已處理） |
+| **認證** | ✅ 需要 Token |
+| **權限** | `customer_service` |
+
+#### 輸入格式 (Query Parameters)
+
+| 參數 | 類型 | 必填 | 說明 |
+|------|------|------|------|
+| `handled` | boolean | ❌ | 是否已處理；不帶時預設只列未處理（handled=0） |
+| `limit` | number | ❌ | 預設 50，最大 200 |
+
+#### 輸出格式 (Success Response - 200)
+
+```json
+{
+  "success": true,
+  "exceptions": [
+    {
+      "id": "uuid",
+      "package_id": "uuid",
+      "tracking_number": "TRK-xxxx",
+      "package_status": "exception",
+      "reason_code": "string|null",
+      "description": "string",
+      "reported_by": "user_id",
+      "reported_role": "driver|warehouse_staff|customer_service",
+      "reported_at": "2025-12-10T00:30:00Z",
+      "handled": 0,
+      "handled_by": null,
+      "handled_at": null,
+      "handling_report": null
+    }
+  ]
+}
+```
+
+| 項目 | 說明 |
+|------|------|
+| **位置** | `POST /api/cs/exceptions/:exceptionId/handle` |
+| **功能** | 將異常標示已處理並填寫處理報告 |
+| **認證** | ✅ 需要 Token |
+| **權限** | `customer_service` |
+
+#### 輸入格式
+
+**Path Parameters:**
+- `exceptionId` (string): 異常紀錄 ID（`package_exceptions.id`）
+
+**Request Body:**
+```json
+{
+  "action": "resume | cancel",
+  "handling_report": "string",
+  "location": "HUB_0 | REG_1 | TRUCK_0 | END_HOME_1"
+}
+```
+
+| 欄位 | 類型 | 必填 | 說明 |
+|------|------|------|------|
+| `action` | string | ✅ | `resume`=解除異常並恢復配送流程（後續由倉儲重新派送任務）；`cancel`=取消委託（同時取消所有 active 任務段） |
+| `handling_report` | string | ✅ | 處理報告 |
+| `location` | string | ❌ | 用於事件定位與客戶追蹤圖顯示（建議填 HUB/REG 表示回到站點） |
+
+#### 行為說明
+- 會將 `package_exceptions.handled` 設為 1 並寫入 `handling_report`。
+- 會新增一筆 `package_events`：`delivery_status='exception_resolved'`。
+- 若 `action='cancel'`：會把該包裹所有 active 任務段（`pending/accepted/in_progress`）標記為 `canceled`，讓司機/倉儲清單立即消失。
+
+### 7.2 異常申報（司機/倉儲） `[已實作]`
+
+| 項目 | 說明 |
+|------|------|
+| **位置** | `POST /api/driver/packages/:packageId/exception` |
+| **功能** | 司機異常申報：建立異常紀錄並將包裹狀態更新為 `exception`（同時寫入事件） |
+| **認證** | ✅ 需要 Token |
+| **權限** | `driver` |
+
+#### 輸入格式 (Request Body)
+```json
+{
+  "reason_code": "string",
+  "description": "string",
+  "location": "TRUCK_0 | END_HOME_1 | REG_1 | HUB_0"
+}
+```
+
+| 欄位 | 類型 | 必填 | 說明 |
+|------|------|------|------|
+| `description` | string | ✅ | 異常描述（會寫入異常池與事件） |
+| `reason_code` | string | ❌ | 異常代碼（建議由系統/客服補填；司機可不填） |
+| `location` | string | ❌ | 異常發生位置：節點 ID（點異常）或 `TRUCK_*`（線異常） |
+
+#### reason_code 建議值（輕量規範）
+
+> `reason_code` 主要用於統計與客服分類；不應增加司機申報負擔。建議由 UI 以「選單」呈現，或允許司機略過，後續由客服補填/修正。
+
+| reason_code | 說明 |
+|------------|------|
+| `damaged` | 包裹破損 |
+| `lost` | 遺失 |
+| `delayed` | 延誤 |
+| `address_issue` | 地址/收件資料問題 |
+| `payment_dispute` | 付款爭議（到付/預付） |
+| `refused` | 收件人拒收 |
+| `misroute` | 配送路徑/節點錯誤 |
+| `vehicle_issue` | 車輛/設備問題 |
+| `other` | 其他（搭配 description 詳細說明） |
+
+**格式建議**
+- 使用小寫 snake_case（例如 `address_issue`）。
+- 若未知/不適用：不填即可，改以 `description` 描述。
+
+#### 行為說明（重要）
+- 異常必須同時建立：
+  - `package_exceptions` 一筆（異常池）
+  - `package_events` 一筆：`delivery_status='exception'`
+- 異常申報後，系統會把該包裹的 active 任務段（`pending/accepted/in_progress`）取消，讓任務從司機/倉儲清單消失。
+
+| 項目 | 說明 |
+|------|------|
+| **位置** | `POST /api/warehouse/packages/:packageId/exception` |
+| **功能** | 倉儲異常申報：建立異常紀錄並將包裹狀態更新為 `exception`（同時寫入事件） |
+| **認證** | ✅ 需要 Token |
+| **權限** | `warehouse_staff` |
+
+#### 異常事件規範（客戶追蹤圖相容）
+- `delivery_status='exception'`：
+  - `delivery_details` 必須有可讀描述（對應 `description`）。
+  - `location` 建議必填：
+    - 節點 ID（`END_*/REG_*/HUB_*`）→ 前端標記「點」異常
+    - `TRUCK_*` + `delivery_details` 含目的地（`前往 XXX`/`下一站 XXX`）→ 前端標記「線」異常
+- `delivery_status='exception_resolved'`：
+  - 僅應由客服處理端點產生（`POST /api/cs/exceptions/:exceptionId/handle`），避免「解除事件」與異常池狀態不一致。
+
+### 7.3 司機任務與車輛移動 `[已實作]`
+
+| 項目 | 說明 |
+|------|------|
+| **位置** | `POST /api/driver/tasks/:taskId/accept` |
+| **功能** | 司機接受/開始任務（任務狀態推進） |
+| **認證** | ✅ 需要 Token |
+| **權限** | `driver` |
+
+| 項目 | 說明 |
+|------|------|
+| **位置** | `POST /api/driver/tasks/:taskId/complete` |
+| **功能** | 司機完成任務：推進包裹貨態、到付可回報實收，包裹上車時所在地可更新為貨車編號 |
+| **認證** | ✅ 需要 Token |
+| **權限** | `driver` |
+
+| 項目 | 說明 |
+|------|------|
+| **位置** | `GET /api/driver/vehicle` |
+| **功能** | 取得司機車輛狀態（home/current/vehicle_code） |
+| **認證** | ✅ 需要 Token |
+| **權限** | `driver` |
+
+| 項目 | 說明 |
+|------|------|
+| **位置** | `POST /api/driver/vehicle/move` |
+| **功能** | 司機在地圖上移動到相鄰節點（後端檢查 `edges` 相鄰） |
+| **認證** | ✅ 需要 Token |
+| **權限** | `driver` |
+
+### 7.4 倉儲改路徑 `[規劃中]`
+
+| 項目 | 說明 |
+|------|------|
+| **位置** | `PATCH /api/warehouse/packages/:packageId/route` |
+| **功能** | 以系統計算路徑為建議，允許倉儲員修改包裹後續配送路徑（更新 `packages.route_path`） |
+| **認證** | ✅ 需要 Token |
+| **權限** | `warehouse_staff` |
+
+---
+
+## 附錄：客戶顯示 Stage 狀態機
 
 ```
-created → picked_up → in_transit → sorting → warehouse_in 
-    → warehouse_out → out_for_delivery → delivered
-                                      ↘ exception
+Stage 為「客戶顯示用的大階段」，可能在配送站/轉運中心之間重複循環（多段轉運）。
+
+created → picked_up → in_transit → warehouse_in → sorting → warehouse_out → in_transit → … → delivered
+
+末端配送（最後一哩）：
+warehouse_out → out_for_delivery → delivered
+
+異常（可從任意 stage 發生）：
+ANY → exception
+exception --(客服處理 exception_resolved, action=resume)--> warehouse_in / in_transit
+exception --(客服處理 action=cancel)-->（取消委託；不再派發任務段）
 ```
 
 ---
@@ -1135,4 +1601,18 @@ created → picked_up → in_transit → sorting → warehouse_in
 | 2.1 | 2025-12-10 | 修正：1) 所有 API 增加 403 錯誤處理 2) weight 改為選填 3) content_description 改為必填 4) limit 增加範圍限制 5) 簡化路線 API 6) 計費模組增加月結客戶說明 |
 | 3.0 | 2025-12-10 | 依照類別圖的模組重寫，將系統區重新分為6個模組。修改部分說明使其更符合目前的專案狀況。|
 | 3.1 | 2025-12-13 | 文件整理：更新 README、新增開發指南與測試指南 |
+| 3.2 | 2025-12-22 | 新增 API 實作狀態標記，並補足缺失 API 定義 |
 
+---
+
+## 8. 待補齊 API (TODO)
+
+以下 API 尚未在上述章節詳細定義，需後續補齊：
+
+### 8.1 管理員後台 (Admin KPI & Dashboard)
+- `GET /api/admin/stats`: 取得系統關鍵指標 (KPI)，如今日包裹數、異常數。
+
+### 8.2 使用者管理 (User Mgmt)
+- `POST /api/admin/users/:id/suspend`: 停用帳號
+- `DELETE /api/admin/users/:id`: 刪除帳號 (Soft Delete)
+- `POST /api/admin/users/:id/reset-password`: 重設密碼

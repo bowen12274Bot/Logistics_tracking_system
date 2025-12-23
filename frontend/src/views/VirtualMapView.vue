@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from "vue";
+import { computed, onMounted, reactive, ref, watch } from "vue";
+import { useRoute } from "vue-router";
 import { api, type MapEdge, type MapNode } from "../services/api";
+import { useFullscreen } from "../composables/useFullscreen";
 
 type ViewBox = { x: number; y: number; w: number; h: number };
 
@@ -10,8 +12,13 @@ const error = ref<string | null>(null);
 const nodes = ref<MapNode[]>([]);
 const edges = ref<MapEdge[]>([]);
 const selectedNodeId = ref<string | null>(null);
+const hoveredNodeId = ref<string | null>(null);
+const route = useRoute();
 
 const svgEl = ref<SVGSVGElement | null>(null);
+const stageEl = ref<HTMLDivElement | null>(null);
+const { isSupported: fullscreenSupported, isFullscreen, toggle: toggleFullscreen } =
+  useFullscreen(stageEl);
 
 const nodesById = computed(() => {
   const map = new Map<string, MapNode>();
@@ -21,6 +28,10 @@ const nodesById = computed(() => {
 
 const selectedNode = computed(() =>
   selectedNodeId.value ? nodesById.value.get(selectedNodeId.value) ?? null : null,
+);
+
+const hoveredNode = computed(() =>
+  hoveredNodeId.value ? nodesById.value.get(hoveredNodeId.value) ?? null : null,
 );
 
 function computeInitialViewBox(allNodes: MapNode[]): ViewBox {
@@ -56,6 +67,50 @@ function resetView() {
   viewBox.y = initialViewBox.value.y;
   viewBox.w = initialViewBox.value.w;
   viewBox.h = initialViewBox.value.h;
+}
+
+const zoomScale = computed(() => {
+  const base = Number(initialViewBox.value.w);
+  const cur = Number(viewBox.w);
+  if (!Number.isFinite(base) || !Number.isFinite(cur) || cur <= 0) return 1;
+  return base / cur;
+});
+
+type EdgeTier = "hub_hub" | "hub_reg" | "reg_reg" | "reg_end";
+
+const edgeWidths = computed(() => {
+  const z = zoomScale.value;
+  if (z < 1.15) return { hub_hub: 11, hub_reg: 9, reg_reg: 6, reg_end: 6 } as const;
+  if (z < 2.0) return { hub_hub: 16, hub_reg: 13, reg_reg: 9, reg_end: 9 } as const;
+  return { hub_hub: 23, hub_reg: 19, reg_reg: 13, reg_end: 13 } as const;
+});
+
+function edgeTier(edge: MapEdge): EdgeTier {
+  const a = nodesById.value.get(String(edge.source).trim());
+  const b = nodesById.value.get(String(edge.target).trim());
+  const la = a?.level ?? 3;
+  const lb = b?.level ?? 3;
+  if (la === 1 && lb === 1) return "hub_hub";
+  if ((la === 1 && lb === 2) || (la === 2 && lb === 1)) return "hub_reg";
+  if (la === 2 && lb === 2) return "reg_reg";
+  return "reg_end";
+}
+
+function edgeStrokeWidth(edge: MapEdge) {
+  return edgeWidths.value[edgeTier(edge)];
+}
+
+function edgeOpacity(edge: MapEdge) {
+  const tier = edgeTier(edge);
+  return tier === "hub_hub" ? 0.58 : tier === "hub_reg" ? 0.48 : tier === "reg_reg" ? 0.34 : 0.44;
+}
+
+function edgeStroke(edge: MapEdge) {
+  const tier = edgeTier(edge);
+  if (tier === "hub_hub") return "rgba(100, 116, 139, 0.98)";
+  if (tier === "hub_reg") return "rgba(148, 163, 184, 0.96)";
+  if (tier === "reg_reg") return "rgba(148, 163, 184, 0.9)";
+  return "rgba(71, 85, 105, 0.9)";
 }
 
 function clientToSvg(clientX: number, clientY: number): { x: number; y: number } | null {
@@ -139,11 +194,85 @@ function nodeStyle(node: MapNode) {
   return { r: 55, fill: "#f97316" };
 }
 
+function shouldShowLabel(node: MapNode) {
+  if (node.level <= 2) return true;
+  if (node.id === selectedNodeId.value) return true;
+  if (node.id === hoveredNodeId.value) return true;
+  return zoomScale.value >= 2.2;
+}
+
+const labelPosById = computed(() => {
+  const regs = nodes.value.filter((n) => n.level === 2);
+  const map = new Map<
+    string,
+    { x: number; y: number; anchor: "start" | "middle" | "end"; cls: string }
+  >();
+
+  for (const node of nodes.value) {
+    if (node.level !== 3 || !node.id.startsWith("END_") || regs.length === 0) continue;
+
+    let nearest: MapNode | null = null;
+    let best = Number.POSITIVE_INFINITY;
+    for (const reg of regs) {
+      const dx = node.x - reg.x;
+      const dy = node.y - reg.y;
+      const d2 = dx * dx + dy * dy;
+      if (d2 < best) {
+        best = d2;
+        nearest = reg;
+      }
+    }
+
+    if (!nearest) continue;
+    const dx = node.x - nearest.x;
+    const dy = node.y - nearest.y;
+    const mag = Math.hypot(dx, dy) || 1;
+    const ux = dx / mag;
+    const uy = dy / mag;
+    const offset = 170;
+    const x = node.x + ux * offset;
+    const y = node.y + uy * offset;
+    const anchor: "start" | "end" = ux >= 0 ? "start" : "end";
+    map.set(node.id, { x, y, anchor, cls: "end" });
+  }
+
+  return map;
+});
+
+function labelProps(node: MapNode): {
+  x: number;
+  y: number;
+  anchor: "start" | "middle" | "end";
+  cls: string;
+} {
+  const end = labelPosById.value.get(node.id);
+  if (end) return end;
+  return {
+    x: node.x,
+    y: node.y - nodeStyle(node).r - 60,
+    anchor: "middle",
+    cls: node.level <= 2 ? "major" : "",
+  };
+}
+
 function toggleSelected(id: string) {
   selectedNodeId.value = selectedNodeId.value === id ? null : id;
 }
 
 const viewBoxAttr = computed(() => `${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`);
+
+function focusOnNode(id: string) {
+  const node = nodesById.value.get(id);
+  if (!node) return;
+  selectedNodeId.value = id;
+
+  const targetW = Math.min(initialViewBox.value.w, 3600);
+  const targetH = Math.min(initialViewBox.value.h, 3600);
+  viewBox.w = targetW;
+  viewBox.h = targetH;
+  viewBox.x = node.x - targetW / 2;
+  viewBox.y = node.y - targetH / 2;
+}
 
 onMounted(async () => {
   loading.value = true;
@@ -154,12 +283,24 @@ onMounted(async () => {
     edges.value = data.edges ?? [];
     initialViewBox.value = computeInitialViewBox(nodes.value);
     resetView();
+    const nodeFromQuery = typeof route.query.node === "string" ? route.query.node : "";
+    if (nodeFromQuery) focusOnNode(nodeFromQuery);
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err);
   } finally {
     loading.value = false;
   }
 });
+
+watch(
+  () => route.query.node,
+  (value) => {
+    const id = typeof value === "string" ? value : "";
+    if (!id) return;
+    if (nodes.value.length === 0) return;
+    focusOnNode(id);
+  },
+);
 </script>
 
 <template>
@@ -180,9 +321,19 @@ onMounted(async () => {
     </div>
 
     <div v-else class="map-layout">
-      <div class="card map-canvas">
+      <div ref="stageEl" class="card map-canvas" :class="{ fullscreen: isFullscreen }">
         <div v-if="loading" class="hint">載入地圖中...</div>
         <div v-else class="map-stage">
+          <div class="map-controls">
+            <button
+              v-if="fullscreenSupported"
+              class="ghost-btn"
+              type="button"
+              @click="toggleFullscreen"
+            >
+              {{ isFullscreen ? "退出全螢幕" : "全螢幕" }}
+            </button>
+          </div>
           <svg
             ref="svgEl"
             class="map-svg"
@@ -205,6 +356,9 @@ onMounted(async () => {
                 :x2="nodesById.get(e.target)?.x ?? 0"
                 :y2="nodesById.get(e.target)?.y ?? 0"
                 class="edge-line"
+                :stroke="edgeStroke(e)"
+                :opacity="edgeOpacity(e)"
+                :stroke-width="edgeStrokeWidth(e)"
               />
             </g>
             <g class="nodes">
@@ -214,10 +368,47 @@ onMounted(async () => {
                 class="node"
                 :class="{ selected: n.id === selectedNodeId }"
                 @pointerdown.stop
+                @mouseenter="hoveredNodeId = n.id"
+                @mouseleave="hoveredNodeId = null"
                 @click.stop="toggleSelected(n.id)"
               >
-                <circle :cx="n.x" :cy="n.y" :r="nodeStyle(n).r" :fill="nodeStyle(n).fill" />
-                <text :x="n.x" :y="n.y - nodeStyle(n).r - 60" class="node-label">
+                <circle
+                  v-if="hoveredNodeId === n.id"
+                  :cx="n.x"
+                  :cy="n.y"
+                  :r="nodeStyle(n).r + 58"
+                  class="hover-ring"
+                />
+                <circle
+                  v-if="hoveredNodeId === n.id"
+                  :cx="n.x"
+                  :cy="n.y"
+                  :r="nodeStyle(n).r + 36"
+                  class="hover-glow"
+                />
+                <circle
+                  v-if="n.id === selectedNodeId"
+                  :cx="n.x"
+                  :cy="n.y"
+                  :r="nodeStyle(n).r + 70"
+                  class="node-pulse"
+                />
+                <circle
+                  :cx="n.x"
+                  :cy="n.y"
+                  :r="nodeStyle(n).r"
+                  :fill="nodeStyle(n).fill"
+                  :stroke="n.id === selectedNodeId ? 'rgba(236, 239, 82, 0.85)' : 'rgba(15, 23, 42, 0.18)'"
+                  :stroke-width="n.id === selectedNodeId ? 22 : 12"
+                />
+                <text
+                  v-if="shouldShowLabel(n)"
+                  :x="labelProps(n).x"
+                  :y="labelProps(n).y"
+                  :text-anchor="labelProps(n).anchor"
+                  class="node-label"
+                  :class="labelProps(n).cls"
+                >
                   {{ n.name }}
                 </text>
               </g>
@@ -287,6 +478,7 @@ onMounted(async () => {
   padding: 0;
   overflow: hidden;
   position: relative;
+  background: #ffffff;
 }
 
 .map-stage {
@@ -295,13 +487,24 @@ onMounted(async () => {
   height: 100%;
 }
 
+.map-controls {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 5;
+  display: flex;
+  gap: 8px;
+  pointer-events: auto;
+}
+
 .map-svg {
   width: 100%;
   height: 100%;
   display: block;
   cursor: grab;
   background:
-    radial-gradient(circle at 1px 1px, rgba(148, 163, 184, 0.35) 1px, transparent 0) 0 0 / 26px 26px;
+    radial-gradient(circle at 1px 1px, rgba(148, 163, 184, 0.35) 1px, transparent 0) 0 0 / 26px 26px,
+    #ffffff;
 }
 
 .map-svg:active {
@@ -309,17 +512,27 @@ onMounted(async () => {
 }
 
 .edge-line {
-  stroke: rgba(148, 163, 184, 0.55);
-  stroke-width: 18;
-  vector-effect: non-scaling-stroke;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .node-label {
   font-size: 120px;
   fill: rgba(15, 23, 42, 0.85);
-  text-anchor: middle;
   pointer-events: none;
   user-select: none;
+  paint-order: stroke;
+  stroke: rgba(255, 255, 255, 0.85);
+  stroke-width: 22px;
+}
+
+.node-label.major {
+  font-weight: 700;
+}
+
+.node-label.end {
+  font-size: 92px;
+  stroke-width: 18px;
 }
 
 .node.selected .node-label {
@@ -327,14 +540,70 @@ onMounted(async () => {
 }
 
 .node circle {
-  stroke: rgba(15, 23, 42, 0.2);
-  stroke-width: 16;
-  vector-effect: non-scaling-stroke;
+  vector-effect: none;
 }
 
-.node.selected circle {
-  stroke: rgba(236, 239, 82, 0.715);
-  stroke-width: 16;
+.node {
+  cursor: pointer;
+}
+
+.hover-ring {
+  fill: none;
+  stroke: rgba(15, 23, 42, 0.22);
+  stroke-width: 18;
+  opacity: 0.9;
+  pointer-events: none;
+  vector-effect: none;
+}
+
+.hover-glow {
+  fill: none;
+  stroke: rgba(59, 130, 246, 0.6);
+  stroke-width: 22;
+  opacity: 0.28;
+  pointer-events: none;
+  vector-effect: none;
+  filter: drop-shadow(0 0 14px rgba(59, 130, 246, 0.32));
+  animation: hoverPulse 1200ms ease-out infinite;
+}
+
+@keyframes hoverPulse {
+  0% {
+    opacity: 0.26;
+    stroke-width: 26;
+  }
+  70% {
+    opacity: 0.10;
+    stroke-width: 14;
+  }
+  100% {
+    opacity: 0.18;
+    stroke-width: 14;
+  }
+}
+
+.node-pulse {
+  fill: none;
+  stroke: rgba(99, 102, 241, 0.85);
+  stroke-width: 34;
+  opacity: 0.2;
+  pointer-events: none;
+  animation: nodePulse 1600ms ease-out infinite;
+}
+
+@keyframes nodePulse {
+  0% {
+    opacity: 0.22;
+    stroke-width: 40;
+  }
+  70% {
+    opacity: 0.05;
+    stroke-width: 8;
+  }
+  100% {
+    opacity: 0;
+    stroke-width: 8;
+  }
 }
 
 .map-overlay {
@@ -346,6 +615,16 @@ onMounted(async () => {
   overflow: auto;
   background: rgba(255, 255, 255, 0.88);
   backdrop-filter: blur(8px);
+}
+
+.fullscreen {
+  height: 100vh;
+  background: #ffffff;
+}
+
+:fullscreen .map-overlay {
+  top: 18px;
+  right: 18px;
 }
 
 .legend {

@@ -22,6 +22,7 @@ export class TrackingPublic extends OpenAPIRoute {
               tracking_number: z.string(),
               current_status: z.string(),
               current_location: z.string().nullable(),
+              updated_at: z.string().nullable(),
               estimated_delivery: z.string().nullable(),
               events: z.array(z.object({
                 status: z.string(),
@@ -44,12 +45,13 @@ export class TrackingPublic extends OpenAPIRoute {
 
     // 查詢包裹
     const pkg = await c.env.DB.prepare(
-      "SELECT id, tracking_number, status, estimated_delivery FROM packages WHERE tracking_number = ?"
+      "SELECT id, tracking_number, status, estimated_delivery, created_at FROM packages WHERE tracking_number = ?"
     ).bind(trackingNumber).first<{
       id: string;
       tracking_number: string;
       status: string;
       estimated_delivery: string | null;
+      created_at: string | null;
     }>();
 
     if (!pkg) {
@@ -76,6 +78,7 @@ export class TrackingPublic extends OpenAPIRoute {
       tracking_number: pkg.tracking_number,
       current_status: pkg.status || "created",
       current_location: latestEvent?.location || null,
+      updated_at: latestEvent?.events_at ?? pkg.created_at ?? null,
       estimated_delivery: pkg.estimated_delivery,
       events: (events.results || []).map(e => ({
         status: e.delivery_status,

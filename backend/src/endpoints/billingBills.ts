@@ -1,6 +1,7 @@
 import { OpenAPIRoute } from "chanfana";
 import { z } from "zod";
 import type { AppContext } from "../types";
+import { requireAuth } from "../utils/authUtils";
 
 // GET /api/billing/bills - 帳單列表
 export class BillingBillList extends OpenAPIRoute {
@@ -30,28 +31,9 @@ export class BillingBillList extends OpenAPIRoute {
   };
 
   async handle(c: AppContext) {
-    const authHeader = c.req.header("Authorization");
-    
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return c.json({ error: "Token 缺失" }, 401);
-    }
-
-    const token = authHeader.replace("Bearer ", "");
-    const tokenRecord = await c.env.DB.prepare(
-      "SELECT user_id FROM tokens WHERE id = ?"
-    ).bind(token).first<{ user_id: string }>();
-
-    if (!tokenRecord) {
-      return c.json({ error: "Token 無效" }, 401);
-    }
-
-    const user = await c.env.DB.prepare(
-      "SELECT user_type, user_class FROM users WHERE id = ?"
-    ).bind(tokenRecord.user_id).first<{ user_type: string; user_class: string }>();
-
-    if (!user) {
-      return c.json({ error: "使用者不存在" }, 401);
-    }
+    const auth = await requireAuth(c);
+    if (auth.ok === false) return (auth as any).res;
+    const user = auth.user;
 
     const query = c.req.query();
 
@@ -61,13 +43,13 @@ export class BillingBillList extends OpenAPIRoute {
     const canViewAll = isEmployee && allowedEmployeeRoles.includes(user.user_class);
 
     // 如果客戶嘗試用 customer_id 查別人
-    if (!canViewAll && query.customer_id && query.customer_id !== tokenRecord.user_id) {
+    if (!canViewAll && query.customer_id && query.customer_id !== user.id) {
       return c.json({ error: "無權查詢他人帳單" }, 403);
     }
 
     const customerId = canViewAll && query.customer_id 
       ? query.customer_id 
-      : (canViewAll ? null : tokenRecord.user_id);
+      : (canViewAll ? null : user.id);
 
     let sql = `
       SELECT mb.id, mb.customer_id, mb.cycle_start, mb.cycle_end, 
@@ -162,28 +144,9 @@ export class BillingBillDetail extends OpenAPIRoute {
   };
 
   async handle(c: AppContext) {
-    const authHeader = c.req.header("Authorization");
-    
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return c.json({ error: "Token 缺失" }, 401);
-    }
-
-    const token = authHeader.replace("Bearer ", "");
-    const tokenRecord = await c.env.DB.prepare(
-      "SELECT user_id FROM tokens WHERE id = ?"
-    ).bind(token).first<{ user_id: string }>();
-
-    if (!tokenRecord) {
-      return c.json({ error: "Token 無效" }, 401);
-    }
-
-    const user = await c.env.DB.prepare(
-      "SELECT user_type, user_class FROM users WHERE id = ?"
-    ).bind(tokenRecord.user_id).first<{ user_type: string; user_class: string }>();
-
-    if (!user) {
-      return c.json({ error: "使用者不存在" }, 401);
-    }
+    const auth = await requireAuth(c);
+    if (auth.ok === false) return (auth as any).res;
+    const user = auth.user;
 
     const { billId } = c.req.param() as { billId: string };
 
@@ -204,7 +167,7 @@ export class BillingBillDetail extends OpenAPIRoute {
     const allowedRoles = ["customer_service", "admin"];
     const canViewAll = isEmployee && allowedRoles.includes(user.user_class);
 
-    if (!canViewAll && bill.customer_id !== tokenRecord.user_id) {
+    if (!canViewAll && bill.customer_id !== user.id) {
       return c.json({ error: "無權查詢此帳單" }, 403);
     }
 

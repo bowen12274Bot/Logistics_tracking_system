@@ -1,63 +1,126 @@
 import { OpenAPIRoute, Str } from "chanfana";
 import { z } from "zod";
 import { type AppContext, Package, PackageEvent } from "../types";
+import { requireAuth } from "../utils/authUtils";
+import { getActiveException } from "../lib/packageGuards";
+
 
 export class PackageStatusQuery extends OpenAPIRoute {
 	schema = {
 		tags: ["Packages"],
-		summary: "貨態查詢 API (T4)",
-		description: "查詢包裹狀態與事件歷程。客戶只能查自己的包裹。",
+		summary: "Package status query (T4)",
+		description: "Query a package and its event history (customer can only access own packages).",
+		security: [{ bearerAuth: [] }],
 		request: {
 			params: z.object({
-				packageId: Str({ description: "包裹 ID 或追蹤碼" }),
+				packageId: Str({ description: "Package ID or tracking number" }),
 			}),
 		},
 		responses: {
 			"200": {
-				description: "返回包裹資訊與事件列表",
+				description: "OK",
 				content: {
 					"application/json": {
 						schema: z.object({
 							success: z.boolean(),
 							package: Package,
 							events: z.array(PackageEvent),
+							active_exception: z
+								.object({
+									id: z.string(),
+									reason_code: z.string().nullable(),
+									description: z.string().nullable(),
+									reported_role: z.string(),
+									reported_at: z.string().nullable(),
+									location: z.string().nullable(),
+								})
+								.nullable(),
+							vehicle: z
+								.object({
+									id: z.string(),
+									vehicle_code: z.string(),
+								})
+								.nullable(),
 						}),
 					},
 				},
 			},
-			"404": {
-				description: "包裹不存在",
-			},
+			"401": { description: "Unauthorized" },
+			"403": { description: "Forbidden" },
+			"404": { description: "Not found" },
 		},
 	};
 
 	async handle(c: AppContext) {
+		const auth = await requireAuth(c);
+		if (auth.ok === false) return (auth as any).res;
+
 		const data = await this.getValidatedData<typeof this.schema>();
 		const { packageId } = data.params;
 
-		// Try to find by ID or tracking_number
 		let pkg = await c.env.DB.prepare("SELECT * FROM packages WHERE id = ?")
 			.bind(packageId)
-			.first();
-
+			.first<any>();
 		if (!pkg) {
-			pkg = await c.env.DB.prepare(
-				"SELECT * FROM packages WHERE tracking_number = ?"
-			)
+			pkg = await c.env.DB.prepare("SELECT * FROM packages WHERE tracking_number = ?")
 				.bind(packageId)
-				.first();
+				.first<any>();
 		}
-
 		if (!pkg) {
 			return c.json({ success: false, error: "Package not found" }, 404);
 		}
 
-		// Get all events for this package, ordered by time
+		if (auth.user.user_type === "customer" && pkg.customer_id !== auth.user.id) {
+			return c.json({ error: "Forbidden" }, 403);
+		}
+
 		const events = await c.env.DB.prepare(
 			"SELECT * FROM package_events WHERE package_id = ? ORDER BY events_at ASC"
 		)
 			.bind(pkg.id)
 			.all();
+
+		const activeException = await getActiveException(c.env.DB, pkg.id);
+		const activeExceptionForUser =
+			activeException && auth.user.user_type === "customer"
+				? {
+						id: activeException.id,
+						reason_code: activeException.reason_code,
+						description: null,
+						reported_role: activeException.reported_role,
+						reported_at: activeException.reported_at,
+						location: activeException.location,
+					}
+				: activeException;
+
+		let vehicle = await c.env.DB.prepare(
+			`
+			SELECT v.id AS id, v.vehicle_code AS vehicle_code
+			FROM vehicle_cargo vc
+			JOIN vehicles v ON v.id = vc.vehicle_id
+			WHERE vc.package_id = ? AND vc.unloaded_at IS NULL
+			ORDER BY vc.loaded_at DESC
+			LIMIT 1
+			`,
+		)
+			.bind(pkg.id)
+			.first<{ id: string; vehicle_code: string }>();
+
+		// If not loaded yet, but the latest event location is a TRUCK_ code (driver en-route to pickup),
+		// resolve it to a vehicle record so the customer UI can show truck code.
+		if (!vehicle) {
+			const latest = await c.env.DB.prepare(
+				"SELECT location FROM package_events WHERE package_id = ? ORDER BY events_at DESC LIMIT 1",
+			)
+				.bind(pkg.id)
+				.first<{ location: string | null }>();
+			const loc = String(latest?.location ?? "").trim();
+			if (/^TRUCK_/i.test(loc)) {
+				vehicle = await c.env.DB.prepare("SELECT id, vehicle_code FROM vehicles WHERE UPPER(vehicle_code) = ? LIMIT 1")
+					.bind(loc.toUpperCase())
+					.first<{ id: string; vehicle_code: string }>();
+			}
+		}
 
 		let parsedPackage = pkg;
 		if (pkg.description_json) {
@@ -68,8 +131,8 @@ export class PackageStatusQuery extends OpenAPIRoute {
 					if ((pkg as any).special_handling) {
 						specialHandling = JSON.parse((pkg as any).special_handling as string);
 					}
-				} catch (err) {
-					// ignore parse error, fallback to description
+				} catch {
+					// ignore parse error
 				}
 
 				parsedPackage = {
@@ -86,7 +149,7 @@ export class PackageStatusQuery extends OpenAPIRoute {
 					route_path: pkg.route_path ?? description.route_path,
 					description_json: description,
 				};
-			} catch (err) {
+			} catch {
 				parsedPackage = pkg;
 			}
 		}
@@ -95,25 +158,27 @@ export class PackageStatusQuery extends OpenAPIRoute {
 			success: true,
 			package: parsedPackage,
 			events: events.results,
+			active_exception: activeExceptionForUser ?? null,
+			vehicle: vehicle ? { id: String(vehicle.id), vehicle_code: String(vehicle.vehicle_code) } : null,
 		};
 	}
 }
 
-// List packages endpoint (for querying multiple)
 export class PackageList extends OpenAPIRoute {
 	schema = {
 		tags: ["Packages"],
-		summary: "包裹列表查詢",
-		description: "查詢包裹列表，可依客戶 ID 篩選",
+		summary: "Package list query",
+		description: "Customer can only list own packages; employees can list all (temporary policy).",
+		security: [{ bearerAuth: [] }],
 		request: {
 			query: z.object({
-				customer_id: Str({ description: "客戶 ID", required: false }),
+				customer_id: Str({ description: "Customer ID", required: false }),
 				limit: z.coerce.number().int().default(20),
 			}),
 		},
 		responses: {
 			"200": {
-				description: "返回包裹列表",
+				description: "OK",
 				content: {
 					"application/json": {
 						schema: z.object({
@@ -123,19 +188,26 @@ export class PackageList extends OpenAPIRoute {
 					},
 				},
 			},
+			"401": { description: "Unauthorized" },
+			"403": { description: "Forbidden" },
 		},
 	};
 
 	async handle(c: AppContext) {
+		const auth = await requireAuth(c);
+		if (auth.ok === false) return (auth as any).res;
+
 		const data = await this.getValidatedData<typeof this.schema>();
 		const { customer_id, limit } = data.query;
+
+		const effectiveCustomerId = auth.user.user_type === "customer" ? auth.user.id : customer_id;
 
 		let query = "SELECT * FROM packages";
 		const params: any[] = [];
 
-		if (customer_id) {
+		if (effectiveCustomerId) {
 			query += " WHERE customer_id = ?";
-			params.push(customer_id);
+			params.push(effectiveCustomerId);
 		}
 
 		query += ` LIMIT ${limit}`;
@@ -150,7 +222,7 @@ export class PackageList extends OpenAPIRoute {
 						if ((pkg as any).special_handling) {
 							specialHandling = JSON.parse((pkg as any).special_handling as string);
 						}
-					} catch (err) {
+					} catch {
 						// ignore parse error
 					}
 					return {
@@ -159,8 +231,7 @@ export class PackageList extends OpenAPIRoute {
 						sender: (pkg as any).sender ?? (pkg as any).sender_name ?? description.sender,
 						receiver: (pkg as any).receiver ?? (pkg as any).receiver_name ?? description.receiver,
 						special_handling: specialHandling,
-						declared_value:
-							(pkg as any).declared_value ?? description.declared_value,
+						declared_value: (pkg as any).declared_value ?? description.declared_value,
 						delivery_time: pkg.delivery_time ?? description.delivery_time,
 						pickup_date: description.pickup_date,
 						pickup_time_window: description.pickup_time_window,
@@ -168,7 +239,7 @@ export class PackageList extends OpenAPIRoute {
 						route_path: pkg.route_path ?? description.route_path,
 						description_json: description,
 					};
-				} catch (err) {
+				} catch {
 					return pkg;
 				}
 			}

@@ -108,6 +108,11 @@ wrangler dev
 |--------|----------|------|------|
 | `GET` | `/api/driver/tasks` | 取得今日工作清單 | ✅ (driver) |
 | `POST` | `/api/driver/packages/:packageId/status` | 更新配送狀態 | ✅ (driver) |
+| `POST` | `/api/driver/tasks/:taskId/accept` | 接受/開始任務（規劃中） | ✅ (driver) |
+| `POST` | `/api/driver/tasks/:taskId/complete` | 完成任務並推進貨態（規劃中） | ✅ (driver) |
+| `GET` | `/api/driver/vehicle` | 取得司機車輛狀態（home/current/vehicle_code）（規劃中） | ✅ (driver) |
+| `POST` | `/api/driver/vehicle/move` | 司機移動到相鄰節點（規劃中） | ✅ (driver) |
+| `POST` | `/api/driver/packages/:packageId/exception` | 司機異常申報（規劃中） | ✅ (driver) |
 
 ---
 
@@ -115,7 +120,18 @@ wrangler dev
 
 | Method | Endpoint | 描述 | 認證 |
 |--------|----------|------|------|
-| `POST` | `/api/warehouse/batch-operation` | 批次入庫/出庫 | ✅ (warehouse) |
+| `POST` | `/api/warehouse/batch-operation` | 批次入庫/出庫 | ✅ (warehouse_staff) |
+| `PATCH` | `/api/warehouse/packages/:packageId/route` | 調整包裹後續配送路徑（規劃中） | ✅ (warehouse_staff) |
+| `POST` | `/api/warehouse/packages/:packageId/exception` | 倉儲異常申報（規劃中） | ✅ (warehouse_staff) |
+
+---
+
+### 🎧 客服模組 (Customer Service Module)
+
+| Method | Endpoint | 描述 | 認證 |
+|--------|----------|------|------|
+| `GET` | `/api/cs/exceptions` | 異常池列表（未處理/已處理）（規劃中） | ✅ (customer_service) |
+| `POST` | `/api/cs/exceptions/:exceptionId/handle` | 標示已處理並填寫處理報告（規劃中） | ✅ (customer_service) |
 
 ---
 
@@ -197,13 +213,17 @@ npm test -- --watch
 | `0003_payments.sql` | 付款表 (payments) |
 | `0004_monthly_billing.sql` | 月結帳單表 (monthly_billing) |
 | `0005_monthly_billing_items.sql` | 帳單明細表 |
-| `0006_virtual_map.sql` | 虛擬地圖 (nodes/edges) |
-| `0007_packages_add_columns.sql` | packages 新增欄位 |
-| `0008_users_add_columns.sql` | users 新增欄位 |
+| `0006_virtual_map_schema.sql` | 虛擬地圖 Schema (nodes/edges) |
+| `0007_virtual_map_seed.sql` | 虛擬地圖 seed data |
+| `0008_contract_applications.sql` | 合約申請表 |
 | `0009_tokens.sql` | 認證 Token 表 |
-| `0010_contract_applications.sql` | 合約申請表 |
-| `0011_monthly_billing_add_columns.sql` | monthly_billing 新增欄位 |
-| `0012_system_errors.sql` | 系統錯誤表 |
+| `0010_system_errors.sql` | 系統錯誤表 |
+| `0011_seed_test_users.sql` | 測試帳號/員工配置 seed |
+| `0012_package_exceptions.sql` | 異常池表 (package_exceptions) |
+| `0013_delivery_tasks.sql` | 司機任務表 (delivery_tasks) |
+| `0014_vehicles.sql` | 車輛/位置表 (vehicles) |
+
+> 規劃中資料表/欄位：`package_events` 付款資訊欄位擴充。
 
 ### 套用遷移 (Apply Migrations)
 

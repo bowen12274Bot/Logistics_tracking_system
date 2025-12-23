@@ -22,3 +22,5 @@
   description_json TEXT,
   created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
+
+CREATE INDEX IF NOT EXISTS idx_packages_status ON packages(status);

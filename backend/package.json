@@ -6,18 +6,24 @@
     "deploy": "wrangler deploy",
     "dev": "wrangler dev",
     "start": "wrangler dev",
+    "dev:clean": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/stop-local-workers.ps1 -Port 8787",
+    "dev:reset": "npm run dev:clean && wrangler dev",
     "cf-typegen": "wrangler types",
-    "test": "vitest"
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
+    "@types/luxon": "^3.7.1",
     "chanfana": "^2.6.3",
     "hono": "^4.6.20",
+    "luxon": "^3.7.2",
     "zod": "^3.24.1"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.10.14",
     "@types/node": "22.13.0",
     "@types/service-worker-mock": "^2.0.4",
+    "@vitest/coverage-istanbul": "^3.2.4",
     "vitest": "^3.2.4",
     "wrangler": "^4.51.0"
   }

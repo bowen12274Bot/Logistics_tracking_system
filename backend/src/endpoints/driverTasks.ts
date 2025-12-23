@@ -1,6 +1,7 @@
 import { OpenAPIRoute } from "chanfana";
 import { z } from "zod";
 import type { AppContext } from "../types";
+import { getTerminalStatus, hasActiveException } from "../lib/packageGuards";
 
 // GET /api/driver/tasks - 駕駛員工作清單
 export class DriverTaskList extends OpenAPIRoute {
@@ -116,7 +117,7 @@ export class DriverUpdateStatus extends OpenAPIRoute {
         content: {
           "application/json": {
             schema: z.object({
-              status: z.enum(["picked_up", "in_transit", "out_for_delivery", "delivered", "exception"]),
+              status: z.enum(["picked_up", "in_transit", "out_for_delivery", "delivered"]),
               note: z.string().optional(),
               location: z.string().optional(),
             }),
@@ -164,12 +165,13 @@ export class DriverUpdateStatus extends OpenAPIRoute {
       return c.json({ error: "僅駕駛員可使用此功能" }, 403);
     }
 
-    const { packageId } = c.req.param() as { packageId: string };
-    const body = await c.req.json<{
-      status: string;
-      note?: string;
-      location?: string;
-    }>();
+    const data = await this.getValidatedData<typeof this.schema>();
+    const { packageId } = data.params as { packageId: string };
+    const body = data.body as { status: string; note?: string; location?: string };
+
+    if (body.status === "exception") {
+      return c.json({ error: "請使用 /api/driver/packages/:packageId/exception 申報異常" }, 400);
+    }
 
     // 檢查包裹是否存在
     const pkg = await c.env.DB.prepare(
@@ -180,10 +182,13 @@ export class DriverUpdateStatus extends OpenAPIRoute {
       return c.json({ error: "包裹不存在" }, 404);
     }
 
-    // 更新包裹狀態
-    await c.env.DB.prepare(
-      "UPDATE packages SET status = ? WHERE id = ?"
-    ).bind(body.status, packageId).run();
+    const terminal = await getTerminalStatus(c.env.DB, packageId);
+    if (terminal) {
+      return c.json({ error: "Package is terminal", status: terminal }, 409);
+    }
+    if (await hasActiveException(c.env.DB, packageId)) {
+      return c.json({ error: "Package has active exception" }, 409);
+    }
 
     // 新增事件記錄
     const eventId = crypto.randomUUID();

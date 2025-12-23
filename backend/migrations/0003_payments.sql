@@ -7,5 +7,6 @@ CREATE TABLE IF NOT EXISTS payments (
   special_fee INTEGER,
   calculated_at TEXT,
   paid_at TEXT,
+  collected_by TEXT,
   package_id TEXT REFERENCES packages(id)
 );
