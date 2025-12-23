@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref } from "vue";
 import { api, type DeliveryTaskRecord, type MapEdge, type MapNode, type VehicleRecord } from "../services/api";
 import { useFullscreen } from "../composables/useFullscreen";
+import { selectableReasonsFor } from "../lib/exceptionReasons";
 const truckIconUrl = new URL("../assets/truck.png", import.meta.url).href;
 
 type ViewBox = { x: number; y: number; w: number; h: number };
@@ -281,15 +282,8 @@ const handoffAtCurrentNode = computed(() => {
 
 const exceptionModalOpen = ref(false);
 const exceptionTarget = ref<{ packageId: string; taskId?: string } | null>(null);
-const exceptionReasons = [
-  { code: "damaged", label: "貨損 / 包裝破損" },
-  { code: "lost", label: "貨件遺失 / 找不到包裹" },
-  { code: "delay", label: "延遲送達 / 塞車" },
-  { code: "refused", label: "收件人拒收 / 無法收件" },
-  { code: "wrong_address", label: "地址錯誤 / 無人應門" },
-  { code: "other", label: "其他（請詳述）" },
-];
-const exceptionForm = reactive({ reason_code: "", description: "", location: "" });
+const exceptionReasons = selectableReasonsFor("driver").map((r) => ({ code: r.code, label: r.label }));
+const exceptionForm = reactive({ reason_code: "", description: "", location_mode: "node" as "node" | "truck" });
 
 const hoveredNode = computed(() => {
   const id = hoveredNodeId.value;
@@ -439,7 +433,8 @@ function startException(task: DeliveryTaskRecord) {
   exceptionTarget.value = { packageId: task.package_id, taskId: task.id };
   exceptionForm.reason_code = "";
   exceptionForm.description = "";
-  exceptionForm.location = currentNodeId.value ?? "";
+  const onTruck = cargoPackageIds.value.has(String(task.package_id));
+  exceptionForm.location_mode = onTruck ? "truck" : "node";
   exceptionModalOpen.value = true;
 }
 
@@ -458,9 +453,12 @@ async function submitException() {
   arriveError.value = null;
   try {
     await api.driverReportPackageException(exceptionTarget.value.packageId, {
-      reason_code: exceptionForm.reason_code.trim() || undefined,
+      reason_code: exceptionForm.reason_code.trim(),
       description: exceptionForm.description.trim(),
-      location: (exceptionForm.location || currentNodeId.value || "").trim() || undefined,
+      location:
+        exceptionForm.location_mode === "truck"
+          ? (truckCode.value || "").trim() || undefined
+          : (currentNodeId.value || "").trim() || undefined,
     });
     exceptionModalOpen.value = false;
     exceptionTarget.value = null;
@@ -1034,6 +1032,7 @@ onMounted(async () => {
                   </div>
                   <div class="hint">{{ taskRouteLabel(t) }}</div>
                   <div class="hint">配送時效：{{ t.delivery_time ?? "未設定" }} · {{ paymentLabel(t) }}{{ paymentDueDisplay(t) }}</div>
+                  <div v-if="t.instructions" class="hint">客服指示：{{ t.instructions }}</div>
                   <div class="arrive-task-actions">
                     <button
                       v-if="String(t.status ?? '').trim().toLowerCase() !== 'in_progress'"
@@ -1071,6 +1070,7 @@ onMounted(async () => {
                   </div>
                   <div class="hint">{{ taskRouteLabel(t) }}</div>
                   <div class="hint">配送時效：{{ t.delivery_time ?? "未設定" }} · {{ paymentLabel(t) }}{{ paymentDueDisplay(t) }}</div>
+                  <div v-if="t.instructions" class="hint">客服指示：{{ t.instructions }}</div>
                   <div class="arrive-task-actions">
                     <button class="primary-btn small-btn" type="button" :disabled="arriveBusy" @click="dropoffTask(t)">
                       卸貨完成
@@ -1095,6 +1095,7 @@ onMounted(async () => {
                   <div class="hint">
                     配送時效：{{ t.delivery_time ?? "未設定" }} · {{ paymentLabel(t) }}{{ paymentDueDisplay(t) }}
                   </div>
+                  <div v-if="t.instructions" class="hint">客服指示：{{ t.instructions }}</div>
                   <div class="arrive-task-actions" style="margin-top: 8px">
                     <button class="ghost-btn small-btn" type="button" :disabled="arriveBusy" @click="enrouteTask(t)">
                       正在前往
@@ -1141,8 +1142,11 @@ onMounted(async () => {
                 </select>
               </label>
               <label class="hint" style="display: grid; gap: 6px; margin-top: 10px">
-                發生位置（預設為當前節點，可修改）
-                <input v-model="exceptionForm.location" class="text-input" placeholder="REG_12 / HUB_3 / END_HOME_5" />
+                發生位置（貨車 / 節點二選一）
+                <select v-model="exceptionForm.location_mode" class="text-input">
+                  <option value="truck">車上（{{ truckCode || "-" }}）</option>
+                  <option value="node">節點（{{ currentNodeId || "-" }}）</option>
+                </select>
               </label>
               <label class="hint" style="display: grid; gap: 6px; margin-top: 10px">
                 說明（必填，請描述狀況與處理）

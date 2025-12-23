@@ -3,6 +3,7 @@ import { computed, nextTick, onMounted, reactive, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { api, type MapNode, type PackageEventRecord, type TrackingSearchResponse } from "../services/api";
 import { useAuthStore } from "../stores/auth";
+import { exceptionReasonLabel } from "../lib/exceptionReasons";
 
 const auth = useAuthStore();
 const router = useRouter();
@@ -58,6 +59,7 @@ const detailByPackageId = ref<
       events: PackageEventRecord[];
       latestDetails: string | null;
       vehicleCode: string | null;
+      activeReasonCode: string | null;
     }
   >
 >({});
@@ -122,17 +124,40 @@ const estimatedDeliveryFallback = (pkg: any) => {
   return addDays(pkg.created_at, days);
 };
 
-const statusBadge = (status?: string | null) => (status === "exception" ? "異常" : "正常");
+const statusBadge = (status?: string | null) => {
+  const s = String(status ?? "").trim().toLowerCase();
+  if (s === "delivery_failed") return "配送失敗";
+  if (s === "exception") return "異常";
+  return "正常";
+};
 
-const statusKeyForPackage = (pkg: any): "ok" | "exception" => {
+const statusKeyForPackage = (pkg: any): "ok" | "exception" | "failed" => {
   const details = detailByPackageId.value[pkg.id];
   const latest = details?.events?.length ? details.events[details.events.length - 1] : null;
   const latestStatus = String(latest?.delivery_status ?? "").trim().toLowerCase();
+  if (latestStatus === "delivery_failed") return "failed";
   if (["exception", "abnormal", "error", "failed"].includes(latestStatus)) return "exception";
-  return String(pkg.status ?? "").trim().toLowerCase() === "exception" ? "exception" : "ok";
+  const pkgStatus = String(pkg.status ?? "").trim().toLowerCase();
+  if (pkgStatus === "delivery_failed") return "failed";
+  if (pkgStatus === "exception") return "exception";
+  return "ok";
 };
 
-const statusLabel = (key: "ok" | "exception") => (key === "exception" ? "異常" : "正常");
+const statusLabel = (key: "ok" | "exception" | "failed") =>
+  key === "failed" ? "配送失敗" : key === "exception" ? "異常" : "正常";
+
+const reasonLabel = exceptionReasonLabel;
+
+const statusInfoText = (pkg: any) => {
+  const key = statusKeyForPackage(pkg);
+  const details = detailByPackageId.value[pkg.id];
+  if (key === "failed") return "配送失敗（已終止）";
+  if (key === "exception") {
+    const code = details?.activeReasonCode ?? null;
+    return code ? `異常 (${reasonLabel(code)})` : "異常處理中";
+  }
+  return details?.latestDetails || "-";
+};
 
 const displayNodeText = (nodeId?: string | null) => {
   if (!nodeId) return "-";
@@ -212,7 +237,7 @@ const ensurePackageDetails = async (pkgId: string) => {
   if (detailByPackageId.value[pkgId]) return;
   detailByPackageId.value = {
     ...detailByPackageId.value,
-    [pkgId]: { isLoading: true, error: null, events: [], latestDetails: null, vehicleCode: null },
+    [pkgId]: { isLoading: true, error: null, events: [], latestDetails: null, vehicleCode: null, activeReasonCode: null },
   };
 
   try {
@@ -228,6 +253,7 @@ const ensurePackageDetails = async (pkgId: string) => {
         events: sorted,
         latestDetails: latest?.delivery_details ?? null,
         vehicleCode: res.vehicle?.vehicle_code ?? null,
+        activeReasonCode: res.active_exception?.reason_code ?? null,
       },
     };
   } catch (err) {
@@ -239,6 +265,7 @@ const ensurePackageDetails = async (pkgId: string) => {
         events: [],
         latestDetails: null,
         vehicleCode: null,
+        activeReasonCode: null,
       },
     };
   }
@@ -277,7 +304,10 @@ watch(
 
   const nodeTimeById = new Map<string, string>();
   let originAtFromEvent: string | null = null;
-	  for (const evt of events) {
+ 	    for (const evt of events) {
+        const status = String(evt.delivery_status ?? "").trim().toLowerCase();
+        // exception_resolved is a CS decision event; it should not advance the customer-visible progress timeline.
+        if (status === "exception_resolved") continue;
 	    const loc = String(evt.location ?? "").trim();
 	    if (!loc) continue;
 	    if (!baseNodes.includes(loc)) continue;
@@ -341,6 +371,9 @@ watch(
 	  const segmentTruckIds = nodes.length > 1 ? nodes.slice(0, -1).map(() => null as string | null) : [];
 	  const segmentExceptionFlags = segmentTruckIds.map(() => false);
 	  const nodeExceptions: Record<string, true> = {};
+	  const nodeFailures: Record<string, true> = {};
+	  const segmentFailureFlags = segmentTruckIds.map(() => false);
+	  const segmentIndexByTruckId: Record<string, number> = {};
 
   // Line (in_transit) state: assign truck id to the segment that matches the destination in event details.
   // This keeps segment tooltips stable across refreshes and after arrival events (picked_up/warehouse_in/etc).
@@ -363,24 +396,59 @@ watch(
       const segIndex = destIndex - 1;
       if (segIndex < 0 || segIndex >= segmentTruckIds.length) continue;
       segmentTruckIds[segIndex] = truckId;
+      segmentIndexByTruckId[truckId] = segIndex;
 	    }
 	  }
 
-	  // Exception states:
-	  // - location is a nodeId -> mark that node as exception (point)
+	  // Exception/Failure states:
+	  // - location is a nodeId -> mark that node as exception/failure (point)
 	  // - location is a truckId + details has destination -> mark that segment as exception (line)
+	  // - delivery_failed + truckId -> try map via the latest in_transit segment for this truckId
 	  if (events.length) {
+      const lastResolvedAt = (() => {
+        let latest: number | null = null;
+        for (const evt of events) {
+          const status = String(evt.delivery_status ?? "").trim().toLowerCase();
+          if (!["exception_resolved", "delivery_failed"].includes(status)) continue;
+          const t = Date.parse(String(evt.events_at ?? ""));
+          if (!Number.isFinite(t)) continue;
+          if (latest === null || t > latest) latest = t;
+        }
+        return latest;
+      })();
+
 	    for (const evt of events) {
 	      const status = String(evt.delivery_status ?? "").trim().toLowerCase();
-	      if (!["exception", "abnormal", "error", "failed"].includes(status)) continue;
+	      const isException = ["exception", "abnormal", "error", "failed"].includes(status);
+	      const isFailure = status === "delivery_failed";
+	      if (!isException && !isFailure) continue;
+
+        if (isException && lastResolvedAt !== null) {
+          const t = Date.parse(String(evt.events_at ?? ""));
+          if (Number.isFinite(t) && t <= lastResolvedAt) continue;
+        }
 
 	      const loc = String(evt.location ?? "").trim();
 	      const details = String(evt.delivery_details ?? "").trim();
 
 		      if (loc && baseNodes.includes(loc)) {
 		        const nodeIndex = nodes.findIndex((n) => n === loc);
-		        if (nodeIndex >= currentIndex) nodeExceptions[loc] = true;
+		        if (nodeIndex >= currentIndex) {
+		          if (isFailure) nodeFailures[loc] = true;
+		          else nodeExceptions[loc] = true;
+		        }
 		      }
+
+	      if (loc && /^TRUCK_/i.test(loc)) {
+	        const segIndex = segmentIndexByTruckId[loc];
+	        if (typeof segIndex === "number" && segIndex >= 0 && segIndex < segmentExceptionFlags.length) {
+	          if (isFailure) segmentFailureFlags[segIndex] = true;
+	          else segmentExceptionFlags[segIndex] = true;
+	          if (!segmentTruckIds[segIndex]) segmentTruckIds[segIndex] = loc;
+	        }
+	      }
+
+	      if (isFailure) continue;
 
 	      const destination = extractDestination(details);
 	      if (!destination) continue;
@@ -388,10 +456,10 @@ watch(
 	      const destIndex = nodes.findIndex((n) => n === destination);
 	      if (destIndex <= 0) continue;
 
-		      const segIndex = destIndex - 1;
-		      if (segIndex < 0 || segIndex >= segmentExceptionFlags.length) continue;
-		      if (segIndex >= currentIndex) segmentExceptionFlags[segIndex] = true;
-		      if (loc && /^TRUCK_/i.test(loc) && !segmentTruckIds[segIndex]) segmentTruckIds[segIndex] = loc;
+	      const segIndex = destIndex - 1;
+	      if (segIndex < 0 || segIndex >= segmentExceptionFlags.length) continue;
+	      if (segIndex >= currentIndex) segmentExceptionFlags[segIndex] = true;
+	      if (loc && /^TRUCK_/i.test(loc) && !segmentTruckIds[segIndex]) segmentTruckIds[segIndex] = loc;
 		    }
 		  }
 
@@ -405,7 +473,9 @@ watch(
 	    displayStage,
 	    segmentTruckIds,
 	    segmentExceptionFlags,
+	    segmentFailureFlags,
 	    nodeExceptions,
+	    nodeFailures,
 	  };
 	};
 
@@ -413,6 +483,7 @@ watch(
 	  const model = routeModel(pkg);
 	  if (index <= model.currentIndex) {
 	    const nodeId = model.nodes?.[index] ? String(model.nodes[index]) : "";
+	    if (nodeId && model.nodeFailures?.[nodeId]) return "failed";
 	    if (nodeId && model.nodeExceptions?.[nodeId]) return "exception";
 	    return "ok";
 	  }
@@ -421,6 +492,7 @@ watch(
 
 	const routeSegState = (pkg: any, segmentIndex: number) => {
 	  const model = routeModel(pkg);
+	  if (model.segmentFailureFlags?.[segmentIndex]) return "failed";
 	  if (model.segmentExceptionFlags?.[segmentIndex]) return "exception";
 	  if (model.segmentTruckIds[segmentIndex]) return "ok";
 	  if (segmentIndex < model.currentIndex) return "ok";
@@ -600,12 +672,16 @@ onMounted(async () => {
           >
             <button type="button" class="row-btn" @click="togglePackage(pkg.id)">
               <span class="tracking">包裹編號 | {{ pkg.tracking_number || pkg.id }}</span>
-              <span
-                class="pill"
-                :class="{ ok: statusKeyForPackage(pkg) === 'ok', warning: statusKeyForPackage(pkg) === 'exception' }"
-              >
-                {{ statusLabel(statusKeyForPackage(pkg)) }}
-              </span>
+                <span
+                  class="pill"
+                  :class="{
+                    ok: statusKeyForPackage(pkg) === 'ok',
+                    warning: statusKeyForPackage(pkg) === 'exception',
+                    failed: statusKeyForPackage(pkg) === 'failed',
+                  }"
+                >
+                  {{ statusLabel(statusKeyForPackage(pkg)) }}
+                </span>
               <span class="meta">更新：{{ formatDateTime(pkg.current_updated_at) }}</span>
             </button>
 
@@ -627,6 +703,7 @@ onMounted(async () => {
                   <div class="route-legend">
                     <span class="legend-pill ok">正常</span>
                     <span class="legend-pill exception">異常</span>
+                    <span class="legend-pill failed">配送失敗</span>
                     <span class="legend-pill pending">未發生</span>
                   </div>
                 </div>
@@ -681,7 +758,7 @@ onMounted(async () => {
                   <span class="summary-value">
                     <template v-if="detailByPackageId[pkg.id]?.isLoading">讀取中...</template>
                     <template v-else-if="detailByPackageId[pkg.id]?.error">{{ detailByPackageId[pkg.id]?.error }}</template>
-                    <template v-else>{{ detailByPackageId[pkg.id]?.latestDetails || "-" }}</template>
+                    <template v-else>{{ statusInfoText(pkg) }}</template>
                   </span>
                 </p>
               </div>
@@ -780,6 +857,12 @@ onMounted(async () => {
   box-shadow: inset 0 0 0 1px rgba(255, 193, 7, 0.25);
 }
 
+.pill.failed {
+  background: rgba(220, 53, 69, 0.18);
+  color: rgba(152, 28, 39, 1);
+  box-shadow: inset 0 0 0 1px rgba(220, 53, 69, 0.25);
+}
+
 .meta {
   font-size: 13px;
   opacity: 0.85;
@@ -850,6 +933,11 @@ onMounted(async () => {
 .legend-pill.exception {
   background: rgba(255, 193, 7, 0.18);
   color: rgba(140, 105, 0, 1);
+}
+
+.legend-pill.failed {
+  background: rgba(220, 53, 69, 0.18);
+  color: rgba(152, 28, 39, 1);
 }
 
 .legend-pill.pending {
@@ -926,6 +1014,10 @@ onMounted(async () => {
   background: linear-gradient(90deg, rgba(255, 193, 7, 0.95), rgba(255, 214, 102, 0.9));
 }
 
+.route-seg.failed {
+  background: linear-gradient(90deg, rgba(220, 53, 69, 0.95), rgba(255, 99, 114, 0.9));
+}
+
 .route-seg.pending {
   background: rgba(120, 120, 120, 0.22);
 }
@@ -971,6 +1063,17 @@ onMounted(async () => {
 
 .route-step.exception .route-dot {
   background: rgba(255, 193, 7, 0.95);
+}
+
+.route-step.failed .route-circle {
+  background: rgba(220, 53, 69, 0.2);
+  box-shadow:
+    inset 0 0 0 1px rgba(220, 53, 69, 0.3),
+    0 12px 30px rgba(220, 53, 69, 0.12);
+}
+
+.route-step.failed .route-dot {
+  background: rgba(220, 53, 69, 0.95);
 }
 
 .route-step.pending .route-circle {

@@ -25,6 +25,7 @@ import { WarehouseBatchOperation } from "./endpoints/warehouseOperations";
 import { WarehousePackagesList } from "./endpoints/warehousePackages";
 import { WarehousePackagesReceive } from "./endpoints/warehouseReceive";
 import { WarehouseDispatchNextTask } from "./endpoints/warehouseTaskDispatch";
+import { WarehousePackageExceptionCreate } from "./endpoints/warehousePackageException";
 import { BillingBillList, BillingBillDetail } from "./endpoints/billingBills";
 import { BillingPaymentCreate, BillingPaymentList } from "./endpoints/billingPayments";
 import { AdminUserCreate } from "./endpoints/adminUsers";
@@ -36,6 +37,7 @@ import { VehicleMeCargoList } from "./endpoints/vehiclesCargoMe";
 import { DriverTaskPickup, DriverTaskDropoff } from "./endpoints/driverTaskCargo";
 import { DriverTaskEnRoute } from "./endpoints/driverTaskEnRoute";
 import { CustomerServiceExceptionHandle, CustomerServiceExceptionList } from "./endpoints/csExceptions";
+import { CustomerServiceContractList, CustomerServiceContractReview } from "./endpoints/csContracts";
 
 type Bindings = {
   DB: D1Database;
@@ -290,10 +292,13 @@ openapi.post("/api/driver/packages/:packageId/exception", DriverPackageException
 openapi.get("/api/driver/exceptions", DriverPackageExceptionList);
 openapi.get("/api/cs/exceptions", CustomerServiceExceptionList);
 openapi.post("/api/cs/exceptions/:exceptionId/handle", CustomerServiceExceptionHandle);
+openapi.get("/api/cs/contract-applications", CustomerServiceContractList);
+openapi.put("/api/cs/contract-applications/:id", CustomerServiceContractReview);
 openapi.get("/api/warehouse/packages", WarehousePackagesList);
 openapi.post("/api/warehouse/packages/receive", WarehousePackagesReceive);
 openapi.post("/api/warehouse/batch-operation", WarehouseBatchOperation);
 openapi.post("/api/warehouse/packages/:packageId/dispatch-next", WarehouseDispatchNextTask);
+openapi.post("/api/warehouse/packages/:packageId/exception", WarehousePackageExceptionCreate);
 
 // Billing APIs
 openapi.get("/api/billing/bills", BillingBillList);

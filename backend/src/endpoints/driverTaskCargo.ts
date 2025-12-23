@@ -76,11 +76,12 @@ type TaskRow = {
   to_location: string | null;
   assigned_driver_id: string | null;
   status: string;
+  instructions?: string | null;
 };
 
 async function loadTask(db: D1Database, taskId: string): Promise<TaskRow | null> {
   return db.prepare(
-    "SELECT id, package_id, task_type, from_location, to_location, assigned_driver_id, status FROM delivery_tasks WHERE id = ? LIMIT 1",
+    "SELECT id, package_id, task_type, from_location, to_location, assigned_driver_id, status, instructions FROM delivery_tasks WHERE id = ? LIMIT 1",
   )
     .bind(taskId)
     .first<TaskRow>();

@@ -16,6 +16,7 @@ type TaskRow = {
   segment_index: number | null;
   created_at: string | null;
   updated_at: string | null;
+  instructions?: string | null;
   payment_method?: string | null;
   paid_at?: string | null;
 };
