@@ -32,7 +32,7 @@
 | `package_exceptions` | 異常池：異常申報與處理 | `backend/migrations/0012_package_exceptions.sql` |
 | `delivery_tasks` | 司機任務：取件/配送/轉運 | `backend/migrations/0013_delivery_tasks.sql` |
 | `vehicles` | 車輛與位置 | `backend/migrations/0014_vehicles.sql` |
-| `service_rules` | 運費規則 (規劃中) | `未建立` |
+| `service_rules` | 運費規則 | `backend/migrations/0016_service_rules.sql` |
 
 ### Seed / 測試資料 migrations
 
@@ -64,14 +64,26 @@ CREATE TABLE IF NOT EXISTS users (
   user_type TEXT NOT NULL CHECK (user_type IN ('customer', 'employee')),
   user_class TEXT NOT NULL,
   billing_preference TEXT,
+  status TEXT DEFAULT 'active' CHECK (status IN ('active', 'suspended', 'deleted')),
+  suspended_at TEXT,
+  suspended_reason TEXT,
+  deleted_at TEXT,
   created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
 ```
 
-- `address` 欄位定義：
-  - `customer`：客戶預設地址/位置（目前以字串保存，可能是座標字串如 `10,20` 或節點 ID）
-  - `employee`：員工工作地（地圖節點 ID，例如配送中心 `HUB_0`、配送站 `REG_0`）
-- 測試帳號/員工工作地 seed：`backend/migrations/0011_seed_test_users.sql`
+**欄位說明**
+
+| 欄位 | 說明 |
+|------|------|
+| `address` | 客戶：預設地址/位置；員工：工作地（地圖節點 ID，如 `HUB_0`、`REG_0`） |
+| `status` | 帳號狀態：`active`（正常）、`suspended`（停用）、`deleted`（軟刪除） |
+| `suspended_at` | 帳號停用時間 |
+| `suspended_reason` | 帳號停用原因 |
+| `deleted_at` | 帳號刪除時間（軟刪除） |
+
+> 新增欄位來源：`backend/migrations/0015_users_status.sql`（規劃中）
+> 測試帳號/員工工作地 seed：`backend/migrations/0011_seed_test_users.sql`
 
 ---
 
@@ -328,6 +340,67 @@ CREATE UNIQUE INDEX idx_vehicles_driver_user_id ON vehicles(driver_user_id);
 
 ---
 
+### 2.15 `service_rules` - 運費規則 `[規劃中]`
+
+用途：定義運費計算規則，支援依服務等級、重量、距離、特殊處理等條件設定不同費率。
+
+```sql
+CREATE TABLE IF NOT EXISTS service_rules (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  description TEXT,
+  
+  -- 條件篩選
+  service_level TEXT,    -- overnight / two_day / standard / economy / NULL=全部
+  min_weight REAL,       -- 最小重量（kg），NULL=無下限
+  max_weight REAL,       -- 最大重量（kg），NULL=無上限
+  min_distance REAL,     -- 最小距離（km），NULL=無下限
+  max_distance REAL,     -- 最大距離（km），NULL=無上限
+  special_handling TEXT, -- fragile / dangerous / international / NULL=無特殊
+  
+  -- 計價方式
+  base_price INTEGER NOT NULL,  -- 基本價格（元）
+  weight_rate REAL DEFAULT 0,   -- 每公斤加價（元）
+  distance_rate REAL DEFAULT 0, -- 每公里加價（元）
+  
+  -- 狀態與排序
+  priority INTEGER DEFAULT 0,   -- 優先順序（越大優先）
+  is_active INTEGER DEFAULT 1,  -- 是否啟用
+  
+  created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+  updated_at TEXT
+);
+
+CREATE INDEX idx_service_rules_active_priority ON service_rules(is_active, priority DESC);
+```
+
+**欄位說明**
+
+| 欄位 | 說明 |
+|------|------|
+| `service_level` | 適用的服務等級，`NULL` 表示適用所有等級 |
+| `min_weight` / `max_weight` | 重量範圍篩選（kg） |
+| `min_distance` / `max_distance` | 距離範圍篩選（km） |
+| `special_handling` | 特殊處理標記（fragile/dangerous/international） |
+| `base_price` | 基本價格（元） |
+| `weight_rate` | 每公斤加價（元） |
+| `distance_rate` | 每公里加價（元） |
+| `priority` | 優先順序，數值越大優先匹配 |
+| `is_active` | 是否啟用（0=停用，1=啟用） |
+
+**規則匹配邏輯**
+
+運費計算時，系統依以下條件篩選適用規則：
+1. `service_level` 為 `NULL` 或與包裹相符
+2. 包裹重量在 `[min_weight, max_weight]` 範圍內
+3. 配送距離在 `[min_distance, max_distance]` 範圍內
+4. `special_handling` 為 `NULL` 或與包裹相符
+5. `is_active = 1`
+
+符合條件的規則中，取 `priority` 最高者套用。
+
+---
+
 ## 3. ER 圖
 
 ```mermaid
@@ -367,6 +440,7 @@ erDiagram
 | `delivery_tasks` | `idx_delivery_tasks_assignee_status_created` | `assigned_driver_id, status, created_at` | 加速司機工作清單查詢 |
 | `delivery_tasks` | `idx_delivery_tasks_package_segment` | `package_id, segment_index` | 加速同包裹任務分段查詢/排序 |
 | `vehicles` | `idx_vehicles_driver_user_id` | `driver_user_id` | 加速依司機取得車輛狀態 |
+| `service_rules` | `idx_service_rules_active_priority` | `is_active, priority DESC` | 加速運費規則匹配查詢 |
 
 ---
 
@@ -375,3 +449,4 @@ erDiagram
 | 版本 | 日期 | 說明 |
 |---|---|---|
 | 1.0 | 2025-12-12 | 重寫本文件以修正亂碼，並同步最新 migrations |
+| 1.1 | 2025-12-23 | 新增 `users` 狀態欄位（status/suspended_at/deleted_at）、`service_rules` 運費規則表 |
