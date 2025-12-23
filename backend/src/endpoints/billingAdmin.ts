@@ -1,6 +1,7 @@
 import { OpenAPIRoute } from "chanfana";
 import { z } from "zod";
 import type { AppContext } from "../types";
+import { requireAdmin } from "../utils/authUtils";
 
 // PATCH /api/admin/billing/bills/:billId - 手動更新帳單
 export class BillingAdminUpdate extends OpenAPIRoute {
@@ -33,13 +34,8 @@ export class BillingAdminUpdate extends OpenAPIRoute {
 
   async handle(c: AppContext) {
     // Admin check
-    const authHeader = c.req.header("Authorization");
-    if (!authHeader || !authHeader.startsWith("Bearer ")) return c.json({ error: "Token missing" }, 401);
-    const token = authHeader.replace("Bearer ", "");
-    const tokenRecord = await c.env.DB.prepare("SELECT user_id FROM tokens WHERE id = ?").bind(token).first<{ user_id: string }>();
-    if (!tokenRecord) return c.json({ error: "Invalid token" }, 401);
-    const user = await c.env.DB.prepare("SELECT user_class FROM users WHERE id = ?").bind(tokenRecord.user_id).first<{ user_class: string }>();
-    if (!user || user.user_class !== "admin") return c.json({ error: "Forbidden" }, 403);
+    const auth = await requireAdmin(c);
+    if (!auth.ok) return (auth as any).res;
 
     const { billId } = c.req.param() as { billId: string };
     const body = await c.req.json<any>();
@@ -103,11 +99,8 @@ export class BillingAdminAddItem extends OpenAPIRoute {
 
   async handle(c: AppContext) {
     // Admin check omitted for brevity but should be here
-    const authHeader = c.req.header("Authorization");
-    const token = authHeader?.replace("Bearer ", "");
-    const tokenRecord = await c.env.DB.prepare("SELECT user_id FROM tokens WHERE id = ?").bind(token).first<{user_id: string}>();
-    const user = await c.env.DB.prepare("SELECT user_class FROM users WHERE id = ?").bind(tokenRecord?.user_id).first<{user_class: string}>();
-    if (user?.user_class !== "admin") return c.json({ error: "Forbidden" }, 403);
+    const auth = await requireAdmin(c);
+    if (!auth.ok) return (auth as any).res;
 
     const { billId } = c.req.param() as { billId: string };
     const { package_id } = await c.req.json<{ package_id: string }>();
@@ -159,11 +152,8 @@ export class BillingAdminRemoveItem extends OpenAPIRoute {
   };
 
   async handle(c: AppContext) {
-    const authHeader = c.req.header("Authorization");
-    const token = authHeader?.replace("Bearer ", "");
-    const tokenRecord = await c.env.DB.prepare("SELECT user_id FROM tokens WHERE id = ?").bind(token).first<{user_id: string}>();
-    const user = await c.env.DB.prepare("SELECT user_class FROM users WHERE id = ?").bind(tokenRecord?.user_id).first<{user_class: string}>();
-    if (user?.user_class !== "admin") return c.json({ error: "Forbidden" }, 403);
+    const auth = await requireAdmin(c);
+    if (!auth.ok) return (auth as any).res;
 
     const { billId, itemId } = c.req.param() as { billId: string; itemId: string };
 

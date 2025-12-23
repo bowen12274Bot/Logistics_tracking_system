@@ -2,6 +2,7 @@ import { OpenAPIRoute } from "chanfana";
 import { z } from "zod";
 import type { AppContext } from "../types";
 import { getTerminalStatus, hasActiveException } from "../lib/packageGuards";
+import { requireDriver } from "../utils/authUtils";
 
 // GET /api/driver/tasks - 駕駛員工作清單
 export class DriverTaskList extends OpenAPIRoute {
@@ -29,28 +30,8 @@ export class DriverTaskList extends OpenAPIRoute {
   };
 
   async handle(c: AppContext) {
-    const authHeader = c.req.header("Authorization");
-    
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return c.json({ error: "Token 缺失" }, 401);
-    }
-
-    const token = authHeader.replace("Bearer ", "");
-    const tokenRecord = await c.env.DB.prepare(
-      "SELECT user_id FROM tokens WHERE id = ?"
-    ).bind(token).first<{ user_id: string }>();
-
-    if (!tokenRecord) {
-      return c.json({ error: "Token 無效" }, 401);
-    }
-
-    const user = await c.env.DB.prepare(
-      "SELECT user_type, user_class FROM users WHERE id = ?"
-    ).bind(tokenRecord.user_id).first<{ user_type: string; user_class: string }>();
-
-    if (!user || user.user_class !== "driver") {
-      return c.json({ error: "僅駕駛員可使用此功能" }, 403);
-    }
+    const auth = await requireDriver(c);
+    if (!auth.ok) return (auth as any).res;
 
     const query = c.req.query();
 
@@ -142,28 +123,8 @@ export class DriverUpdateStatus extends OpenAPIRoute {
   };
 
   async handle(c: AppContext) {
-    const authHeader = c.req.header("Authorization");
-    
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return c.json({ error: "Token 缺失" }, 401);
-    }
-
-    const token = authHeader.replace("Bearer ", "");
-    const tokenRecord = await c.env.DB.prepare(
-      "SELECT user_id FROM tokens WHERE id = ?"
-    ).bind(token).first<{ user_id: string }>();
-
-    if (!tokenRecord) {
-      return c.json({ error: "Token 無效" }, 401);
-    }
-
-    const user = await c.env.DB.prepare(
-      "SELECT user_type, user_class FROM users WHERE id = ?"
-    ).bind(tokenRecord.user_id).first<{ user_type: string; user_class: string }>();
-
-    if (!user || user.user_class !== "driver") {
-      return c.json({ error: "僅駕駛員可使用此功能" }, 403);
-    }
+    const auth = await requireDriver(c);
+    if (!auth.ok) return (auth as any).res;
 
     const data = await this.getValidatedData<typeof this.schema>();
     const { packageId } = data.params as { packageId: string };

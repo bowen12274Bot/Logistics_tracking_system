@@ -1,13 +1,8 @@
 import { OpenAPIRoute } from "chanfana";
 import { z } from "zod";
 import type { AppContext } from "../types";
-
-const sha256Hex = async (input: string) => {
-  const data = new TextEncoder().encode(input);
-  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-  const bytes = Array.from(new Uint8Array(hashBuffer));
-  return bytes.map((b) => b.toString(16).padStart(2, "0")).join("");
-};
+import { requireAdmin } from "../utils/authUtils";
+import { sha256Hex } from "../utils/cryptoUtils";
 
 // POST /api/admin/users - 建立員工帳號
 export class AdminUserCreate extends OpenAPIRoute {
@@ -51,41 +46,16 @@ export class AdminUserCreate extends OpenAPIRoute {
   };
 
   async handle(c: AppContext) {
-    const authHeader = c.req.header("Authorization");
-    
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return c.json({ error: "Token 缺失" }, 401);
-    }
+    const auth = await requireAdmin(c);
+    if (!auth.ok) return (auth as any).res;
 
-    const token = authHeader.replace("Bearer ", "");
-    const tokenRecord = await c.env.DB.prepare(
-      "SELECT user_id FROM tokens WHERE id = ?"
-    ).bind(token).first<{ user_id: string }>();
-
-    if (!tokenRecord) {
-      return c.json({ error: "Token 無效" }, 401);
-    }
-
-    const user = await c.env.DB.prepare(
-      "SELECT user_type, user_class FROM users WHERE id = ?"
-    ).bind(tokenRecord.user_id).first<{ user_type: string; user_class: string }>();
-
-    if (!user || user.user_class !== "admin") {
-      return c.json({ error: "僅 admin 可使用此功能" }, 403);
-    }
-
-    const body = await c.req.json<{
-      user_name: string;
-      email: string;
-      password: string;
-      phone_number?: string;
-      address?: string;
-      user_class: string;
-    }>();
-
-    if (!body.user_name || !body.email || !body.password || !body.user_class) {
-      return c.json({ error: "必填欄位缺失" }, 400);
-    }
+    // Use getValidatedData instead of manually parsing json for better type safety if preferred,
+    // but keeping consistent with original logic structure for now is fine, just replacing auth.
+    // However, chanfana usually provides validated body via getValidatedData. 
+    // The original code used c.req.json(). Let's stick to c.req.json() to minimize logical changes unless necessary,
+    // but using getValidatedData is safer. Let's use getValidatedData since we have the schema.
+    const data = await this.getValidatedData<typeof this.schema>();
+    const body = data.body;
 
     // 檢查 email 是否已存在
     const existingUser = await c.env.DB.prepare(
