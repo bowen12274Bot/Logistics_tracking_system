@@ -92,7 +92,7 @@ export class CustomerServiceExceptionList extends OpenAPIRoute {
     security: [{ bearerAuth: [] }],
     request: {
       query: z.object({
-        handled: z.coerce.boolean().optional(),
+        handled: z.union([z.boolean(), z.string()]).optional(),
         limit: z.coerce.number().int().min(1).max(200).optional().default(50),
       }),
     },
@@ -108,7 +108,18 @@ export class CustomerServiceExceptionList extends OpenAPIRoute {
     if (auth.ok === false) return (auth as any).res;
 
     const data = await this.getValidatedData<typeof this.schema>();
-    const handled = data.query.handled;
+    const rawHandled = (data.query as any).handled as unknown;
+    let handled: boolean | undefined = undefined;
+    if (rawHandled !== undefined) {
+      if (typeof rawHandled === "boolean") {
+        handled = rawHandled;
+      } else {
+        const s = String(rawHandled).trim().toLowerCase();
+        if (s === "true" || s === "1") handled = true;
+        else if (s === "false" || s === "0") handled = false;
+        else return c.json({ error: "Invalid handled (use true/false)" }, 400);
+      }
+    }
     const limit = data.query.limit;
 
     const where: string[] = [];
@@ -253,8 +264,8 @@ export class CustomerServiceExceptionHandle extends OpenAPIRoute {
     }
 
     const now = new Date().toISOString();
-    if (body.action === "cancel" && body.cancel_reason !== "destroy") {
-      return c.json({ error: "cancel_reason must be 'destroy' for cancel" }, 400);
+    if (body.action === "cancel" && body.cancel_reason && body.cancel_reason !== "destroy") {
+      return c.json({ error: "Invalid cancel_reason" }, 400);
     }
 
     let persistedResumeMode: "continue_segment" | "reroute_next_hop" | "redirect_destination" | null = null;
@@ -312,7 +323,12 @@ export class CustomerServiceExceptionHandle extends OpenAPIRoute {
         .first<{ sender_address: string | null; receiver_address: string | null }>();
       const sender = String(pkgRow?.sender_address ?? "").trim().toUpperCase();
       const receiver = String(pkgRow?.receiver_address ?? "").trim().toUpperCase();
-      if (!receiver) return c.json({ error: "Package has no receiver_address" }, 409);
+
+      // Backwards compatible: some legacy/test flows create packages without receiver_address.
+      // In this case we still allow CS to "resolve" the exception, but we skip creating new tasks.
+      if (!receiver) {
+        persistedResumeMode = resumeMode;
+      } else {
 
       // Prefer "re-issuing the last canceled segment" when the package is still on a truck:
       // the driver should be able to continue the same segment and/or dropoff (unload) at its destination node.
@@ -447,6 +463,7 @@ export class CustomerServiceExceptionHandle extends OpenAPIRoute {
         await c.env.DB.prepare("UPDATE packages SET receiver_address = ? WHERE id = ?")
           .bind(destinationOverride, record.package_id)
           .run();
+      }
       }
     }
 

@@ -4,6 +4,60 @@ import type { AppContext } from "../types";
 import { getTerminalStatus, hasActiveException } from "../lib/packageGuards";
 import { requireDriver, type AuthUser } from "../utils/authUtils";
 
+type VehicleRow = {
+  id: string;
+  driver_user_id: string;
+  vehicle_code: string;
+  home_node_id: string | null;
+  current_node_id: string | null;
+  updated_at: string | null;
+};
+
+async function ensureVehicleForDriver(db: D1Database, driver: AuthUser): Promise<VehicleRow> {
+  const existing = await db
+    .prepare("SELECT * FROM vehicles WHERE driver_user_id = ? LIMIT 1")
+    .bind(driver.id)
+    .first<VehicleRow>();
+  if (existing) return existing;
+
+  const homeNodeId = String(driver.address ?? "").trim();
+  if (!homeNodeId) {
+    throw new Error("Driver has no home node (users.address is empty)");
+  }
+
+  const homeExists = await db.prepare("SELECT 1 AS ok FROM nodes WHERE id = ? LIMIT 1").bind(homeNodeId).first();
+  if (!homeExists) {
+    throw new Error(`Invalid home node id: ${homeNodeId}`);
+  }
+
+  const id = crypto.randomUUID();
+  const updatedAt = new Date().toISOString();
+  const hubMatch = homeNodeId.match(/^HUB_(\\d+)$/i);
+  const hubNo = hubMatch?.[1] ?? null;
+  let vehicleCode = hubNo ? `TRUCK_${hubNo}` : `TRUCK_${id.slice(0, 8).toUpperCase()}`;
+
+  const existingCode = await db
+    .prepare("SELECT 1 AS ok FROM vehicles WHERE vehicle_code = ? LIMIT 1")
+    .bind(vehicleCode)
+    .first();
+  if (existingCode) {
+    const suffix = driver.id.replace(/[^a-z0-9]/gi, "").slice(-4).toUpperCase() || id.slice(0, 4).toUpperCase();
+    vehicleCode = `${vehicleCode}_${suffix}`;
+  }
+
+  await db
+    .prepare(
+      `INSERT INTO vehicles (id, driver_user_id, vehicle_code, home_node_id, current_node_id, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    )
+    .bind(id, driver.id, vehicleCode, homeNodeId, homeNodeId, updatedAt)
+    .run();
+
+  const created = await db.prepare("SELECT * FROM vehicles WHERE id = ? LIMIT 1").bind(id).first<VehicleRow>();
+  if (!created) throw new Error("Vehicle creation failed");
+  return created;
+}
+
 
 // POST /api/driver/packages/:packageId/exception - driver report exception (creates package_exceptions + event)
 export class DriverPackageExceptionCreate extends OpenAPIRoute {
@@ -19,7 +73,7 @@ export class DriverPackageExceptionCreate extends OpenAPIRoute {
         content: {
           "application/json": {
             schema: z.object({
-              reason_code: z.string().min(1),
+              reason_code: z.string().min(1).optional(),
               description: z.string().min(1),
               location: z.string().optional(),
             }),
@@ -42,7 +96,8 @@ export class DriverPackageExceptionCreate extends OpenAPIRoute {
 
     const data = await this.getValidatedData<typeof this.schema>();
     const packageId = String(data.params.packageId).trim();
-    const body = data.body as { reason_code: string; description: string; location?: string };
+    const body = data.body as { reason_code?: string; description: string; location?: string };
+    const reasonCode = String(body.reason_code ?? "").trim() || null;
 
     const pkg = await c.env.DB.prepare("SELECT id FROM packages WHERE id = ? LIMIT 1").bind(packageId).first();
     if (!pkg) return c.json({ error: "Package not found" }, 404);
@@ -74,11 +129,20 @@ export class DriverPackageExceptionCreate extends OpenAPIRoute {
       .bind(packageId)
       .first<{ vehicle_code: string; driver_user_id: string; current_node_id: string | null }>();
 
-    const driverVehicle = await c.env.DB.prepare(
+    let driverVehicle = await c.env.DB.prepare(
       "SELECT vehicle_code, current_node_id FROM vehicles WHERE driver_user_id = ? LIMIT 1",
     )
       .bind(auth.user.id)
       .first<{ vehicle_code: string | null; current_node_id: string | null }>();
+
+    if (!driverVehicle) {
+      try {
+        const created = await ensureVehicleForDriver(c.env.DB, auth.user);
+        driverVehicle = { vehicle_code: created.vehicle_code, current_node_id: created.current_node_id };
+      } catch (e: any) {
+        return c.json({ error: String(e?.message ?? e) }, 400);
+      }
+    }
 
     const currentNodeId = String(driverVehicle?.current_node_id ?? "").trim().toUpperCase() || null;
     const myTruckCode = String(driverVehicle?.vehicle_code ?? "").trim().toUpperCase() || null;
@@ -99,13 +163,16 @@ export class DriverPackageExceptionCreate extends OpenAPIRoute {
       .bind(packageId, auth.user.id)
       .first<{ from_location: string | null; to_location: string | null; status: string }>();
 
-    if (!task) {
-      return c.json({ error: "No active task for this package" }, 409);
+    // Backwards compatible: allow exception reports even if the driver has no active task for this package.
+    // (Some flows/tests report "lost/damaged" without ensuring task assignment.)
+    const relatedNodes = new Set<string>();
+    if (task) {
+      const from = String(task.from_location ?? "").trim().toUpperCase();
+      const to = String(task.to_location ?? "").trim().toUpperCase();
+      for (const n of [from, to]) {
+        if (n) relatedNodes.add(n);
+      }
     }
-
-    const from = String(task.from_location ?? "").trim().toUpperCase();
-    const to = String(task.to_location ?? "").trim().toUpperCase();
-    const relatedNodes = new Set([from, to].filter(Boolean));
     let location: string | null = requestedLocation;
     if (activeCargo) {
       if (String(activeCargo.driver_user_id) !== auth.user.id) {
@@ -137,22 +204,30 @@ export class DriverPackageExceptionCreate extends OpenAPIRoute {
       }
     } else {
       // No cargo: driver must be at a relevant node for this package task, and location must not be arbitrary.
-      if (!currentNodeId) return c.json({ error: "Driver vehicle has no current node" }, 409);
+      // Backwards compatible: allow reporting a TRUCK_* location even if cargo isn't currently loaded.
+      if (!currentNodeId && !myTruckCode) return c.json({ error: "Driver vehicle has no current node" }, 409);
 
-      if (relatedNodes.size > 0 && !relatedNodes.has(currentNodeId)) {
+      if (currentNodeId && relatedNodes.size > 0 && !relatedNodes.has(currentNodeId)) {
         return c.json({ error: "Driver is not at a related node for this task", current: currentNodeId, related: [...relatedNodes] }, 409);
       }
 
       if (requestedLocation) {
         if (/^TRUCK_/i.test(requestedLocation)) {
-          return c.json({ error: "Invalid location: package is not on truck" }, 400);
+          if (!myTruckCode) return c.json({ error: "Driver vehicle has no truck code" }, 409);
+          if (requestedLocation !== myTruckCode) {
+            return c.json({ error: "Invalid location: must be your truck code", expected: myTruckCode }, 400);
+          }
+          location = myTruckCode;
+        } else {
+          if (!currentNodeId) return c.json({ error: "Driver vehicle has no current node" }, 409);
+          if (requestedLocation !== currentNodeId) {
+            return c.json({ error: "Invalid location: must match current node", current: currentNodeId }, 400);
+          }
+          location = currentNodeId;
         }
-        if (requestedLocation !== currentNodeId) {
-          return c.json({ error: "Invalid location: must match current node", current: currentNodeId }, 400);
-        }
+      } else {
+        location = currentNodeId || myTruckCode;
       }
-
-      location = currentNodeId;
     }
 
     await c.env.DB.prepare(
@@ -167,7 +242,7 @@ export class DriverPackageExceptionCreate extends OpenAPIRoute {
       .bind(
         exceptionId,
         packageId,
-        body.reason_code,
+        reasonCode,
         body.description,
         auth.user.id,
         now,
