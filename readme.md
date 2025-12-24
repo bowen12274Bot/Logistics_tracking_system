@@ -13,13 +13,16 @@
 
 | 文件 | 說明 |
 |------|------|
-| [API 契約文件](docs/api-contract.md) | 完整的後端 API 規格說明 |
+| [API 契約文件](docs/api-contract.md) | API 契約索引（分頁參考入口） |
+| [文件導覽](docs/README.md) | `docs/` 目錄導覽入口（分層閱讀） |
+| [系統概觀](docs/architecture/overview.md) | 系統核心概念與責任邊界（概念層） |
+| [異常模組](docs/modules/exceptions.md) | 異常申報/異常池/結案與 location 規則（規則層） |
 | [資料庫結構](docs/database-schema.md) | 資料庫表格與欄位定義 |
-| [測試計畫](docs/vitest-plan.md) | Vitest 測試案例規劃 |
-| [開發環境設定](docs/getting-started.md) | 詳細的開發環境設定指南 |
-| [測試指南](docs/testing-guide.md) | 測試執行與報告說明 |
-| [CI/CD 設定指南](docs/ci-cd-guide.md) | GitHub Actions 與 Cloudflare 部署設定 |
-| [貢獻指南](docs/contributing.md) | 協作規範與 PR 流程 |
+| [測試計畫](docs/guides/vitest-plan.md) | Vitest 測試案例規劃 |
+| [開發環境設定](docs/guides/getting-started.md) | 詳細的開發環境設定指南 |
+| [測試指南](docs/guides/testing-guide.md) | 測試執行與報告說明 |
+| [CI/CD 設定指南](docs/guides/ci-cd-guide.md) | GitHub Actions 與 Cloudflare 部署設定 |
+| [貢獻指南](docs/guides/contributing.md) | 協作規範與 PR 流程 |
 
 ---
 
@@ -163,11 +166,12 @@ logistics-system/               # Repo 根目錄
 ├─docs/                          # [文件 (Documentation)]
 │      api-contract.md           # 後端 API 契約（含規劃中端點）
 │      database-schema.md        # 資料庫 schema（含規劃中資料表）
-│      getting-started.md        # 開發環境設定
-│      testing-guide.md          # 測試指南
-│      vitest-plan.md            # 測試案例規劃
-│      ci-cd-guide.md            # CI/CD 說明
-│      contributing.md           # 貢獻指南/協作規範
+│      guides/                   # 開發/測試/部署/協作指南
+│      ├─ getting-started.md     # 開發環境設定
+│      ├─ testing-guide.md       # 測試指南
+│      ├─ vitest-plan.md         # 測試案例規劃
+│      ├─ ci-cd-guide.md         # CI/CD 說明
+│      └─ contributing.md        # 貢獻指南/協作規範
 │
 ├─UML/                           # 設計文件 (Design Documents)
 │      TermProject114.md         # 需求/說明文件（原始資料）

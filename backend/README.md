@@ -249,4 +249,4 @@ python apply_migrations.py
 
 - [API 契約文件](../docs/api-contract.md) - 完整 API 規格
 - [資料庫結構](../docs/database-schema.md) - 表格與欄位定義
-- [測試計畫](../docs/vitest-plan.md) - 測試案例規劃
+- [測試計畫](../docs/guides/vitest-plan.md) - 測試案例規劃
