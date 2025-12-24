@@ -1,16 +1,14 @@
-# 資料庫 Schema 說明文件
+# 資料庫 Schema（D1 / SQLite）
 
-本文件整理目前專案後端資料庫（D1 / SQLite 相容）之最終表結構，來源為 `backend/migrations/` 依序套用後的結果。
-
----
+本文件整理專案目前資料庫（Cloudflare D1 / SQLite 相容）的最終表結構；權威來源為 `backend/migrations/`。
 
 ## 目錄
 
 - [1. 總覽](#1-總覽)
 - [2. 表格定義](#2-表格定義)
 - [3. ER 圖](#3-er-圖)
-- [4. 索引說明](#4-索引說明)
-- [5. 版本歷史](#5-版本歷史)
+- [4. 索引清單](#4-索引清單)
+- [5. 版本紀錄](#5-版本紀錄)
 
 ---
 
@@ -18,40 +16,32 @@
 
 | 表格名稱 | 說明 | Migration 檔案 |
 |---|---|---|
-| `users` | 使用者帳號（客戶/員工） | `backend/migrations/0000_users.sql` |
+| `users` | 使用者（客戶/員工） | `backend/migrations/0000_users.sql` |
 | `packages` | 包裹主檔 | `backend/migrations/0001_packages.sql` |
-| `package_events` | 包裹貨態事件 | `backend/migrations/0002_package_events.sql` |
-| `payments` | 單筆付款與費用拆分 | `backend/migrations/0003_payments.sql` |
+| `package_events` | 包裹事件（append-only） | `backend/migrations/0002_package_events.sql` |
+| `payments` | 付款/計費結果 | `backend/migrations/0003_payments.sql` |
 | `monthly_billing` | 月結帳單主檔 | `backend/migrations/0004_monthly_billing.sql` |
 | `monthly_billing_items` | 月結帳單明細（帳單包含哪些包裹） | `backend/migrations/0005_monthly_billing_items.sql` |
-| `nodes` | 虛擬地圖節點 | `backend/migrations/0006_virtual_map_schema.sql`, `backend/migrations/0007_virtual_map_seed.sql` |
-| `edges` | 虛擬地圖邊（道路/成本） | `backend/migrations/0006_virtual_map_schema.sql`, `backend/migrations/0007_virtual_map_seed.sql` |
+| `nodes` | 地圖節點（配送中心/站/終端） | `backend/migrations/0006_virtual_map_schema.sql`, `backend/migrations/0007_virtual_map_seed.sql` |
+| `edges` | 地圖邊（道路/成本） | `backend/migrations/0006_virtual_map_schema.sql`, `backend/migrations/0007_virtual_map_seed.sql` |
 | `contract_applications` | 合約客戶申請/審核 | `backend/migrations/0008_contract_applications.sql` |
 | `tokens` | 認證 token | `backend/migrations/0009_tokens.sql` |
 | `system_errors` | 系統錯誤/異常紀錄 | `backend/migrations/0010_system_errors.sql` |
-| `package_exceptions` | 異常池：異常申報與處理 | `backend/migrations/0012_package_exceptions.sql` |
-| `delivery_tasks` | 司機任務：取件/配送/轉運 | `backend/migrations/0013_delivery_tasks.sql` |
+| `package_exceptions` | 包裹異常（客服處理） | `backend/migrations/0012_package_exceptions.sql` |
+| `delivery_tasks` | 運送任務（分段 pickup/deliver/transfer） | `backend/migrations/0013_delivery_tasks.sql` |
 | `vehicles` | 車輛與位置 | `backend/migrations/0014_vehicles.sql` |
-| `service_rules` | 運費規則 (規劃中) | `未建立` |
+| `vehicle_cargo` | 車上貨物（包裹上車/下車記錄） | `backend/migrations/0015_vehicle_cargo.sql` |
 
 ### Seed / 測試資料 migrations
 
-> 以下 migration 主要用於寫入 seed/測試資料（非新增資料表）。
-
-| 檔案 | 說明 |
-|---|---|
-| `backend/migrations/0007_virtual_map_seed.sql` | 重建 `nodes` / `edges` 並寫入虛擬地圖資料 |
-| `backend/migrations/0011_seed_test_users.sql` | 寫入測試帳號與員工工作地（依 `nodes` 內容生成） |
-
-### 規劃中（尚未落地到 migrations）
-
-> 目前暫無。
+- `backend/migrations/0007_virtual_map_seed.sql`：建立/重建 `nodes`、`edges` 並寫入 seed
+- `backend/migrations/0011_seed_test_users.sql`：寫入測試帳號/員工（依賴 `nodes` 已存在）
 
 ---
 
 ## 2. 表格定義
 
-### 2.1 `users` - 使用者 `[已實作]`
+### 2.1 `users` - 使用者
 
 ```sql
 CREATE TABLE IF NOT EXISTS users (
@@ -72,18 +62,13 @@ CREATE TABLE IF NOT EXISTS users (
 );
 ```
 
-- `address` 欄位定義：
-  - `customer`：客戶預設地址/位置（目前以字串保存，可能是座標字串如 `10,20` 或節點 ID）
-  - `employee`：員工工作地（地圖節點 ID，例如配送中心 `HUB_0`、配送站 `REG_0`）
-- `status` 欄位定義：
-  - `active`：正常
-  - `suspended`：停用
-  - `deleted`：軟刪除
-- 測試帳號/員工工作地 seed：`backend/migrations/0011_seed_test_users.sql`
+重點欄位：
 
----
+- `user_type`：`customer` / `employee`
+- `user_class`：客戶（`non_contract_customer` / `contract_customer`）；員工（`driver` / `warehouse_staff` / `customer_service` / `admin`）
+- `address`：客戶端是預設地址；員工端是工作地（地圖節點 ID，例如 `HUB_0`、`REG_3`）
 
-### 2.2 `packages` - 包裹主檔 `[已實作]`
+### 2.2 `packages` - 包裹主檔
 
 ```sql
 CREATE TABLE IF NOT EXISTS packages (
@@ -110,11 +95,11 @@ CREATE TABLE IF NOT EXISTS packages (
   description_json TEXT,
   created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
+
+CREATE INDEX IF NOT EXISTS idx_packages_status ON packages(status);
 ```
 
----
-
-### 2.3 `package_events` - 包裹事件 `[已實作]`
+### 2.3 `package_events` - 包裹事件
 
 ```sql
 CREATE TABLE IF NOT EXISTS package_events (
@@ -125,11 +110,12 @@ CREATE TABLE IF NOT EXISTS package_events (
   events_at TEXT,
   location TEXT
 );
+
+CREATE INDEX IF NOT EXISTS idx_package_events_package_id ON package_events(package_id);
+CREATE INDEX IF NOT EXISTS idx_package_events_location ON package_events(location);
 ```
 
----
-
-### 2.4 `payments` - 付款紀錄 `[已實作]`
+### 2.4 `payments` - 付款/計費結果
 
 ```sql
 CREATE TABLE IF NOT EXISTS payments (
@@ -144,11 +130,11 @@ CREATE TABLE IF NOT EXISTS payments (
   collected_by TEXT,
   package_id TEXT REFERENCES packages(id)
 );
+
+CREATE INDEX IF NOT EXISTS idx_payments_package_id ON payments(package_id);
 ```
 
----
-
-### 2.5 `monthly_billing` - 月結帳單主檔 `[已實作]`
+### 2.5 `monthly_billing` - 月結帳單主檔
 
 ```sql
 CREATE TABLE IF NOT EXISTS monthly_billing (
@@ -163,11 +149,12 @@ CREATE TABLE IF NOT EXISTS monthly_billing (
   paid_at TEXT,
   created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
+
+CREATE INDEX IF NOT EXISTS idx_monthly_billing_customer_id ON monthly_billing(customer_id);
+CREATE INDEX IF NOT EXISTS idx_monthly_billing_status ON monthly_billing(status);
 ```
 
----
-
-### 2.6 `monthly_billing_items` - 月結帳單明細 `[已實作]`
+### 2.6 `monthly_billing_items` - 月結帳單明細
 
 ```sql
 CREATE TABLE IF NOT EXISTS monthly_billing_items (
@@ -175,13 +162,13 @@ CREATE TABLE IF NOT EXISTS monthly_billing_items (
   monthly_billing_id TEXT,
   package_id TEXT
 );
+
+CREATE INDEX IF NOT EXISTS idx_monthly_billing_items_billing_id ON monthly_billing_items(monthly_billing_id);
 ```
 
----
+### 2.7 `nodes` / `edges` - 地圖
 
-### 2.7 `nodes` / `edges` - 虛擬地圖 `[已實作]`
-
-`backend/migrations/0006_virtual_map_schema.sql` 建立 `nodes`、`edges` 與索引；`backend/migrations/0007_virtual_map_seed.sql` 會重建表並寫入 seed 資料（節點/道路）。
+> `0006_virtual_map_schema.sql` 建表；`0007_virtual_map_seed.sql` 會 `DROP TABLE` 後重建並寫入 seed。
 
 ```sql
 CREATE TABLE nodes (
@@ -203,11 +190,11 @@ CREATE TABLE edges (
   FOREIGN KEY(source) REFERENCES nodes(id),
   FOREIGN KEY(target) REFERENCES nodes(id)
 );
+
+CREATE INDEX IF NOT EXISTS idx_edges_source ON edges(source);
 ```
 
----
-
-### 2.8 `contract_applications` - 合約客戶申請 `[已實作]`
+### 2.8 `contract_applications` - 合約申請
 
 ```sql
 CREATE TABLE IF NOT EXISTS contract_applications (
@@ -226,11 +213,12 @@ CREATE TABLE IF NOT EXISTS contract_applications (
   credit_limit INTEGER,
   created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
+
+CREATE INDEX IF NOT EXISTS idx_contract_applications_customer ON contract_applications(customer_id);
+CREATE INDEX IF NOT EXISTS idx_contract_applications_status ON contract_applications(status);
 ```
 
----
-
-### 2.9 `tokens` - 認證 Token `[已實作]`
+### 2.9 `tokens` - Token
 
 ```sql
 CREATE TABLE IF NOT EXISTS tokens (
@@ -239,11 +227,11 @@ CREATE TABLE IF NOT EXISTS tokens (
   created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
   expires_at TEXT
 );
+
+CREATE INDEX IF NOT EXISTS idx_tokens_user_id ON tokens(user_id);
 ```
 
----
-
-### 2.10 `system_errors` - 系統錯誤 `[已實作]`
+### 2.10 `system_errors` - 系統錯誤
 
 ```sql
 CREATE TABLE IF NOT EXISTS system_errors (
@@ -257,60 +245,55 @@ CREATE TABLE IF NOT EXISTS system_errors (
   resolved_by TEXT REFERENCES users(id),
   resolved_at TEXT
 );
+
+CREATE INDEX IF NOT EXISTS idx_system_errors_level ON system_errors(level);
+CREATE INDEX IF NOT EXISTS idx_system_errors_resolved ON system_errors(resolved);
 ```
 
----
-
-### 2.11 `package_exceptions` - 異常池 `[規劃中]`
-
-用途：當司機/倉儲在作業中將包裹狀態改為 `exception` 時，建立異常紀錄供客服在異常池處理；客服 MVP 先做到「標示已處理 + 處理報告」。
+### 2.11 `package_exceptions` - 包裹異常
 
 ```sql
 CREATE TABLE IF NOT EXISTS package_exceptions (
   id TEXT PRIMARY KEY,
   package_id TEXT NOT NULL REFERENCES packages(id),
-  reason_code TEXT,
+  reported_by_user_id TEXT REFERENCES users(id),
+  reason_code TEXT NOT NULL,
   description TEXT,
-  reported_by TEXT REFERENCES users(id),
-  reported_role TEXT, -- driver / warehouse_staff / customer_service
+  location TEXT,
   reported_at TEXT,
-  handled INTEGER DEFAULT 0,
-  handled_by TEXT REFERENCES users(id),
+  handled INTEGER NOT NULL DEFAULT 0,
   handled_at TEXT,
+  handled_by_user_id TEXT REFERENCES users(id),
+  action TEXT,
   handling_report TEXT
 );
-CREATE INDEX idx_package_exceptions_handled_reported_at ON package_exceptions(handled, reported_at);
-CREATE INDEX idx_package_exceptions_package_id ON package_exceptions(package_id);
+
+CREATE INDEX IF NOT EXISTS idx_package_exceptions_package_id ON package_exceptions(package_id);
+CREATE INDEX IF NOT EXISTS idx_package_exceptions_handled_reported_at ON package_exceptions(handled, reported_at);
 ```
 
----
-
-### 2.12 `delivery_tasks` - 司機任務 `[規劃中]`
-
-用途：將「待取件/待配送/待轉運」抽象成任務，支援單一司機的工作清單與任務狀態（接受/進行中/完成）。
+### 2.12 `delivery_tasks` - 運送任務
 
 ```sql
 CREATE TABLE IF NOT EXISTS delivery_tasks (
   id TEXT PRIMARY KEY,
   package_id TEXT NOT NULL REFERENCES packages(id),
-  task_type TEXT NOT NULL, -- pickup / deliver / transfer_pickup / transfer_dropoff
+  task_type TEXT NOT NULL,
   from_location TEXT,
   to_location TEXT,
   assigned_driver_id TEXT REFERENCES users(id),
-  status TEXT NOT NULL DEFAULT 'pending', -- pending / accepted / in_progress / completed / canceled
-  segment_index INTEGER, -- 路徑分段序號（每段對應一條 edges，相鄰節點）
+  status TEXT NOT NULL DEFAULT 'pending',
+  segment_index INTEGER,
+  instructions TEXT,
   created_at TEXT,
   updated_at TEXT
 );
-CREATE INDEX idx_delivery_tasks_assignee_status_created ON delivery_tasks(assigned_driver_id, status, created_at);
-CREATE INDEX idx_delivery_tasks_package_segment ON delivery_tasks(package_id, segment_index);
+
+CREATE INDEX IF NOT EXISTS idx_delivery_tasks_assignee_status_created ON delivery_tasks(assigned_driver_id, status, created_at);
+CREATE INDEX IF NOT EXISTS idx_delivery_tasks_package_segment ON delivery_tasks(package_id, segment_index);
 ```
 
----
-
-### 2.13 `vehicles` - 車輛/位置 `[規劃中]`
-
-用途：支援司機「貨車起始點=司機工作地點」與「地圖上點選相鄰節點移動」；包裹上車後所在地可記錄為 `vehicle_code`。
+### 2.13 `vehicles` - 車輛/位置
 
 ```sql
 CREATE TABLE IF NOT EXISTS vehicles (
@@ -321,18 +304,30 @@ CREATE TABLE IF NOT EXISTS vehicles (
   current_node_id TEXT REFERENCES nodes(id),
   updated_at TEXT
 );
-CREATE UNIQUE INDEX idx_vehicles_driver_user_id ON vehicles(driver_user_id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_vehicles_driver_user_id ON vehicles(driver_user_id);
 ```
 
----
+### 2.14 `vehicle_cargo` - 車上貨物
 
-### 2.14 付款資訊（`payments`）
+```sql
+CREATE TABLE IF NOT EXISTS vehicle_cargo (
+  id TEXT PRIMARY KEY,
+  vehicle_id TEXT NOT NULL REFERENCES vehicles(id),
+  package_id TEXT NOT NULL REFERENCES packages(id),
+  loaded_at TEXT,
+  unloaded_at TEXT
+);
 
-用途：付款紀錄欄位位於 `payments`；`package_events` 專注在貨態/流程事件（需要記錄付款事件時，用事件時間 `events_at` 表示）。
+CREATE INDEX IF NOT EXISTS idx_vehicle_cargo_vehicle_unloaded ON vehicle_cargo(vehicle_id, unloaded_at);
+CREATE INDEX IF NOT EXISTS idx_vehicle_cargo_package_unloaded ON vehicle_cargo(package_id, unloaded_at);
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_vehicle_cargo_package_loaded ON vehicle_cargo(package_id) WHERE unloaded_at IS NULL;
+```
 
-- 是否付款：以 `payments.paid_at` 是否為 `NULL` 判斷（`NULL`=未付款，非 `NULL`=已付款）
-- 付款時間：`payments.paid_at`（客戶實際付款時間）
-- 收款人：`payments.collected_by`（`system` 或 `users.id`；現金由司機收款時填司機的 `users.id`）
+重點約束：
+
+- `uniq_vehicle_cargo_package_loaded` 確保同一個 `package_id` 同時間只會載在一台車上
+- `unloaded_at IS NULL` 表示仍在車上；`unloaded_at` 有值代表已卸貨（保留歷史）
 
 ---
 
@@ -340,47 +335,59 @@ CREATE UNIQUE INDEX idx_vehicles_driver_user_id ON vehicles(driver_user_id);
 
 ```mermaid
 erDiagram
-    users ||--o{ packages : "寄件/下單"
-    packages ||--o{ package_events : "貨態事件"
-    packages ||--o| payments : "付款"
-    packages ||--o{ package_exceptions : "異常池"
-    users ||--o{ package_exceptions : "申報/處理"
-    users ||--o{ delivery_tasks : "司機任務"
-    packages ||--o{ delivery_tasks : "任務關聯"
-    users ||--o| vehicles : "車輛"
-    nodes ||--o{ vehicles : "所在節點"
-    users ||--o{ monthly_billing : "月結帳單"
-    monthly_billing ||--o{ monthly_billing_items : "帳單明細"
-    monthly_billing_items }o--|| packages : "包含"
+    users ||--o{ packages : "下單"
+    packages ||--o{ package_events : "事件"
+    packages ||--o| payments : "計費/付款"
     users ||--o{ tokens : "登入 token"
+
     users ||--o{ contract_applications : "合約申請"
-    users ||--o{ system_errors : "處理/關聯"
+    users ||--o{ system_errors : "系統錯誤"
+
+    packages ||--o{ package_exceptions : "異常"
+    users ||--o{ package_exceptions : "申報/處理"
+
+    packages ||--o{ delivery_tasks : "任務"
+    users ||--o{ delivery_tasks : "司機任務"
+
+    users ||--o| vehicles : "司機車輛"
+    nodes ||--o{ vehicles : "所在節點"
+    vehicles ||--o{ vehicle_cargo : "裝載"
+    vehicle_cargo }o--|| packages : "包裹上車"
+
+    users ||--o{ monthly_billing : "月結"
+    monthly_billing ||--o{ monthly_billing_items : "明細"
+    monthly_billing_items }o--|| packages : "包含"
+
     nodes ||--o{ edges : "道路"
 ```
 
 ---
 
-## 4. 索引說明
+## 4. 索引清單
 
-| 表格 | 索引 | 欄位 | 說明 |
+| 表格 | 索引 | 欄位 | 用途 |
 |---|---|---|---|
-| `users` | (UNIQUE) | `email` | Email 唯一 |
-| `edges` | `idx_edges_source` | `source` | 加速查詢以某節點為起點的邊 |
-| `tokens` | `idx_tokens_user_id` | `user_id` | 加速依使用者查 token |
-| `contract_applications` | `idx_contract_applications_customer` | `customer_id` | 加速依客戶查詢申請 |
-| `contract_applications` | `idx_contract_applications_status` | `status` | 加速依狀態篩選申請 |
-| `system_errors` | `idx_system_errors_level` | `level` | 加速依等級篩選 |
-| `system_errors` | `idx_system_errors_resolved` | `resolved` | 加速依是否已處理篩選 |
-| `package_exceptions` | `idx_package_exceptions_handled_reported_at` | `handled, reported_at` | 加速客服異常池未處理/已處理列表 |
-| `delivery_tasks` | `idx_delivery_tasks_assignee_status_created` | `assigned_driver_id, status, created_at` | 加速司機工作清單查詢 |
-| `delivery_tasks` | `idx_delivery_tasks_package_segment` | `package_id, segment_index` | 加速同包裹任務分段查詢/排序 |
-| `vehicles` | `idx_vehicles_driver_user_id` | `driver_user_id` | 加速依司機取得車輛狀態 |
+| `packages` | `idx_packages_status` | `status` | 依狀態篩選包裹 |
+| `edges` | `idx_edges_source` | `source` | 依起點查詢鄰居/路線 |
+| `tokens` | `idx_tokens_user_id` | `user_id` | 依使用者查 token |
+| `contract_applications` | `idx_contract_applications_customer` | `customer_id` | 依客戶查申請 |
+| `contract_applications` | `idx_contract_applications_status` | `status` | 依狀態查申請 |
+| `system_errors` | `idx_system_errors_level` | `level` | 依等級篩選 |
+| `system_errors` | `idx_system_errors_resolved` | `resolved` | 依是否已處理篩選 |
+| `package_exceptions` | `idx_package_exceptions_package_id` | `package_id` | 依包裹查異常 |
+| `package_exceptions` | `idx_package_exceptions_handled_reported_at` | `handled, reported_at` | 查未處理/新進異常 |
+| `delivery_tasks` | `idx_delivery_tasks_assignee_status_created` | `assigned_driver_id, status, created_at` | 司機工作清單 |
+| `delivery_tasks` | `idx_delivery_tasks_package_segment` | `package_id, segment_index` | 依包裹查任務段落 |
+| `vehicles` | `idx_vehicles_driver_user_id` | `driver_user_id` | 依司機取車輛 |
+| `vehicle_cargo` | `idx_vehicle_cargo_vehicle_unloaded` | `vehicle_id, unloaded_at` | 依車輛查目前載貨/歷史 |
+| `vehicle_cargo` | `idx_vehicle_cargo_package_unloaded` | `package_id, unloaded_at` | 依包裹查目前是否在車上 |
+| `vehicle_cargo` | `uniq_vehicle_cargo_package_loaded` | `package_id` (WHERE `unloaded_at IS NULL`) | 保證包裹同時只在一台車上 |
 
 ---
 
-## 5. 版本歷史
+## 5. 版本紀錄
 
 | 版本 | 日期 | 說明 |
 |---|---|---|
-| 1.0 | 2025-12-12 | 重寫本文件以修正亂碼，並同步最新 migrations |
-| 1.1 | 2025-12-24 | 新增 `users` 狀態欄位（status/suspended_at/suspended_reason/deleted_at） |
+| 1.0 | 2025-12-24 | 同步到目前 migrations，補齊 `vehicles` / `vehicle_cargo` 文件 |
+

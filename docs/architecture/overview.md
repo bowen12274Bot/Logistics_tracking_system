@@ -11,6 +11,7 @@
 
 ## 文件連結
 
+- Repo 結構：`docs/architecture/repository-structure.md`
 - 資料模型：`docs/architecture/data-model.md`
 - 模組規格（規則權威）：
   - 異常：`docs/modules/exceptions.md`

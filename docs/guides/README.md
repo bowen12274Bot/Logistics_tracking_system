@@ -8,3 +8,4 @@
 - CI/CD：`docs/guides/ci-cd-guide.md`（舊入口：`docs/ci-cd-guide.md`）
 - 貢獻規範：`docs/guides/contributing.md`（舊入口：`docs/contributing.md`）
 - Docs 維護規範：`docs/guides/docs-maintenance.md`
+- 版本歷史：`docs/guides/version-history.md`

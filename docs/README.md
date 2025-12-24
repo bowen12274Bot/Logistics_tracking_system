@@ -2,17 +2,31 @@
 
 這份 `docs/` 目錄是「分層文件」的入口：先看全貌，再往下看模組規格與 API 參考，最後才是操作手冊與圖表。
 
+## Docs 結構總覽（快速）
+
+| 目錄 | 放什麼 | 定位 |
+|---|---|---|
+| `docs/architecture/` | 系統概念、不變量、資料模型 | L1（概念層） |
+| `docs/modules/` | 規則/流程/一致性（權威） | L2（規則層） |
+| `docs/reference/` | 可查詢的參考資料（API/Schema） | L3（接口層） |
+| `docs/handbook/` | 各角色操作手冊（UI/步驟） | 操作層（不做規則權威） |
+| `docs/design/` | UI/UX、流程圖、設計備忘 | 支援資料 |
+| `docs/guides/` | 開發/測試/部署/協作指南 | L4（指南層） |
+| `docs/legacy/` | 舊文件留存（非權威） | 歷史參考 |
+| `docs/*.md` | 舊入口 stub（避免舊連結失效） | 轉址/索引 |
+
 ## 建議閱讀順序
 
 - 新加入/想快速跑起來：`docs/guides/getting-started.md`（舊入口：`docs/getting-started.md`）→ `docs/guides/testing-guide.md`（舊入口：`docs/testing-guide.md`）→ `docs/api-contract.md`
 - 想理解系統怎麼運作（概念/規則）：`docs/architecture/overview.md` → `docs/architecture/data-model.md` → `docs/modules/exceptions.md`
-- 想對照 UI：`docs/design/ui-spec.md`（舊入口：`docs/ui-spec.md`）→ `docs/handbook/customer-service.md` / `docs/handbook/warehouse-staff.md` / `docs/handbook/driver.md`
+- 想對照 UI：`docs/design/ui-spec.md`（舊入口：`docs/ui-spec.md`）→ `docs/handbook/customer-service.md` / `docs/handbook/warehouse-staff.md` / `docs/handbook/driver.md` / `docs/handbook/non-contract-customer.md` / `docs/handbook/contract-customer.md` / `docs/handbook/admin.md`
 
 ## 目前文件分層
 
 ### L1：系統概觀（概念/資料）
 
 - 概觀：`docs/architecture/overview.md`
+- Repo 結構（檔案放置規則）：`docs/architecture/repository-structure.md`
 - 資料模型（摘要）：`docs/architecture/data-model.md`（DDL 以 `backend/migrations/` 為準）
 - 既有詳細表結構（資料字典）：`docs/reference/database-schema.md`（舊入口：`docs/database-schema.md`）
 - 服務標準/原則（若有需要）：`docs/architecture/delivery-service-standards.md`（舊入口：`docs/delivery_service_standards.md`）

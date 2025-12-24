@@ -13,6 +13,34 @@
 - 事件：`package_events`（`delivery_status='exception'|'exception_resolved'|'delivery_failed'`）
 - 任務：`delivery_tasks`（異常成立會取消 active tasks）
 
+## Reason Codes（`reason_code` 字典）
+
+`reason_code` 是可擴充的「字串枚舉」（後端以字串儲存，不在 DB 做 enum）。前端/顧客端顯示用「中文分類」對照表；遇到未知 code 時，顧客端顯示「其他」並保留原始資料供內部查看。
+
+> 顧客端呈現規範：只顯示「中文分類」（reason_code → 中文），不顯示 `description` / `handling_report`。
+
+目前實作上：司機端點接受 `reason_code` 可選（但建議必填）；倉儲端點 `reason_code` 必填。
+
+### 完整 `reason_code`（MVP：包裹問題，可擴充）
+
+| reason_code | 中文顯示（顧客可見） | 司機可申報 | 倉儲可申報 | 說明（何時用） |
+|---|---|:---:|:---:|---|
+| `lost` | 遺失 / 找不到包裹 | ✅ | ✅ | 車上/站內找不到、交接點缺件 |
+| `damaged` | 損毀 / 外箱破損 | ✅ | ✅ | 外箱破損/凹陷/明顯受損 |
+| `unpaid` | 未付款 / 付款爭議 | ✅ |  | 貨到付款拒付、金額爭議（先停件） |
+| `sender_not_ready` | 寄件者未備妥包裹 | ✅ |  | 取件時寄件者尚未備妥（先停件） |
+| `no_answer` | 客戶未應門 / 無法聯絡 | ✅ |  | 到達取件/送件點，無人應門或無法聯絡（先停件） |
+| `refused` | 收件者拒收包裹 | ✅ |  | 明確拒收或拒絕簽收（先停件） |
+| `address_issue` | 地址問題 / 無法送達 | ✅ |  | 地址不存在、地址資訊不全、需客服協助更正（先停件） |
+| `label_issue` | 標籤 / 面單問題 |  | ✅ | 條碼/面單破損、無法辨識、資訊不全（先停件） |
+| `misroute` | 錯分 / 送錯站 |  | ✅ | 站內錯分、送錯站、路徑明顯不合理（先停件） |
+| `other` | 其他（請詳述） | ✅ | ✅ | 不在以上分類（`description` 必填） |
+
+### 角色可用清單（便於前端下拉選單）
+
+- 司機（driver）：`lost`、`damaged`、`unpaid`、`sender_not_ready`、`no_answer`、`refused`、`address_issue`、`other`
+- 倉儲（warehouse_staff）：`lost`、`damaged`、`label_issue`、`misroute`、`other`
+
 ## Location（權威與驗證）
 
 ### 1) `package_events.location` 的語意

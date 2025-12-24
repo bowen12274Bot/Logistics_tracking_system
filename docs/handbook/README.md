@@ -1,7 +1,11 @@
-# Handbooks（角色作業手冊）
+# Handbooks（角色操作手冊）
 
-本資料夾放「角色作業手冊」：描述 UI/操作步驟與驗收點；規則與一致性約束以 `docs/modules/` 為準。
+本資料夾放「角色端 UI/操作步驟」：怎麼按、怎麼填、怎麼走流程。規則與一致性（權威）以 `docs/modules/` 為準。
 
-- 司機：`docs/handbook/driver.md`
-- 倉儲：`docs/handbook/warehouse-staff.md`
-- 客服：`docs/handbook/customer-service.md`
+- 司機（driver）：`docs/handbook/driver.md`
+- 倉儲（warehouse_staff）：`docs/handbook/warehouse-staff.md`
+- 客服（customer_service）：`docs/handbook/customer-service.md`
+- 客戶（非合約 / non_contract_customer）：`docs/handbook/non-contract-customer.md`
+- 客戶（合約 / contract_customer）：`docs/handbook/contract-customer.md`
+- 管理員（admin）：`docs/handbook/admin.md`
+
