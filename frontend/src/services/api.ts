@@ -287,6 +287,18 @@ export type DriverExceptionRecord = {
   handled_at?: string | null;
 };
 
+export type WarehouseExceptionRecord = {
+  id: string;
+  package_id: string;
+  tracking_number?: string | null;
+  package_status?: string | null;
+  reason_code?: string | null;
+  description?: string | null;
+  reported_at?: string | null;
+  handled?: number | null;
+  handled_at?: string | null;
+};
+
 export type CustomerServiceExceptionRecord = {
   id: string;
   package_id: string;
@@ -571,6 +583,13 @@ export const api = {
       const qs = new URLSearchParams({ limit: String(limit) });
       return request<WarehousePackagesResponse>(`/api/warehouse/packages?${qs.toString()}`, { method: "GET" });
     },
+    getWarehouseExceptionReports: (limit = 50) => {
+      const qs = new URLSearchParams({ limit: String(limit) });
+      return request<{ success: boolean; exceptions: WarehouseExceptionRecord[] }>(
+        `/api/warehouse/exceptions?${qs.toString()}`,
+        { method: "GET" },
+      );
+    },
   receiveWarehousePackages: (package_ids: string[]) =>
     request<WarehouseReceiveResponse>("/api/warehouse/packages/receive", {
       method: "POST",
@@ -579,6 +598,11 @@ export const api = {
   dispatchWarehouseNext: (packageId: string, payload: { toNodeId: string }) =>
     request<{ success: boolean; task_id: string; assigned_driver_id: string | null; segment_index: number }>(
       `/api/warehouse/packages/${encodeURIComponent(packageId)}/dispatch-next`,
+      { method: "POST", body: JSON.stringify(payload) },
+    ),
+  reportWarehouseException: (packageId: string, payload: { reason_code: string; description: string }) =>
+    request<{ success: boolean; exception_id: string; event_id: string }>(
+      `/api/warehouse/packages/${encodeURIComponent(packageId)}/exception`,
       { method: "POST", body: JSON.stringify(payload) },
     ),
   getMe: () =>

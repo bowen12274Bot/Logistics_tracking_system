@@ -25,7 +25,7 @@ import { WarehouseBatchOperation } from "./endpoints/warehouseOperations";
 import { WarehousePackagesList } from "./endpoints/warehousePackages";
 import { WarehousePackagesReceive } from "./endpoints/warehouseReceive";
 import { WarehouseDispatchNextTask } from "./endpoints/warehouseTaskDispatch";
-import { WarehousePackageExceptionCreate } from "./endpoints/warehousePackageException";
+import { WarehousePackageExceptionCreate, WarehousePackageExceptionList } from "./endpoints/warehousePackageException";
 import { BillingBillList, BillingBillDetail } from "./endpoints/billingBills";
 import { BillingPaymentCreate, BillingPaymentList } from "./endpoints/billingPayments";
 import { AdminUserCreate } from "./endpoints/adminUsers";
@@ -296,6 +296,7 @@ openapi.post("/api/cs/exceptions/:exceptionId/handle", CustomerServiceExceptionH
 openapi.get("/api/cs/contract-applications", CustomerServiceContractList);
 openapi.put("/api/cs/contract-applications/:id", CustomerServiceContractReview);
 openapi.get("/api/warehouse/packages", WarehousePackagesList);
+openapi.get("/api/warehouse/exceptions", WarehousePackageExceptionList);
 openapi.post("/api/warehouse/packages/receive", WarehousePackagesReceive);
 openapi.post("/api/warehouse/batch-operation", WarehouseBatchOperation);
 openapi.post("/api/warehouse/packages/:packageId/dispatch-next", WarehouseDispatchNextTask);

@@ -248,10 +248,10 @@ export class CustomerServiceExceptionHandle extends OpenAPIRoute {
     };
 
     const record = await c.env.DB.prepare(
-      "SELECT id, package_id, handled, reason_code FROM package_exceptions WHERE id = ? LIMIT 1",
+      "SELECT id, package_id, handled, reason_code, reported_role FROM package_exceptions WHERE id = ? LIMIT 1",
     )
       .bind(exceptionId)
-      .first<{ id: string; package_id: string; handled: number; reason_code: string | null }>();
+      .first<{ id: string; package_id: string; handled: number; reason_code: string | null; reported_role: string | null }>();
     if (!record) return c.json({ error: "Exception not found" }, 404);
     if (Number(record.handled) === 1) return c.json({ error: "Already handled" }, 409);
 
@@ -271,6 +271,7 @@ export class CustomerServiceExceptionHandle extends OpenAPIRoute {
     let persistedResumeMode: "continue_segment" | "reroute_next_hop" | "redirect_destination" | null = null;
     let persistedNextHopOverride: string | null = null;
     let persistedDestinationOverride: string | null = null;
+    let warehouseRestore: { status: string; location: string; details: string | null } | null = null;
 
     if (body.action === "resume") {
       if (await hasActiveTask(c.env.DB, record.package_id)) {
@@ -282,7 +283,7 @@ export class CustomerServiceExceptionHandle extends OpenAPIRoute {
       const fallbackLocation = String(body.location ?? "").trim().toUpperCase();
       const exceptionLocRow = await c.env.DB.prepare(
         `
-        SELECT location
+        SELECT location, events_at
         FROM package_events
         WHERE package_id = ?
           AND delivery_status = 'exception'
@@ -291,8 +292,41 @@ export class CustomerServiceExceptionHandle extends OpenAPIRoute {
         `,
       )
         .bind(record.package_id)
-        .first<{ location: string | null }>();
+        .first<{ location: string | null; events_at: string | null }>();
       const exceptionLoc = String(exceptionLocRow?.location ?? "").trim().toUpperCase();
+      const exceptionAt = String(exceptionLocRow?.events_at ?? "").trim();
+
+      // If warehouse staff reported an exception while the package was still in station workflow,
+      // resuming should restore it back to that workflow (e.g. warehouse_in -> awaiting receive),
+      // rather than immediately creating a delivery task for drivers.
+      const shouldRestoreWarehouseWorkflow =
+        String(record.reported_role ?? "").trim() === "warehouse_staff" && Boolean(exceptionAt);
+      let skipResumeTaskCreation = false;
+      if (shouldRestoreWarehouseWorkflow) {
+        const restoreRow = await c.env.DB.prepare(
+          `
+          SELECT delivery_status, delivery_details, location
+          FROM package_events
+          WHERE package_id = ?
+            AND events_at < ?
+            AND LOWER(TRIM(delivery_status)) NOT IN ('exception','exception_resolved')
+          ORDER BY events_at DESC
+          LIMIT 1
+          `,
+        )
+          .bind(record.package_id, exceptionAt)
+          .first<{ delivery_status: string | null; delivery_details: string | null; location: string | null }>();
+
+        const restoreStatus = String(restoreRow?.delivery_status ?? "").trim().toLowerCase();
+        const restoreLocation = String(restoreRow?.location ?? "").trim().toUpperCase();
+        const restoreDetails = String(restoreRow?.delivery_details ?? "").trim() || null;
+        const restoreIsWarehouseStage = ["warehouse_in", "warehouse_received", "sorting", "route_decided"].includes(restoreStatus);
+        if (restoreIsWarehouseStage && restoreLocation) {
+          warehouseRestore = { status: restoreStatus, location: restoreLocation, details: restoreDetails };
+        }
+        skipResumeTaskCreation =
+          restoreIsWarehouseStage && ["warehouse_in", "warehouse_received", "sorting"].includes(restoreStatus);
+      }
 
       const activeCargoVehicle = await getActiveCargoVehicle(c.env.DB, record.package_id);
 
@@ -329,6 +363,7 @@ export class CustomerServiceExceptionHandle extends OpenAPIRoute {
       if (!receiver) {
         persistedResumeMode = resumeMode;
       } else {
+        if (!skipResumeTaskCreation) {
 
       // Prefer "re-issuing the last canceled segment" when the package is still on a truck:
       // the driver should be able to continue the same segment and/or dropoff (unload) at its destination node.
@@ -464,6 +499,7 @@ export class CustomerServiceExceptionHandle extends OpenAPIRoute {
           .bind(destinationOverride, record.package_id)
           .run();
       }
+        }
       }
     }
 
@@ -540,6 +576,26 @@ export class CustomerServiceExceptionHandle extends OpenAPIRoute {
     )
       .bind(eventId, record.package_id, details, now, resolvedLocation)
       .run();
+
+    if (body.action === "resume" && warehouseRestore) {
+      const now2 = new Date(Date.parse(now) + 1).toISOString();
+      const restoreEventId = crypto.randomUUID();
+      await c.env.DB.prepare(
+        `
+        INSERT INTO package_events (id, package_id, delivery_status, delivery_details, events_at, location)
+        VALUES (?, ?, ?, ?, ?, ?)
+        `,
+      )
+        .bind(
+          restoreEventId,
+          record.package_id,
+          warehouseRestore.status,
+          warehouseRestore.details,
+          now2,
+          warehouseRestore.location,
+        )
+        .run();
+    }
 
     let deliveryFailedEventId: string | null = null;
     if (body.action === "cancel") {

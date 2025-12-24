@@ -72,7 +72,7 @@
 | T10 | 鑑權與拒絕請求 API              | 讓用戶只能查到自己的包裹，並提供拒絕請求功能                                                        | 劉柏言 | 已完成   |
 | T11 | 異常事件/申報/處理模型          | 定義「異常」事件類型、異常原因/說明、處理狀態（未處理/已處理）與處理報告，供司機/倉儲申報、客服處理 | 劉柏言 | 已完成   |
 | T12 | 異常池資料表 migration          | 新增 `package_exceptions`：異常原因/說明、申報者、handled/handled_by/handled_at、處理報告與索引       | 劉柏言 | 已完成   |
-| T13 | 異常申報/查詢/處理 API          | 司機/倉儲可申報異常；客服可查詢異常池（未處理/已處理）與標示已處理＋報告（串接 T11/T12）            | 劉柏言 | 進行中   |
+| T13 | 異常申報/查詢/處理 API          | 司機/倉儲可申報異常；客服可查詢異常池（未處理/已處理）與標示已處理＋報告（串接 T11/T12）            | 劉柏言 | 已完成   |
 | T14 | 司機任務資料表 migration        | 新增 `delivery_tasks`（或 staff_tasks）：task_type、from/to、assigned_driver、status、timestamps     | 劉柏言 | 已完成   |
 | T15 | 司機車輛/位置資料表 migration   | 新增 `vehicles`（或 driver_state）：vehicle_code、home_node_id、current_node_id，支援地圖移動與起點 | 劉柏言 | 已完成   |
 | T16 | 到付實收欄位/收費資料調整       | 擴充 `payments` 以支援司機到付實收（collected_amount/collected_at/collected_by...）並串接 D4        | 劉柏言 | 進行中   |
@@ -114,9 +114,9 @@
 | W2  | 入站接收轉運包裹       | 包裹進到配送站時，將狀態設為「分揀轉運處理」並寫入事件（T6/T3） | 劉柏言 | 已完成   |
 | W3  | 分揀完成/待轉運         | 分揀完成後將狀態設為「待貨車轉運」，並讓司機端重新產生/看到任務 | 劉柏言 | 已完成   |
 | W4  | 決定下一次配送點/調整路徑 | 以系統計算路徑為建議，允許倉儲員修改包裹後續配送路徑（下一站/路徑序列） | 劉柏言 | 已完成   |
-| W5  | 倉儲異常申報            | 入庫/分揀/轉運過程可申報異常，建立異常紀錄並將包裹狀態改為異常 | 劉柏言 | 進行中   |
+| W5  | 倉儲異常申報            | 入庫/分揀/轉運過程可申報異常，建立異常紀錄並將包裹狀態改為異常 | 劉柏言 | 已完成   |
 | W6  | 倉儲改路徑 API           | 更新 `packages.route_path`（選配：新增 route override 留痕），供倉儲員修改後續配送路徑 | 劉柏言 | 已完成   |
-| W7  | 倉儲異常申報 API         | 倉儲端建立異常紀錄（寫入 `package_exceptions`）並更新 packages/status + package_events | 劉柏言 | 進行中   |
+| W7  | 倉儲異常申報 API         | 倉儲端建立異常紀錄（寫入 `package_exceptions`）並更新 packages/status + package_events | 劉柏言 | 已完成   |
 
 ---
 
