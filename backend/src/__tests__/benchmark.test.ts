@@ -60,23 +60,23 @@ async function getToken(userClass: string): Promise<string> {
   if (tokens[userClass]) return tokens[userClass];
 
   const credentials: Record<string, { email: string; password: string }> = {
-    customer: { email: "test_customer@example.com", password: "password123" },
-    driver: { email: "test_driver@example.com", password: "password123" },
-    warehouse_staff: { email: "test_warehouse@example.com", password: "password123" },
-    customer_service: { email: "test_cs@example.com", password: "password123" },
-    admin: { email: "test_admin@example.com", password: "password123" },
+    customer: { email: "cust@example.com", password: "cust123" },
+    driver: { email: "driver_hub_0@example.com", password: "driver123" },
+    warehouse_staff: { email: "warehouse_hub_0@example.com", password: "warehouse123" },
+    customer_service: { email: "cs@example.com", password: "cs123" },
+    admin: { email: "admin@example.com", password: "admin123" },
   };
 
   const cred = credentials[userClass];
   if (!cred) throw new Error(`Unknown user class: ${userClass}`);
 
-  const res = await SELF.fetch("http://localhost/api/auth/login", {
+  const res = await SELF.fetch("http://local.test/api/auth/login", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ identifier: cred.email, password: cred.password }),
   });
 
-  const data = await res.json() as { token?: string };
+  const data = (await res.json()) as { token?: string };
   if (!data.token) throw new Error(`Failed to get token for ${userClass}`);
 
   tokens[userClass] = data.token;
@@ -96,11 +96,17 @@ async function measureRequest(config: EndpointConfig): Promise<number> {
 
   const start = performance.now();
   
-  await SELF.fetch(`http://localhost${config.path}`, {
+  const res = await SELF.fetch(`http://local.test${config.path}`, {
     method: config.method,
     headers,
     body: config.body ? JSON.stringify(config.body) : undefined,
   });
+  // Always consume body to avoid leaking streams/handles across tests.
+  try {
+    await res.arrayBuffer();
+  } catch {
+    // ignore
+  }
 
   const end = performance.now();
   return end - start;

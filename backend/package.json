@@ -11,7 +11,7 @@
     "cf-typegen": "wrangler types",
     "test": "vitest run",
     "test:watch": "vitest",
-    "benchmark": "vitest run src/__tests__/benchmark.test.ts --reporter=verbose",
+    "benchmark": "vitest run --config vitest.benchmark.config.ts --reporter=verbose",
     "benchmark:report": "npx ts-node scripts/generate-report.ts"
   },
   "dependencies": {

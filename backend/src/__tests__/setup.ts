@@ -16,7 +16,6 @@ import m0012 from "../../migrations/0012_package_exceptions.sql?raw";
 import m0013 from "../../migrations/0013_delivery_tasks.sql?raw";
 import m0014 from "../../migrations/0014_vehicles.sql?raw";
 import m0015 from "../../migrations/0015_vehicle_cargo.sql?raw";
-import m0016 from "../../migrations/0016_users_status.sql?raw";
 
 const migrations = [
   m0000,
@@ -34,7 +33,6 @@ const migrations = [
   m0013,
   m0014,
   m0015,
-  m0016,
 ];
 
 const splitSqlStatements = (sql: string) => {
@@ -100,19 +98,7 @@ beforeAll(async () => {
       }
     }
   } else {
-    // Existing DB, check for updates
-    // Check m0016 (status column)
-    try {
-       await env.DB.prepare("SELECT status FROM users LIMIT 1").first();
-    } catch (e) {
-       // Column missing, apply m0016
-       console.log("Applying missing migration m0016...");
-       for (const statement of splitSqlStatements(m0016)) {
-          try { await env.DB.prepare(statement).run(); } catch(err) { console.warn("m0016 partial fail", err); }
-       }
-    }
-
-    // Check seed (Admin user)
+    // Existing DB: assume DB is reset between deploys; only ensure test seed exists.
     const admin = await env.DB.prepare("SELECT id FROM users WHERE email='admin@example.com'").first();
     if (!admin) {
        console.log("Re-seeding m0011...");
