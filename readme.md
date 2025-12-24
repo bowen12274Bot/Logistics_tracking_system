@@ -145,12 +145,13 @@ logistics-system/               # Repo 根目錄
 │              HomeView.vue                  # 首頁
 │              LoginView.vue                 # 登入
 │              VirtualMapView.vue            # 虛擬地圖展示/模擬
+│              DriverMapView.vue             # 司機地圖（路線/車輛位置）
 │              CustomerDashboard.vue         # 客戶主控台
 │              CustomerTrackView.vue         # 包裹追蹤
+│              PublicTrackView.vue           # 公開查詢（免登入）
 │              CustomerSendView.vue          # 建立寄件
 │              CustomerPaymentView.vue       # 付款/帳單（客戶）
 │              CustomerContractView.vue      # 合約/月結申請
-│              CustomerScheduleView.vue      # 排程取件（客戶）
 │              CustomerProfileView.vue       # 客戶資料
 │              ShippingEstimateView.vue      # 運費試算（頁面）
 │              EmployeeDriverView.vue        # 司機端（工作清單/操作）
@@ -253,14 +254,14 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File ".\backend\scripts\reset
 ### 1. 安裝依賴 (Install Dependencies)
 
 ```powershell
-# 後端
+# 後端（終端機 1）
 cd backend
-npm install
-npm install -g wrangler
+npm install   # 或 npm ci
+cd ..
 
-# 前端（開新終端機）
+# 前端（終端機 2）
 cd frontend
-npm install
+npm install   # 或 npm ci
 ```
 
 ### 2. 初始化資料庫 (Initialize Database)
@@ -269,7 +270,7 @@ npm install
 cd backend
 
 # 產生 Type 定義
-wrangler types
+npm run cf-typegen
 
 # 套用資料庫遷移 (Migrations) 到本地模擬器
 npx wrangler d1 migrations apply DB --local

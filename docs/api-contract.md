@@ -1573,23 +1573,24 @@ Authorization: Bearer <token>
 | 欄位 | 類型 | 必填 | 說明 |
 |------|------|------|------|
 | `description` | string | ✅ | 異常描述（會寫入異常池與事件） |
-| `reason_code` | string | ❌ | 異常代碼（建議由系統/客服補填；司機可不填） |
+| `reason_code` | string | ❌ | 異常分類代碼（由 UI 選單選擇；本專案 driver/warehouse_staff 必填） |
 | `location` | string | ❌ | 異常發生位置：節點 ID（點異常）或 `TRUCK_*`（線異常） |
 
 #### reason_code 建議值（輕量規範）
 
-> `reason_code` 主要用於統計與客服分類；不應增加司機申報負擔。建議由 UI 以「選單」呈現，或允許司機略過，後續由客服補填/修正。
+> 本專案以「選單」呈現並要求司機/倉儲員必填；客服/管理端可擴充更多分類而不破壞既有資料。
 
 | reason_code | 說明 |
 |------------|------|
-| `damaged` | 包裹破損 |
-| `lost` | 遺失 |
-| `delayed` | 延誤 |
-| `address_issue` | 地址/收件資料問題 |
-| `payment_dispute` | 付款爭議（到付/預付） |
-| `refused` | 收件人拒收 |
-| `misroute` | 配送路徑/節點錯誤 |
-| `vehicle_issue` | 車輛/設備問題 |
+| `lost` | 遺失 / 找不到包裹 |
+| `damaged` | 損毀 / 外箱破損 |
+| `unpaid` | 未付款 / 付款爭議 |
+| `sender_not_ready` | 寄件者未備妥包裹 |
+| `no_answer` | 客戶未應門 / 無法聯絡 |
+| `refused` | 收件者拒收 |
+| `address_issue` | 地址問題 / 無法送達 |
+| `label_issue` | 標籤 / 面單問題（倉儲） |
+| `misroute` | 錯分 / 送錯站（倉儲） |
 | `other` | 其他（搭配 description 詳細說明） |
 
 **格式建議**

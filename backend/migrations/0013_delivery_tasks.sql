@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS delivery_tasks (
   assigned_driver_id TEXT REFERENCES users(id),
   status TEXT NOT NULL DEFAULT 'pending', -- pending / accepted / in_progress / completed / canceled
   segment_index INTEGER, -- route segment order (1 edge per segment)
+  instructions TEXT, -- optional driver-facing instructions (e.g. CS handling_report on resume)
   created_at TEXT,
   updated_at TEXT
 );
