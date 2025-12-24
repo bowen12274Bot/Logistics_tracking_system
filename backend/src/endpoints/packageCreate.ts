@@ -10,6 +10,7 @@ import {
   type DeliveryType,
   type BoxType
 } from "../utils/pricing";
+import { buildGraph, normalizeNodeId, type EdgeRow } from "../utils/graphUtils";
 
 async function computeInitialPaymentAmount(
   db: any,
@@ -418,37 +419,32 @@ export class PackageCreate extends OpenAPIRoute {
 			// - At creation time, only dispatch pickup END -> its adjacent REG (1 edge).
 			// - Later segments are dispatched by warehouse staff after they decide the real route.
 			if (normalizedSenderAddress && normalizedReceiverAddress) {
-				type NodeRow = { id: string; level: number };
-				type EdgeRow = { source: string; target: string };
+				type NodeRowExtended = { id: string; level: number };
+				// edge has no cost column here, just source/target.
+				// But buildGraph expects optional cost.
+				// We can just cast or map.
+				
 				const nodesResult = await c.env.DB.prepare("SELECT id, level FROM nodes").all();
 				const edgesResult = await c.env.DB.prepare("SELECT source, target FROM edges").all();
-				const nodes = (nodesResult.results || []) as NodeRow[];
+				const nodes = (nodesResult.results || []) as NodeRowExtended[];
 				const edges = (edgesResult.results || []) as EdgeRow[];
+
+                // Use shared utility to build graph adjacency
+				const graph = buildGraph(nodes, edges);
+                // graph.adj values are { to: string; cost: number }[]
 
 				const levelById = new Map<string, number>();
 				for (const n of nodes) levelById.set(String(n.id).trim(), Number(n.level));
 
-				const adj = new Map<string, string[]>();
-				const add = (a: string, b: string) => {
-					if (!adj.has(a)) adj.set(a, []);
-					adj.get(a)!.push(b);
-				};
-				for (const e of edges) {
-					const a = String(e.source).trim();
-					const b = String(e.target).trim();
-					if (!a || !b) continue;
-					add(a, b);
-					add(b, a);
-				}
-
 				const findAdjacentNode = (from: string) => {
-					const neighbors = adj.get(from) ?? [];
+					// Adapt from graphUtils structure
+					const neighbors = graph.adj.get(normalizeNodeId(from))?.map(n => n.to) ?? [];
 					const reg = neighbors.find((n) => /^REG_\d+$/i.test(n));
 					return reg ?? neighbors[0] ?? null;
 				};
 
 				const findRootHub = (startNodeId: string) => {
-					const start = String(startNodeId).trim();
+					const start = normalizeNodeId(startNodeId);
 					if (!start) return null;
 					const startLevel = levelById.get(start);
 					if (startLevel === 1) return start;
@@ -461,7 +457,10 @@ export class PackageCreate extends OpenAPIRoute {
 						const node = queue.shift()!;
 						const lvl = levelById.get(node);
 						if (lvl === 1) return node;
-						for (const nei of adj.get(node) ?? []) {
+						
+						// Iterating graphUtils adj
+						for (const edge of graph.adj.get(node) ?? []) {
+                            const nei = edge.to;
 							if (visited.has(nei)) continue;
 							visited.add(nei);
 							queue.push(nei);

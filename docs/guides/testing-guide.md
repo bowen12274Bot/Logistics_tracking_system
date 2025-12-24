@@ -1,8 +1,7 @@
-# 測試指南 (Testing Guide)
+﻿# 測試指南 (Testing Guide)
 
 本文件說明物流追蹤系統的測試架構與執行方式。
 
----
 
 ## 🏗️ 測試架構概述 (Testing Architecture)
 
@@ -74,6 +73,12 @@ npm test -- --watch
 
 # 顯示詳細輸出 (Verbose)
 npm test -- --reporter=verbose
+
+# 執行效能測試
+npm run benchmark        
+
+# 生成 HTML 報告
+npm run benchmark:report 
 ```
 
 ### 前端測試
@@ -313,6 +318,6 @@ describe('模組名稱 API', () => {
 
 ## 📚 相關文件 (Related Documentation)
 
-- [測試計畫](vitest-plan.md) - 完整測試案例規劃（舊入口：`docs/vitest-plan.md`）
-- [API 契約文件](api-contract.md) - API 規格參考
-- [開發環境設定](getting-started.md) - 環境設定指南（舊入口：`docs/getting-started.md`）
+- [測試計畫](vitest-plan.md) - 完整測試案例規劃
+- [API 契約文件](../api-contract.md) - API 規格參考
+- [開發環境設定](getting-started.md) - 環境設定指南

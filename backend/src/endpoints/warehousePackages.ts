@@ -2,6 +2,19 @@ import { OpenAPIRoute } from "chanfana";
 import { z } from "zod";
 import type { AppContext } from "../types";
 import { requireWarehouse, type AuthUser } from "../utils/authUtils";
+import { normalizeNodeId, buildGraph, dijkstraCost, type NodeRow, type EdgeRow } from "../utils/graphUtils";
+
+async function requireWarehouseWithNode(c: AppContext) {
+  const auth = await requireWarehouse(c);
+  if (auth.ok === false) return auth;
+
+  const nodeId = normalizeNodeId(auth.user.address);
+  if (!nodeId) {
+    return { ok: false as const, res: c.json({ error: "Warehouse has no node (users.address)" }, 400) };
+  }
+
+  return { ok: true as const, user: { ...auth.user, address: nodeId } };
+}
 
 type PackageRow = {
   id: string;
@@ -18,82 +31,7 @@ type PackageRow = {
   last_location: string | null;
 };
 
-type NodeRow = { id: string };
-type EdgeRow = { source: string; target: string; cost: number };
 
-function normalizeNodeId(value: string | null | undefined) {
-  return String(value ?? "").trim().toUpperCase();
-}
-
-async function requireWarehouseWithNode(c: AppContext) {
-  const auth = await requireWarehouse(c);
-  if (auth.ok === false) return auth;
-
-  const nodeId = normalizeNodeId(auth.user.address);
-  if (!nodeId) {
-    return { ok: false as const, res: c.json({ error: "Warehouse has no node (users.address)" }, 400) };
-  }
-
-  return { ok: true as const, user: { ...auth.user, address: nodeId } };
-}
-
-function buildGraph(nodes: NodeRow[], edges: EdgeRow[]) {
-  const nodeIds = new Set(nodes.map((n) => normalizeNodeId(n.id)).filter(Boolean));
-  const adj = new Map<string, Array<{ to: string; cost: number }>>();
-
-  const add = (a: string, b: string, cost: number) => {
-    if (!adj.has(a)) adj.set(a, []);
-    adj.get(a)!.push({ to: b, cost });
-  };
-
-  for (const e of edges) {
-    const a = normalizeNodeId(e.source);
-    const b = normalizeNodeId(e.target);
-    const cost = Number((e as any).cost);
-    if (!a || !b || !Number.isFinite(cost)) continue;
-    add(a, b, cost);
-    add(b, a, cost);
-  }
-
-  return { nodeIds, adj };
-}
-
-function dijkstraCost(
-  graph: { nodeIds: Set<string>; adj: Map<string, Array<{ to: string; cost: number }>> },
-  from: string,
-  to: string,
-) {
-  const start = normalizeNodeId(from);
-  const goal = normalizeNodeId(to);
-  if (!start || !goal) return null;
-  if (!graph.nodeIds.has(start) || !graph.nodeIds.has(goal)) return null;
-  if (start === goal) return 0;
-
-  const dist = new Map<string, number>();
-  const visited = new Set<string>();
-  const pq: Array<{ node: string; d: number }> = [{ node: start, d: 0 }];
-  dist.set(start, 0);
-
-  while (pq.length > 0) {
-    pq.sort((a, b) => a.d - b.d);
-    const cur = pq.shift()!;
-    if (visited.has(cur.node)) continue;
-    visited.add(cur.node);
-    if (cur.node === goal) return cur.d;
-
-    for (const nxt of graph.adj.get(cur.node) ?? []) {
-      if (visited.has(nxt.to)) continue;
-      const nd = cur.d + nxt.cost;
-      const best = dist.get(nxt.to);
-      if (best === undefined || nd < best) {
-        dist.set(nxt.to, nd);
-        pq.push({ node: nxt.to, d: nd });
-      }
-    }
-  }
-
-  return null;
-}
 
 export class WarehousePackagesList extends OpenAPIRoute {
   schema = {

@@ -15,108 +15,44 @@ export type RouteResult =
       debug?: { nodesCount: number; edgesCount: number; fromDegree: number; toDegree: number };
     };
 
+import { buildGraph, computeShortestPath, type EdgeRow, type NodeRow } from "../utils/graphUtils";
+
 export const computeRoute = async (
   db: D1Database,
   fromNodeId: string,
   toNodeId: string,
 ): Promise<RouteResult> => {
-  const fromId = String(fromNodeId).trim();
-  const toId = String(toNodeId).trim();
-
-  const fromExists = await db.prepare("SELECT 1 FROM nodes WHERE id = ?").bind(fromId).first();
-  if (!fromExists) return { ok: false, reason: "from_not_found" };
-  const toExists = await db.prepare("SELECT 1 FROM nodes WHERE id = ?").bind(toId).first();
-  if (!toExists) return { ok: false, reason: "to_not_found" };
-
   const nodesResult = await db.prepare("SELECT id FROM nodes").all();
   const edgesResult = await db.prepare("SELECT source, target, cost FROM edges").all();
 
-  const nodes = (nodesResult.results || []) as NodeData[];
-  const edges = (edgesResult.results || []) as EdgeData[];
+  const nodes = (nodesResult.results || []) as NodeRow[];
+  const edges = (edgesResult.results || []) as EdgeRow[];
 
-  const graph: Map<string, { neighbor: string; cost: number }[]> = new Map();
-  for (const node of nodes) graph.set(String(node.id).trim(), []);
-  if (!graph.has(fromId)) graph.set(fromId, []);
-  if (!graph.has(toId)) graph.set(toId, []);
+  const graph = buildGraph(nodes, edges);
+  
+  const result = computeShortestPath(graph, fromNodeId, toNodeId);
 
-  for (const edge of edges) {
-    const cost = Number((edge as any).cost);
-    if (!Number.isFinite(cost)) continue;
+  if (!result) {
+    const start = String(fromNodeId).trim().toUpperCase();
+    const end = String(toNodeId).trim().toUpperCase();
+    if (!graph.nodeIds.has(start)) return { ok: false, reason: "from_not_found" };
+    if (!graph.nodeIds.has(end)) return { ok: false, reason: "to_not_found" };
 
-    const source = String(edge.source).trim();
-    const target = String(edge.target).trim();
-    if (!source || !target) continue;
-
-    if (!graph.has(source)) graph.set(source, []);
-    if (!graph.has(target)) graph.set(target, []);
-
-    graph.get(source)?.push({ neighbor: target, cost });
-    graph.get(target)?.push({ neighbor: source, cost });
-  }
-
-  const distances: Map<string, number> = new Map();
-  const previous: Map<string, string | null> = new Map();
-  const visited: Set<string> = new Set();
-  const pq: { node: string; distance: number }[] = [];
-
-  for (const node of nodes) {
-    const id = String(node.id).trim();
-    distances.set(id, Infinity);
-    previous.set(id, null);
-  }
-
-  distances.set(fromId, 0);
-  pq.push({ node: fromId, distance: 0 });
-
-  while (pq.length > 0) {
-    pq.sort((a, b) => a.distance - b.distance);
-    const current = pq.shift()!;
-    if (visited.has(current.node)) continue;
-    visited.add(current.node);
-    if (current.node === toId) break;
-
-    const neighbors = graph.get(current.node) || [];
-    for (const { neighbor, cost } of neighbors) {
-      if (visited.has(neighbor)) continue;
-      const currentDist = distances.get(current.node);
-      const newDist = (currentDist ?? Infinity) + cost;
-      if (newDist < (distances.get(neighbor) ?? Infinity)) {
-        distances.set(neighbor, newDist);
-        previous.set(neighbor, current.node);
-        pq.push({ node: neighbor, distance: newDist });
-      }
-    }
-  }
-
-  const totalCost = distances.get(toId);
-  if (totalCost === undefined || totalCost === Infinity) {
-    const fromDegree = (graph.get(fromId) ?? []).length;
-    const toDegree = (graph.get(toId) ?? []).length;
     return {
       ok: false,
       reason: "no_route",
-      debug: { nodesCount: nodes.length, edgesCount: edges.length, fromDegree, toDegree },
+      debug: { 
+        nodesCount: nodes.length, 
+        edgesCount: edges.length, 
+        fromDegree: (graph.adj.get(start)?.length || 0), 
+        toDegree: (graph.adj.get(end)?.length || 0) 
+      },
     };
   }
 
-  const path: string[] = [];
-  let current: string | null = toId;
-  const seen = new Set<string>();
-  while (current !== null) {
-    if (seen.has(current)) {
-      return {
-        ok: false,
-        reason: "no_route",
-        debug: { nodesCount: nodes.length, edgesCount: edges.length, fromDegree: 0, toDegree: 0 },
-      };
-    }
-    seen.add(current);
-    path.unshift(current);
-    current = previous.get(current) || null;
-  }
-
-  return { ok: true, path, totalCost };
+  return { ok: true, path: result.path, totalCost: result.cost };
 };
+
 
 // GET /api/map/route - shortest path cost (Dijkstra)
 export class MapRoute extends OpenAPIRoute {

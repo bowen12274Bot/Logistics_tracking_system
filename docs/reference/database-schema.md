@@ -64,6 +64,10 @@ CREATE TABLE IF NOT EXISTS users (
   user_type TEXT NOT NULL CHECK (user_type IN ('customer', 'employee')),
   user_class TEXT NOT NULL,
   billing_preference TEXT,
+  status TEXT DEFAULT 'active' CHECK (status IN ('active', 'suspended', 'deleted')),
+  suspended_at TEXT,
+  suspended_reason TEXT,
+  deleted_at TEXT,
   created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
 ```
@@ -71,6 +75,10 @@ CREATE TABLE IF NOT EXISTS users (
 - `address` 欄位定義：
   - `customer`：客戶預設地址/位置（目前以字串保存，可能是座標字串如 `10,20` 或節點 ID）
   - `employee`：員工工作地（地圖節點 ID，例如配送中心 `HUB_0`、配送站 `REG_0`）
+- `status` 欄位定義：
+  - `active`：正常
+  - `suspended`：停用
+  - `deleted`：軟刪除
 - 測試帳號/員工工作地 seed：`backend/migrations/0011_seed_test_users.sql`
 
 ---
@@ -375,3 +383,4 @@ erDiagram
 | 版本 | 日期 | 說明 |
 |---|---|---|
 | 1.0 | 2025-12-12 | 重寫本文件以修正亂碼，並同步最新 migrations |
+| 1.1 | 2025-12-24 | 新增 `users` 狀態欄位（status/suspended_at/suspended_reason/deleted_at） |

@@ -1,6 +1,7 @@
 import { OpenAPIRoute } from "chanfana";
 import { z } from "zod";
 import type { AppContext } from "../types";
+import { requireRole } from "../utils/authUtils";
 
 // GET /api/tracking/search - 進階搜尋（員工用）
 export class TrackingSearch extends OpenAPIRoute {
@@ -36,37 +37,11 @@ export class TrackingSearch extends OpenAPIRoute {
   };
 
   async handle(c: AppContext) {
-    const authHeader = c.req.header("Authorization");
-    
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return c.json({ error: "Token 缺失" }, 401);
-    }
+    const allowedRoles = ["customer_service", "warehouse_staff", "admin", "customer"];
+    const auth = await requireRole(c, allowedRoles);
+    if (!auth.ok) return (auth as any).res;
 
-    const token = authHeader.replace("Bearer ", "");
-    const tokenRecord = await c.env.DB.prepare(
-      "SELECT user_id FROM tokens WHERE id = ?"
-    ).bind(token).first<{ user_id: string }>();
-
-    if (!tokenRecord) {
-      return c.json({ error: "Token 無效" }, 401);
-    }
-
-    // 檢查權限
-    const user = await c.env.DB.prepare(
-      "SELECT user_type, user_class FROM users WHERE id = ?"
-    ).bind(tokenRecord.user_id).first<{ user_type: string; user_class: string }>();
-
-    if (!user) {
-      return c.json({ error: "使用者不存在" }, 401);
-    }
-
-    const allowedRoles = ["customer_service", "warehouse_staff", "admin"];
-    const isEmployeeAllowed =
-      user.user_type === "employee" && allowedRoles.includes(user.user_class);
-    const isCustomer = user.user_type === "customer";
-    if (!isEmployeeAllowed && !isCustomer) {
-      return c.json({ error: "權限不足" }, 403);
-    }
+    const isCustomer = auth.user.user_type === "customer";
 
     const query = c.req.query();
 
@@ -93,7 +68,7 @@ export class TrackingSearch extends OpenAPIRoute {
 
     let effectiveCustomerId: string | undefined = undefined;
     if (isCustomer) {
-      effectiveCustomerId = tokenRecord.user_id;
+      effectiveCustomerId = auth.user.id;
     } else {
       if (query.customer_id) {
         effectiveCustomerId = query.customer_id;

@@ -29,6 +29,7 @@ import { WarehousePackageExceptionCreate } from "./endpoints/warehousePackageExc
 import { BillingBillList, BillingBillDetail } from "./endpoints/billingBills";
 import { BillingPaymentCreate, BillingPaymentList } from "./endpoints/billingPayments";
 import { AdminUserCreate } from "./endpoints/adminUsers";
+import { AdminUserList, AdminUserDetails, AdminUserUpdate, AdminUserSuspend, AdminUserActivate, AdminUserDelete, AdminUserResetPassword, AdminUserAssignVehicle, AdminUserWorkStats } from "./endpoints/adminUserMgmt";
 import { AdminContractList, AdminContractReview } from "./endpoints/adminContracts";
 import { AdminSystemErrors } from "./endpoints/adminErrors";
 import { VehicleMeGet, VehicleMeMove } from "./endpoints/vehiclesMe";
@@ -319,6 +320,15 @@ openapi.delete("/api/admin/billing/bills/:billId/items/:itemId", BillingAdminRem
 
 // Admin APIs
 openapi.post("/api/admin/users", AdminUserCreate);
+openapi.get("/api/admin/users", AdminUserList);
+openapi.get("/api/admin/users/:id", AdminUserDetails);
+openapi.put("/api/admin/users/:id", AdminUserUpdate);
+openapi.post("/api/admin/users/:id/suspend", AdminUserSuspend);
+openapi.post("/api/admin/users/:id/activate", AdminUserActivate);
+openapi.delete("/api/admin/users/:id", AdminUserDelete);
+openapi.post("/api/admin/users/:id/reset-password", AdminUserResetPassword);
+openapi.post("/api/admin/users/:id/assign-vehicle", AdminUserAssignVehicle);
+openapi.get("/api/admin/users/:id/work-stats", AdminUserWorkStats);
 openapi.get("/api/admin/contract-applications", AdminContractList);
 openapi.put("/api/admin/contract-applications/:id", AdminContractReview);
 openapi.get("/api/admin/system/errors", AdminSystemErrors);
