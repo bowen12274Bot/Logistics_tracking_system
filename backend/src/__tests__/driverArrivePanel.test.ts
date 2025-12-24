@@ -1,6 +1,30 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import { apiRequest, authenticatedRequest, createTestPackage, createTestUser, getDriverToken } from "./helpers";
 
+async function walkVehicleTo(driverToken: string, toNodeId: string) {
+  const me = await authenticatedRequest<any>("/api/vehicles/me", driverToken);
+  expect(me.status).toBe(200);
+  let current = String(me.data.vehicle.current_node_id ?? me.data.vehicle.home_node_id ?? "");
+  expect(current).toBeTruthy();
+
+  const routeRes = await apiRequest<any>(`/api/map/route?from=${encodeURIComponent(current)}&to=${encodeURIComponent(toNodeId)}`);
+  expect(routeRes.status).toBe(200);
+  const path: string[] = routeRes.data?.route?.path ?? [];
+  expect(path[0]).toBe(current);
+  expect(path[path.length - 1]).toBe(toNodeId);
+
+  for (let i = 0; i < path.length - 1; i++) {
+    const from = String(path[i]);
+    const to = String(path[i + 1]);
+    const move = await authenticatedRequest<any>("/api/vehicles/me/move", driverToken, {
+      method: "POST",
+      body: JSON.stringify({ fromNodeId: from, toNodeId: to }),
+    });
+    expect(move.status).toBe(200);
+    current = to;
+  }
+}
+
 describe("Driver Arrive Panel APIs", () => {
   let customerToken: string;
   let driverToken: string;
@@ -34,6 +58,7 @@ describe("Driver Arrive Panel APIs", () => {
     };
 
     let pickupDriverToken: string | null = null;
+    let pickupTask: any | null = null;
     for (const hubId of hubs) {
       const token = hubId === "HUB_0" ? driverToken : await loginDriver(hubId);
       const assignedRes = await authenticatedRequest<any>("/api/driver/tasks?scope=assigned", token);
@@ -41,15 +66,19 @@ describe("Driver Arrive Panel APIs", () => {
       const hit = (assignedRes.data.tasks ?? []).find((t: any) => t.package_id === pkg.id);
       if (hit) {
         pickupDriverToken = token;
+        pickupTask = hit;
         break;
       }
     }
     expect(pickupDriverToken).toBeTruthy();
+    expect(pickupTask).toBeTruthy();
+
+    await walkVehicleTo(String(pickupDriverToken), String(pickupTask.from_location ?? sender));
 
     const report = await authenticatedRequest<any>(
       `/api/driver/packages/${encodeURIComponent(pkg.id)}/exception`,
       String(pickupDriverToken),
-      { method: "POST", body: JSON.stringify({ reason_code: "damaged", description: "box damaged", location: sender }) },
+      { method: "POST", body: JSON.stringify({ reason_code: "damaged", description: "box damaged" }) },
     );
     expect(report.status).toBe(200);
     expect(report.data.success).toBe(true);

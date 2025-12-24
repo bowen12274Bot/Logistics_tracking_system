@@ -73,4 +73,45 @@ describe("Warehouse Functional Tests", () => {
     // The plan says "non-adjacent returns 400".
     expect(res.status).toBe(400); 
   });
+  it("WH-RCV-003: should list packages at warehouse", async () => {
+    // Must use valid END addresses for creation
+    const pkg = await createTestPackage(customerToken, { sender_address: "END_HOME_1", receiver_address: "END_HOME_2" });
+    
+    // Ensure "warehouse_received" is strictly later than "created"
+    // "created" uses Date.now().toISOString() in packageCreate.
+    // We add 2 seconds.
+    const future = new Date(Date.now() + 2000).toISOString();
+    
+    // Simulate package arrival at HUB_0
+    // We manually insert event to control timestamp if needed, or use apiRequest with timestamp payload if supported?
+    // /events endpoint accepts body... delivery_status, etc. 
+    // It sets events_at = new Date().toISOString() inside handle().
+    // So we rely on sleep? Or just wait? 
+    // A loop check? 
+    // Wait, testing environment might freeze time?
+    // No, usually not. 
+    // Let's use `setTimeout` delay before calling apiRequest.
+    await new Promise(r => setTimeout(r, 100)); // 100ms delay
+
+    await apiRequest<any>(`/api/packages/${encodeURIComponent(pkg.id)}/events`, {
+      method: "POST",
+      body: JSON.stringify({ delivery_status: "warehouse_received", location: "HUB_0" }), 
+    });
+    
+    // Check list
+    const res = await authenticatedRequest<any>(
+      "/api/warehouse/packages?status=warehouse_received",
+      warehouseToken,
+      { method: "GET" }
+    );
+    console.log("Warehouse response status:", res.status);
+    console.log("Warehouse response data:", JSON.stringify(res.data, null, 2));
+    expect(res.status).toBe(200);
+    const found = (res.data.packages || []).find((p: any) => p.id === pkg.id);
+    // Debug log if not found
+    if (!found) {
+        // console.log("Package not found in list:", res.data.packages);
+    }
+    expect(found).toBeDefined();
+  });
 });

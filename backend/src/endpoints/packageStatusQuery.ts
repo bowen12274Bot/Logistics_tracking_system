@@ -81,6 +81,16 @@ export class PackageStatusQuery extends OpenAPIRoute {
 			.all();
 
 		const activeException = await getActiveException(c.env.DB, pkg.id);
+		const eventsForUser =
+			auth.user.user_type === "customer"
+				? (events.results ?? []).map((evt: any) => {
+						const status = String(evt?.delivery_status ?? "").trim().toLowerCase();
+						if (status === "exception") {
+							return { ...evt, delivery_details: null };
+						}
+						return evt;
+					})
+				: events.results;
 		const activeExceptionForUser =
 			activeException && auth.user.user_type === "customer"
 				? {
@@ -157,7 +167,7 @@ export class PackageStatusQuery extends OpenAPIRoute {
 		return {
 			success: true,
 			package: parsedPackage,
-			events: events.results,
+			events: eventsForUser,
 			active_exception: activeExceptionForUser ?? null,
 			vehicle: vehicle ? { id: String(vehicle.id), vehicle_code: String(vehicle.vehicle_code) } : null,
 		};

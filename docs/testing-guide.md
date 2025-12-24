@@ -74,6 +74,12 @@ npm test -- --watch
 
 # 顯示詳細輸出 (Verbose)
 npm test -- --reporter=verbose
+
+# 執行效能測試
+npm run benchmark        
+
+# 生成 HTML 報告
+npm run benchmark:report 
 ```
 
 ### 前端測試

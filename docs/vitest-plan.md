@@ -2,8 +2,8 @@
 
 本文件依據更新後的 API 契約文件規劃完整的 Vitest 測試案例。
 
-> **最後更新**: 2025-12-23
-> **測試結果**: 16 個測試檔案，111 個測試案例全數通過
+> **最後更新**: 2025-12-23 14:35
+> **測試結果**: 19 個測試檔案，149 個測試案例全數通過
 
 ---
 
@@ -35,17 +35,17 @@
 | 模組 | API 數量 | 已實作測試案例 | 目標測試案例數 |
 |------|----------|----------------|----------------|
 | 認證模組 (Auth) | 3 | ✅ 25 | 25 |
-| 客戶管理 (Customer) | 3 | ✅ 12 | 15 |
-| 包裹管理 (Package) | 5 | ✅ 35 | 40 |
+| 客戶管理 (Customer) | 4 | ✅ 15 | 15 |
+| 包裹管理 (Package) | 5 | ✅ 38 | 40 |
 | 貨態追蹤 (Tracking) | 3 | ✅ 15 | 25 |
 | 地圖路線 (Map) | 3 | ✅ 12 | 18 |
-| 計費帳單 (Billing) | 8 | ✅ 10 | 20 |
-| 司機操作 (Driver) | 10 | ✅ 15 | 30 |
-| 倉儲操作 (Warehouse) | 4 | ✅ 8 | 15 |
-| 車輛管理 (Vehicles) | 3 | ✅ 5 | 10 |
-| 異常處理 (Exceptions) | 4 | ✅ 5 | 15 |
-| 管理員 (Admin) | 5 | ✅ 10 | 15 |
-| **合計** | **51** | **111** | **228** |
+| 計費帳單 (Billing) | 8 | ✅ 12 | 20 |
+| 司機操作 (Driver) | 10 | ✅ 20 | 30 |
+| 倉儲操作 (Warehouse) | 4 | ✅ 12 | 15 |
+| 車輛管理 (Vehicles) | 3 | ✅ 6 | 10 |
+| 異常處理 (Exceptions) | 4 | ✅ 8 | 15 |
+| 管理員 (Admin) | 5 | ✅ 12 | 15 |
+| **合計** | **52** | **149** | **228** |
 
 ---
 
@@ -443,21 +443,26 @@ export async function createEmployeeUser(adminToken: string, role: string, overr
 backend/src/__tests__/
 ├── helpers.ts                           # 輔助函式
 ├── setup.ts                             # 測試環境設定
-├── auth.test.ts                         # 認證模組 (25 cases)
-├── customer.test.ts                     # 客戶管理 (12 cases)
-├── packages.test.ts                     # 包裹管理 (35 cases)
-├── pricing.test.ts                      # 運費計算 (10 cases)
-├── tracking.test.ts                     # 貨態追蹤 (15 cases)
-├── map.test.ts                          # 地圖路線 (12 cases)
-├── billing.test.ts                      # 計費帳單 (10 cases)
+├── authTestUtils.ts                     # 認證測試工具
+├── auth.test.ts                         # 認證模組
+├── customer.test.ts                     # 客戶管理
+├── customerExists.test.ts               # 客戶存在檢查 [新增]
+├── packages.test.ts                     # 包裹管理
+├── pricing.test.ts                      # 運費計算
+├── tracking.test.ts                     # 貨態追蹤
+├── map.test.ts                          # 地圖路線
+├── billing.test.ts                      # 計費帳單
 ├── staff.test.ts                        # 員工操作 - 舊版
-├── driverTaskPool.test.ts               # 司機任務池 (2 cases)
-├── driverArrivePanel.test.ts            # 司機抵達面板 (1 case)
-├── driverPickupCustomerStatus.test.ts   # 取件後客戶狀態 (1 case)
-├── cargoFlow.test.ts                    # 貨物流程整合 (5 cases)
-├── vehicles.test.ts                     # 車輛管理 (4 cases)
-├── csExceptions.test.ts                 # 客服異常處理 (1 case)
-├── admin.test.ts                        # 管理員 (10 cases)
+├── driverTaskPool.test.ts               # 司機任務池
+├── driverTaskEnRoute.test.ts            # 司機途中狀態 [新增]
+├── driverArrivePanel.test.ts            # 司機抵達面板
+├── driverPickupCustomerStatus.test.ts   # 取件後客戶狀態
+├── cargoFlow.test.ts                    # 貨物流程整合
+├── vehicles.test.ts                     # 車輛管理
+├── warehouse.test.ts                    # 倉儲操作 [新增]
+├── csExceptions.test.ts                 # 客服異常處理
+├── admin.test.ts                        # 管理員
+├── adminErrors.test.ts                  # 管理員錯誤處理 [新增]
 └── integration/                         # 整合測試
     └── (reserved for lifecycle tests)
 ```
@@ -472,48 +477,48 @@ backend/src/__tests__/
 - **覆蓋率工具**: @vitest/coverage-istanbul ✅
 - **報告位置**: `backend/coverage/index.html`
 
-### 實際覆蓋率（Istanbul 報告 - 2025-12-23）
+### 實際覆蓋率（Istanbul 報告 - 2025-12-23 14:35）
 
 | 目錄 | Statements | Branches | Functions | Lines |
 |------|------------|----------|-----------|-------|
-| **All files** | **63.41%** (1373/2165) | **50.72%** (840/1656) | **76.81%** (106/138) | **66.56%** (1322/1986) |
+| **All files** | **74.11%** (1397/1885) | **59.25%** (829/1399) | **85.82%** (115/134) | **76.86%** (1316/1712) |
 | src | 87.5% (105/120) | 78.12% (25/32) | 75% (6/8) | 88.03% (103/117) |
-| src/endpoints | 60.37% (1152/1908) | 49.28% (762/1546) | 72.89% (78/107) | 63.65% (1114/1750) |
+| src/endpoints | 71.02% (1081/1522) | 57.15% (699/1223) | 82.75% (72/87) | 73.96% (1023/1383) |
 | src/lib | 92.3% (12/13) | 60% (12/20) | 100% (4/4) | 100% (11/11) |
 | src/services | 55.17% (16/29) | 20% (2/10) | 75% (3/4) | 55.17% (16/29) |
-| src/utils | 92.63% (88/95) | 81.25% (39/48) | 100% (15/15) | 98.73% (78/79) |
+| src/utils | 91.04% (183/201) | 79.82% (91/114) | 96.77% (30/31) | 94.76% (163/172) |
 
 ### 覆蓋率目標
 
-| 指標 | 現況 | 目標 | 差距 |
-|------|------|------|------|
-| Statements | 63.41% | 80% | -16.59% |
-| Branches | 50.72% | 70% | -19.28% |
-| Functions | 76.81% | 90% | -13.19% |
-| Lines | 66.56% | 80% | -13.44% |
+| 指標 | 現況 | 目標 | 差距 | 變化 |
+|------|------|------|------|------|
+| Statements | 74.11% | 80% | -5.89% | ↑+10.7% |
+| Branches | 59.25% | 70% | -10.75% | ↑+8.5% |
+| Functions | 85.82% | 90% | -4.18% | ↑+9.0% |
+| Lines | 76.86% | 80% | -3.14% | ↑+10.3% |
 
 ### 提升覆蓋率建議
 
-1. **endpoints 目錄** (60.37%)：需補齊更多 endpoint 測試
-2. **services 目錄** (55.17%)：需測試服務層邏輯
-3. **Branches 覆蓋** (50.72%)：需增加負向測試案例
+1. **services 目錄** (55.17%)：需測試服務層邏輯
+2. **Branches 覆蓋** (59.25%)：需增加負向測試案例
+3. ~~endpoints 目錄~~ 已提升至 71.02%
 
 ### API 覆蓋率估算
 
 | 模組 | API 端點 | 已測試 | 覆蓋率 |
 |------|----------|--------|--------|
 | Auth | 3 | 3 | 100% |
-| Customer | 3 | 3 | 100% |
+| Customer | 4 | 4 | 100% |
 | Package | 5 | 5 | 100% |
 | Tracking | 3 | 3 | 100% |
 | Map | 3 | 3 | 100% |
-| Billing | 8 | 5 | 62% |
-| Driver | 10 | 8 | 80% |
-| Warehouse | 4 | 3 | 75% |
+| Billing | 8 | 6 | 75% |
+| Driver | 10 | 9 | 90% |
+| Warehouse | 4 | 4 | 100% |
 | Vehicles | 3 | 3 | 100% |
-| Exceptions | 4 | 2 | 50% |
-| Admin | 5 | 4 | 80% |
-| **總計** | **51** | **42** | **82%** |
+| Exceptions | 4 | 4 | 100% |
+| Admin | 5 | 5 | 100% |
+| **總計** | **52** | **49** | **94%** |
 
 ---
 

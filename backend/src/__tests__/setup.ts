@@ -16,6 +16,7 @@ import m0012 from "../../migrations/0012_package_exceptions.sql?raw";
 import m0013 from "../../migrations/0013_delivery_tasks.sql?raw";
 import m0014 from "../../migrations/0014_vehicles.sql?raw";
 import m0015 from "../../migrations/0015_vehicle_cargo.sql?raw";
+import m0016 from "../../migrations/0016_users_status.sql?raw";
 
 const migrations = [
   m0000,
@@ -33,6 +34,7 @@ const migrations = [
   m0013,
   m0014,
   m0015,
+  m0016,
 ];
 
 const splitSqlStatements = (sql: string) => {
@@ -78,20 +80,45 @@ const splitSqlStatements = (sql: string) => {
 };
 
 beforeAll(async () => {
-  const hasUsers = await env.DB.prepare(
+  const hasUsersQuery = await env.DB.prepare(
     "SELECT 1 as ok FROM sqlite_master WHERE type='table' AND name='users' LIMIT 1",
   ).first();
+  const hasUsers = !!hasUsersQuery;
 
-  if (hasUsers) return;
-
-  for (const sql of migrations) {
-    for (const statement of splitSqlStatements(sql)) {
-      try {
-        await env.DB.prepare(statement).run();
-      } catch (err: any) {
-        const preview = statement.replace(/\s+/g, " ").slice(0, 200);
-        throw new Error(`D1 migration failed on statement: ${preview}`);
+  if (!hasUsers) {
+    // Fresh DB, run all
+    for (const sql of migrations) {
+      for (const statement of splitSqlStatements(sql)) {
+        try {
+          await env.DB.prepare(statement).run();
+        } catch (err: any) {
+             console.error("Migration failed:", err); 
+             // Don't throw immediately to allow partial success debugging? No, strict is better.
+             const preview = statement.replace(/\s+/g, " ").slice(0, 200);
+             throw new Error(`D1 migration failed on statement: ${preview}`);
+        }
       }
+    }
+  } else {
+    // Existing DB, check for updates
+    // Check m0016 (status column)
+    try {
+       await env.DB.prepare("SELECT status FROM users LIMIT 1").first();
+    } catch (e) {
+       // Column missing, apply m0016
+       console.log("Applying missing migration m0016...");
+       for (const statement of splitSqlStatements(m0016)) {
+          try { await env.DB.prepare(statement).run(); } catch(err) { console.warn("m0016 partial fail", err); }
+       }
+    }
+
+    // Check seed (Admin user)
+    const admin = await env.DB.prepare("SELECT id FROM users WHERE email='admin@example.com'").first();
+    if (!admin) {
+       console.log("Re-seeding m0011...");
+       for (const statement of splitSqlStatements(m0011)) {
+          try { await env.DB.prepare(statement).run(); } catch(err) { console.warn("Seed partial fail", err); }
+       }
     }
   }
 });

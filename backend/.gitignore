@@ -171,3 +171,6 @@ worker-configuration.d.ts
 
 # Temporary files
 tmp.out
+
+# benchmark
+reports

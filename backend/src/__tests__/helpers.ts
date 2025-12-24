@@ -17,8 +17,15 @@ export async function apiRequest<T>(
     headers: { "Content-Type": "application/json", ...options?.headers },
     ...options,
   });
-  const data = await response.json() as T;
-  return { status: response.status, data };
+  
+  const text = await response.text();
+  try {
+      const data = JSON.parse(text) as T;
+      return { status: response.status, data };
+  } catch (e) {
+      console.error(`Failed to parse JSON from ${url}. Status: ${response.status}. Body: ${text.slice(0, 500)}`);
+      throw e;
+  }
 }
 
 export async function authenticatedRequest<T>(

@@ -147,6 +147,14 @@ export type PackageStatusResponse = {
   success: boolean;
   package: PackageRecord;
   events: PackageEventRecord[];
+  active_exception?: {
+    id: string;
+    reason_code: string | null;
+    description: string | null;
+    reported_role: string;
+    reported_at: string | null;
+    location: string | null;
+  } | null;
   vehicle: { id: string; vehicle_code: string } | null;
 };
 
@@ -251,6 +259,7 @@ export type DeliveryTaskRecord = {
   to_location: string | null;
   assigned_driver_id?: string | null;
   status: string;
+  instructions?: string | null;
   segment_index?: number | null;
   created_at?: string | null;
   updated_at?: string | null;
@@ -276,6 +285,50 @@ export type DriverExceptionRecord = {
   reported_at?: string | null;
   handled?: number | null;
   handled_at?: string | null;
+};
+
+export type CustomerServiceExceptionRecord = {
+  id: string;
+  package_id: string;
+  tracking_number?: string | null;
+  package_status?: string | null;
+  sender_address?: string | null;
+  receiver_address?: string | null;
+  reason_code?: string | null;
+  description?: string | null;
+  reported_role?: string | null;
+  reported_at?: string | null;
+  handled?: number | null;
+  handled_at?: string | null;
+  handling_report?: string | null;
+  resolution_action?: string | null;
+  resume_mode?: string | null;
+  next_hop_override?: string | null;
+  destination_override?: string | null;
+  active_vehicle_code?: string | null;
+  active_vehicle_node_id?: string | null;
+  last_canceled_task_type?: string | null;
+  last_canceled_from_location?: string | null;
+  last_canceled_to_location?: string | null;
+};
+
+export type ContractApplicationReviewStatus = "pending" | "approved" | "rejected";
+
+export type CustomerServiceContractApplication = {
+  id: string;
+  customer: { id: string; name?: string | null; email?: string | null };
+  company_name: string;
+  tax_id: string;
+  contact_person: string;
+  contact_phone: string;
+  billing_address: string;
+  notes?: string | null;
+  status: ContractApplicationReviewStatus;
+  reviewed_by?: string | null;
+  reviewed_at?: string | null;
+  review_notes?: string | null;
+  credit_limit?: number | null;
+  created_at?: string | null;
 };
 
 export type DriverTasksResponse = {
@@ -458,23 +511,66 @@ export const api = {
     ),
   driverReportPackageException: (
     packageId: string,
-    payload: { reason_code?: string; description: string; location?: string },
+    payload: { reason_code: string; description: string; location?: string },
   ) =>
     request<{ success: boolean; exception_id: string }>(
       `/api/driver/packages/${encodeURIComponent(packageId)}/exception`,
       { method: "POST", body: JSON.stringify(payload) },
     ),
   getDriverExceptionReports: (limit = 50) => {
-    const qs = new URLSearchParams({ limit: String(limit) });
-    return request<{ success: boolean; exceptions: DriverExceptionRecord[] }>(
-      `/api/driver/exceptions?${qs.toString()}`,
-      { method: "GET" },
-    );
-  },
-  getWarehousePackages: (limit = 200) => {
-    const qs = new URLSearchParams({ limit: String(limit) });
-    return request<WarehousePackagesResponse>(`/api/warehouse/packages?${qs.toString()}`, { method: "GET" });
-  },
+      const qs = new URLSearchParams({ limit: String(limit) });
+      return request<{ success: boolean; exceptions: DriverExceptionRecord[] }>(
+        `/api/driver/exceptions?${qs.toString()}`,
+        { method: "GET" },
+      );
+    },
+    getCustomerServiceExceptions: (query?: { handled?: boolean; limit?: number }) => {
+      const qs = new URLSearchParams();
+      if (query?.handled !== undefined) qs.set("handled", String(query.handled));
+      if (query?.limit !== undefined) qs.set("limit", String(query.limit));
+      const suffix = qs.toString() ? `?${qs.toString()}` : "";
+      return request<{ success: boolean; exceptions: CustomerServiceExceptionRecord[] }>(`/api/cs/exceptions${suffix}`, {
+        method: "GET",
+      });
+    },
+    handleCustomerServiceException: (
+      exceptionId: string,
+      payload: {
+        action: "resume" | "cancel";
+        handling_report: string;
+        resume_mode?: "continue_segment" | "reroute_next_hop" | "redirect_destination";
+        next_hop_override?: string;
+        destination_override?: string;
+        cancel_reason?: "destroy";
+        location?: string;
+      },
+    ) =>
+      request<{ success: boolean; event_id: string; delivery_failed_event_id?: string | null; action: string }>(
+        `/api/cs/exceptions/${encodeURIComponent(exceptionId)}/handle`,
+        { method: "POST", body: JSON.stringify(payload) },
+      ),
+    getCustomerServiceContractApplications: (query?: { status?: ContractApplicationReviewStatus; limit?: number }) => {
+      const qs = new URLSearchParams();
+      if (query?.status) qs.set("status", query.status);
+      if (query?.limit !== undefined) qs.set("limit", String(query.limit));
+      const suffix = qs.toString() ? `?${qs.toString()}` : "";
+      return request<{ success: boolean; applications: CustomerServiceContractApplication[] }>(
+        `/api/cs/contract-applications${suffix}`,
+        { method: "GET" },
+      );
+    },
+    reviewCustomerServiceContractApplication: (
+      id: string,
+      payload: { status: "approved" | "rejected"; credit_limit?: number; review_notes?: string },
+    ) =>
+      request<{ success: boolean; message: string; application_id: string; status: string }>(
+        `/api/cs/contract-applications/${encodeURIComponent(id)}`,
+        { method: "PUT", body: JSON.stringify(payload) },
+      ),
+    getWarehousePackages: (limit = 200) => {
+      const qs = new URLSearchParams({ limit: String(limit) });
+      return request<WarehousePackagesResponse>(`/api/warehouse/packages?${qs.toString()}`, { method: "GET" });
+    },
   receiveWarehousePackages: (package_ids: string[]) =>
     request<WarehouseReceiveResponse>("/api/warehouse/packages/receive", {
       method: "POST",

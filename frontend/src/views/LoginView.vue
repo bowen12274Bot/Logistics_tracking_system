@@ -27,7 +27,6 @@ const switchMode = (next: Mode) => {
   mode.value = next
   statusMessage.value = ''
   const redirect = route.query.redirect as string | undefined
-
   if (next === 'register') {
     router.replace({ path: '/register', query: redirect ? { redirect } : undefined })
   } else {
@@ -117,11 +116,9 @@ const handleRegister = async () => {
       user_class: 'non_contract_customer',
     })
 
-
     // ✅ 註冊完成後：若有 redirect 就回去，沒有就去客戶首頁
     const redirect = (route.query.redirect as string) ?? '/customer'
     await router.push(redirect)
-
   } catch (err: any) {
     statusMessage.value = err?.message ?? '註冊失敗，請稍後再試'
   } finally {

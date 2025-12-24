@@ -25,9 +25,11 @@ import { WarehouseBatchOperation } from "./endpoints/warehouseOperations";
 import { WarehousePackagesList } from "./endpoints/warehousePackages";
 import { WarehousePackagesReceive } from "./endpoints/warehouseReceive";
 import { WarehouseDispatchNextTask } from "./endpoints/warehouseTaskDispatch";
+import { WarehousePackageExceptionCreate } from "./endpoints/warehousePackageException";
 import { BillingBillList, BillingBillDetail } from "./endpoints/billingBills";
 import { BillingPaymentCreate, BillingPaymentList } from "./endpoints/billingPayments";
 import { AdminUserCreate } from "./endpoints/adminUsers";
+import { AdminUserList, AdminUserDetails, AdminUserUpdate, AdminUserSuspend, AdminUserActivate, AdminUserDelete, AdminUserResetPassword, AdminUserAssignVehicle, AdminUserWorkStats } from "./endpoints/adminUserMgmt";
 import { AdminContractList, AdminContractReview } from "./endpoints/adminContracts";
 import { AdminSystemErrors } from "./endpoints/adminErrors";
 import { VehicleMeGet, VehicleMeMove } from "./endpoints/vehiclesMe";
@@ -36,6 +38,7 @@ import { VehicleMeCargoList } from "./endpoints/vehiclesCargoMe";
 import { DriverTaskPickup, DriverTaskDropoff } from "./endpoints/driverTaskCargo";
 import { DriverTaskEnRoute } from "./endpoints/driverTaskEnRoute";
 import { CustomerServiceExceptionHandle, CustomerServiceExceptionList } from "./endpoints/csExceptions";
+import { CustomerServiceContractList, CustomerServiceContractReview } from "./endpoints/csContracts";
 
 type Bindings = {
   DB: D1Database;
@@ -290,10 +293,13 @@ openapi.post("/api/driver/packages/:packageId/exception", DriverPackageException
 openapi.get("/api/driver/exceptions", DriverPackageExceptionList);
 openapi.get("/api/cs/exceptions", CustomerServiceExceptionList);
 openapi.post("/api/cs/exceptions/:exceptionId/handle", CustomerServiceExceptionHandle);
+openapi.get("/api/cs/contract-applications", CustomerServiceContractList);
+openapi.put("/api/cs/contract-applications/:id", CustomerServiceContractReview);
 openapi.get("/api/warehouse/packages", WarehousePackagesList);
 openapi.post("/api/warehouse/packages/receive", WarehousePackagesReceive);
 openapi.post("/api/warehouse/batch-operation", WarehouseBatchOperation);
 openapi.post("/api/warehouse/packages/:packageId/dispatch-next", WarehouseDispatchNextTask);
+openapi.post("/api/warehouse/packages/:packageId/exception", WarehousePackageExceptionCreate);
 
 import { BillingSettle } from "./endpoints/billingCycle";
 import { BillingAdminUpdate, BillingAdminAddItem, BillingAdminRemoveItem } from "./endpoints/billingAdmin";
@@ -314,6 +320,15 @@ openapi.delete("/api/admin/billing/bills/:billId/items/:itemId", BillingAdminRem
 
 // Admin APIs
 openapi.post("/api/admin/users", AdminUserCreate);
+openapi.get("/api/admin/users", AdminUserList);
+openapi.get("/api/admin/users/:id", AdminUserDetails);
+openapi.put("/api/admin/users/:id", AdminUserUpdate);
+openapi.post("/api/admin/users/:id/suspend", AdminUserSuspend);
+openapi.post("/api/admin/users/:id/activate", AdminUserActivate);
+openapi.delete("/api/admin/users/:id", AdminUserDelete);
+openapi.post("/api/admin/users/:id/reset-password", AdminUserResetPassword);
+openapi.post("/api/admin/users/:id/assign-vehicle", AdminUserAssignVehicle);
+openapi.get("/api/admin/users/:id/work-stats", AdminUserWorkStats);
 openapi.get("/api/admin/contract-applications", AdminContractList);
 openapi.put("/api/admin/contract-applications/:id", AdminContractReview);
 openapi.get("/api/admin/system/errors", AdminSystemErrors);

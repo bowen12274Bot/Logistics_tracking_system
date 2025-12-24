@@ -3,7 +3,6 @@ import HomeView from '../views/HomeView.vue'
 import LoginView from '../views/LoginView.vue'
 import CustomerDashboard from '../views/CustomerDashboard.vue'
 import CustomerProfileView from '../views/CustomerProfileView.vue'
-import CustomerScheduleView from '../views/CustomerScheduleView.vue'
 import CustomerSendView from '../views/CustomerSendView.vue'
 import CustomerTrackView from '../views/CustomerTrackView.vue'
 import CustomerContractView from '../views/CustomerContractView.vue'
@@ -52,12 +51,6 @@ const router = createRouter({
       path: '/customer/profile',
       name: 'customer-profile',
       component: CustomerProfileView,
-      meta: { roles: CUSTOMER_ROLES },
-    },
-    {
-      path: '/customer/schedule',
-      name: 'customer-schedule',
-      component: CustomerScheduleView,
       meta: { roles: CUSTOMER_ROLES },
     },
     {

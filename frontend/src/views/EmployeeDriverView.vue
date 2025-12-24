@@ -105,6 +105,7 @@ onMounted(() => {
             <div class="hint">
               {{ t.delivery_time ?? "-" }} · {{ t.payment_type ?? "-" }} · {{ t.estimated_delivery ?? "-" }}
             </div>
+            <div v-if="t.instructions" class="hint">客服指示：{{ t.instructions }}</div>
             <div v-if="tab === 'handoff'" style="display: flex; gap: 10px; flex-wrap: wrap">
               <button class="primary-btn small-btn" type="button" @click="takeOver(t.id)">接手任務</button>
             </div>

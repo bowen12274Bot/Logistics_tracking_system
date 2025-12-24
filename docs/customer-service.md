@@ -76,7 +76,17 @@
 客服執行決策時，系統應支援：
 - 填寫 `handling_report`（必填）
 - 選擇 action（resume/cancel）
-- 必要時補充處理位置（location，用於 `exception_resolved` 事件）
+- （本版不需前端填）系統自動決定 `exception_resolved.location`
+
+`location` 目前的功用（規範補充）：
+- 會寫入 `package_events(delivery_status='exception_resolved').location`，作為「異常結案後顧客端回到哪個大階段」的依據。
+- 會影響 `packages.status` 在異常結案後要回到哪個大階段（既有 trigger 規則）：
+  - `location` 為 `HUB_*`/`REG_*` → 回到 `warehouse_in`
+  - 其他（例如 `TRUCK_*`）→ 回到 `in_transit`
+- **不會**用來決定恢復配送的起點：恢復起點一律以「包裹鎖定位置」為準（包裹在車上以車輛位置、包裹在站內以異常事件 location）。
+
+本版落地（實作對齊）：
+- `exception_resolved.location` 由後端依「當下包裹留置位置」自動帶入（沒有提供前端輸入欄位）。
 
 處理後續（非立即落地但需在規範中保留）：
 - 若涉及賠償、重寄、退款：需建立對帳/理賠流程（暫不在本版實作）
