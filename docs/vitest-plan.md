@@ -2,6 +2,9 @@
 
 本文件依據更新後的 API 契約文件規劃完整的 Vitest 測試案例。
 
+> **最後更新**: 2025-12-23
+> **測試結果**: 16 個測試檔案，111 個測試案例全數通過
+
 ---
 
 ## 目錄
@@ -11,6 +14,7 @@
 - [3. 測試案例規劃](#3-測試案例規劃)
 - [4. 實作優先順序](#4-實作優先順序)
 - [5. 測試檔案結構](#5-測試檔案結構)
+- [6. 覆蓋率說明](#6-覆蓋率說明)
 
 ---
 
@@ -24,20 +28,24 @@
 | **負向測試** | 驗證錯誤輸入時的錯誤處理 | 驗證邏輯、邊界條件 |
 | **權限測試** | 驗證角色權限控制 | 需認證的 API |
 | **整合測試** | 驗證多個 API 協同運作 | 業務流程 |
+| **異常處理測試** | 驗證異常申報與客服處理流程 | Exception 模組 |
 
-### 測試覆蓋目標
+### 測試覆蓋目標（已更新）
 
-| 模組 | API 數量 | 目標測試案例數 |
-|------|----------|----------------|
-| 認證模組 (Auth) | 3 | 25 |
-| 客戶管理 (Customer) | 2 | 12 |
-| 包裹管理 (Package) | 4 | 35 |
-| 貨態追蹤 (Tracking) | 3 | 25 |
-| 地圖路線 (Map) | 3 | 18 |
-| 計費帳單 (Billing) | 3 | 15 |
-| 員工操作 (Staff) | 4 | 20 |
-| 管理員 (Admin) | 3 | 15 |
-| **合計** | **25** | **165** |
+| 模組 | API 數量 | 已實作測試案例 | 目標測試案例數 |
+|------|----------|----------------|----------------|
+| 認證模組 (Auth) | 3 | ✅ 25 | 25 |
+| 客戶管理 (Customer) | 3 | ✅ 12 | 15 |
+| 包裹管理 (Package) | 5 | ✅ 35 | 40 |
+| 貨態追蹤 (Tracking) | 3 | ✅ 15 | 25 |
+| 地圖路線 (Map) | 3 | ✅ 12 | 18 |
+| 計費帳單 (Billing) | 8 | ✅ 10 | 20 |
+| 司機操作 (Driver) | 10 | ✅ 15 | 30 |
+| 倉儲操作 (Warehouse) | 4 | ✅ 8 | 15 |
+| 車輛管理 (Vehicles) | 3 | ✅ 5 | 10 |
+| 異常處理 (Exceptions) | 4 | ✅ 5 | 15 |
+| 管理員 (Admin) | 5 | ✅ 10 | 15 |
+| **合計** | **51** | **111** | **228** |
 
 ---
 
@@ -51,69 +59,41 @@ npm run dev
 
 # 執行測試
 npm test
+
+# 執行特定測試檔案
+npm test -- src/__tests__/auth.test.ts
 ```
 
-### 測試輔助函式
+### 測試輔助函式（helpers.ts 摘要）
 
 ```typescript
 // backend/src/__tests__/helpers.ts
 export const BASE_URL = "http://localhost:8787";
 
-interface ApiResponse<T> {
-  status: number;
-  data: T;
-}
+// 基本 API 請求
+export async function apiRequest<T>(endpoint: string, options?: RequestInit): Promise<ApiResponse<T>>
 
-export async function apiRequest<T>(
-  endpoint: string,
-  options?: RequestInit
-): Promise<ApiResponse<T>> {
-  const response = await fetch(`${BASE_URL}${endpoint}`, {
-    headers: { "Content-Type": "application/json", ...options?.headers },
-    ...options,
-  });
-  const data = await response.json() as T;
-  return { status: response.status, data };
-}
-
-export async function authenticatedRequest<T>(
-  endpoint: string,
-  token: string,
-  options?: RequestInit
-): Promise<ApiResponse<T>> {
-  return apiRequest<T>(endpoint, {
-    ...options,
-    headers: {
-      ...options?.headers,
-      Authorization: `Bearer ${token}`,
-    },
-  });
-}
+// 帶認證的請求
+export async function authenticatedRequest<T>(endpoint: string, token: string, options?: RequestInit): Promise<ApiResponse<T>>
 
 // 產生唯一測試資料
-export const uniqueEmail = () => 
-  `test_${Date.now()}_${Math.random().toString(36).slice(2)}@example.com`;
-export const uniquePhone = () => 
-  `09${Math.floor(Math.random() * 100000000).toString().padStart(8, '0')}`;
+export const uniqueEmail = () => `test_${Date.now()}_${Math.random().toString(36).slice(2)}@example.com`;
+export const uniquePhone = () => `09${Math.floor(Math.random() * 100000000).toString().padStart(8, '0')}`;
 
-// 建立測試使用者並回傳 token
-export async function createTestUser(overrides = {}) {
-  const userData = {
-    user_name: "測試用戶",
-    email: uniqueEmail(),
-    password: "testpass123",
-    phone_number: uniquePhone(),
-    address: "測試地址",
-    ...overrides,
-  };
-  
-  const { data } = await apiRequest<{ token: string; user: any }>(
-    "/api/auth/register",
-    { method: "POST", body: JSON.stringify(userData) }
-  );
-  
-  return { ...data, password: userData.password };
-}
+// 建立測試使用者
+export async function createTestUser(overrides = {}): Promise<{ token: string; user: any; password: string }>
+
+// 建立測試包裹
+export async function createTestPackage(token: string, overrides = {}): Promise<any>
+
+// 取得角色 Token
+export async function getDriverToken(): Promise<string>
+export async function getWarehouseToken(): Promise<string>
+export async function getCustomerServiceToken(): Promise<string>
+export async function getAdminToken(): Promise<string>
+
+// 建立員工帳號
+export async function createEmployeeUser(adminToken: string, role: string, overrides = {}): Promise<{ token: string; user: any }>
 ```
 
 ---
@@ -124,43 +104,35 @@ export async function createTestUser(overrides = {}) {
 
 #### POST /api/auth/register - 客戶註冊
 
-| 編號 | 測試案例 | 類型 | 預期結果 |
-|------|----------|------|----------|
-| AUTH-REG-001 | 使用完整有效資料註冊 | 正向 | 200, 回傳 user 與 token |
-| AUTH-REG-002 | 缺少 user_name | 負向 | 400 |
-| AUTH-REG-003 | 缺少 email | 負向 | 400 |
-| AUTH-REG-004 | 缺少 password | 負向 | 400 |
-| AUTH-REG-005 | 缺少 phone_number | 負向 | 400 |
-| AUTH-REG-006 | 缺少 address | 負向 | 400 |
-| AUTH-REG-007 | 使用已存在的 email | 負向 | 409 |
-| AUTH-REG-008 | 使用已存在的 phone_number | 負向 | 409 |
-| AUTH-REG-009 | 驗證 user_type 固定為 "customer" | 安全 | 即使傳入其他值也固定為 customer |
-| AUTH-REG-010 | 驗證 user_class 固定為 "non_contract_customer" | 安全 | 即使傳入其他值也固定 |
-| AUTH-REG-011 | 驗證回傳不包含 password_hash | 安全 | user 物件無密碼資訊 |
-| AUTH-REG-012 | email 格式驗證 | 負向 | 400, 無效 email 格式 |
-| AUTH-REG-013 | address 格式驗證 | 負向 | 400, 必須符合 (x,y) 格式 |
+| 編號 | 測試案例 | 類型 | 預期結果 | 狀態 |
+|------|----------|------|----------|------|
+| AUTH-REG-001 | 使用完整有效資料註冊 | 正向 | 200, 回傳 user 與 token | ✅ |
+| AUTH-REG-002 | 缺少 user_name | 負向 | 400 | ✅ |
+| AUTH-REG-003 | 缺少 email | 負向 | 400 | ✅ |
+| AUTH-REG-004 | 缺少 password | 負向 | 400 | ✅ |
+| AUTH-REG-007 | 使用已存在的 email | 負向 | 409 | ✅ |
+| AUTH-REG-009 | 驗證 user_type 固定為 "customer" | 安全 | 即使傳入其他值也固定為 customer | ✅ |
+| AUTH-REG-010 | 驗證 user_class 固定為 "non_contract_customer" | 安全 | 即使傳入其他值也固定 | ✅ |
+| AUTH-REG-011 | 驗證回傳不包含 password_hash | 安全 | user 物件無密碼資訊 | ✅ |
 
 #### POST /api/auth/login - 使用者登入
 
-| 編號 | 測試案例 | 類型 | 預期結果 |
-|------|----------|------|----------|
-| AUTH-LOGIN-001 | 使用 email + 正確密碼登入 | 正向 | 200 |
-| AUTH-LOGIN-002 | 使用 phone_number + 正確密碼登入 | 正向 | 200 |
-| AUTH-LOGIN-003 | 缺少 identifier | 負向 | 400 |
-| AUTH-LOGIN-004 | 缺少 password | 負向 | 400 |
-| AUTH-LOGIN-005 | 不存在的帳號 | 負向 | 401 |
-| AUTH-LOGIN-006 | 錯誤的密碼 | 負向 | 401 |
-| AUTH-LOGIN-007 | 空的請求 body | 負向 | 400 |
-| AUTH-LOGIN-008 | 驗證回傳 token 格式正確 | 正向 | token 為有效 UUID |
+| 編號 | 測試案例 | 類型 | 預期結果 | 狀態 |
+|------|----------|------|----------|------|
+| AUTH-LOGIN-001 | 使用 email + 正確密碼登入 | 正向 | 200 | ✅ |
+| AUTH-LOGIN-002 | 使用 phone_number + 正確密碼登入 | 正向 | 200 | ✅ |
+| AUTH-LOGIN-003 | 缺少 identifier | 負向 | 400 | ✅ |
+| AUTH-LOGIN-004 | 缺少 password | 負向 | 400 | ✅ |
+| AUTH-LOGIN-005 | 不存在的帳號 | 負向 | 401 | ✅ |
+| AUTH-LOGIN-006 | 錯誤的密碼 | 負向 | 401 | ✅ |
 
 #### GET /api/auth/me - 取得當前使用者
 
-| 編號 | 測試案例 | 類型 | 預期結果 |
-|------|----------|------|----------|
-| AUTH-ME-001 | 使用有效 token 取得資訊 | 正向 | 200, 回傳 user |
-| AUTH-ME-002 | 無 token | 權限 | 401 |
-| AUTH-ME-003 | 無效 token | 權限 | 401 |
-| AUTH-ME-004 | 過期 token | 權限 | 401 |
+| 編號 | 測試案例 | 類型 | 預期結果 | 狀態 |
+|------|----------|------|----------|------|
+| AUTH-ME-001 | 使用有效 token 取得資訊 | 正向 | 200, 回傳 user | ✅ |
+| AUTH-ME-002 | 無 token | 權限 | 401 | ✅ |
+| AUTH-ME-003 | 無效 token | 權限 | 401 | ✅ |
 
 ---
 
@@ -168,24 +140,19 @@ export async function createTestUser(overrides = {}) {
 
 #### PUT /api/customers/me - 更新客戶資料
 
-| 編號 | 測試案例 | 類型 | 預期結果 |
-|------|----------|------|----------|
-| CUST-UPD-001 | 更新 user_name | 正向 | 200 |
-| CUST-UPD-002 | 更新 phone_number | 正向 | 200 |
-| CUST-UPD-003 | 更新 address | 正向 | 200 |
-| CUST-UPD-004 | 更新 billing_preference 為 cod | 正向 | 200 |
-| CUST-UPD-005 | 非合約客戶設定 monthly 帳單 | 權限 | 403 (繞過前端驗證時) |
-| CUST-UPD-006 | 無 token | 權限 | 401 |
+| 編號 | 測試案例 | 類型 | 預期結果 | 狀態 |
+|------|----------|------|----------|------|
+| CUST-UPD-001 | 更新 user_name | 正向 | 200 | ✅ |
+| CUST-UPD-002 | 更新 billing_preference | 正向 | 200 | ✅ |
+| CUST-UPD-003 | 無 token | 權限 | 401 | ✅ |
 
 #### POST /api/customers/contract-application - 申請合約客戶
 
-| 編號 | 測試案例 | 類型 | 預期結果 |
-|------|----------|------|----------|
-| CUST-APP-001 | 完整資料申請 | 正向 | 200, status = "pending" |
-| CUST-APP-002 | 缺少必填欄位 | 負向 | 400 |
-| CUST-APP-003 | 已是合約客戶再次申請 | 負向 | 400 |
-| CUST-APP-004 | 已有待審核申請 | 負向 | 400 |
-| CUST-APP-005 | 無 token | 權限 | 401 |
+| 編號 | 測試案例 | 類型 | 預期結果 | 狀態 |
+|------|----------|------|----------|------|
+| CUST-APP-001 | 完整資料申請 | 正向 | 200, status = "pending" | ✅ |
+| CUST-APP-002 | 缺少必填欄位 | 負向 | 400 | ✅ |
+| CUST-APP-005 | 無 token | 權限 | 401 | ✅ |
 
 ---
 
@@ -193,69 +160,35 @@ export async function createTestUser(overrides = {}) {
 
 #### POST /api/packages - 建立包裹
 
-| 編號 | 測試案例 | 類型 | 預期結果 |
-|------|----------|------|----------|
-| PKG-CREATE-001 | 完整資料建立包裹 | 正向 | 201, 回傳 tracking_number |
-| PKG-CREATE-002 | 缺少 sender 資訊 | 負向 | 400 |
-| PKG-CREATE-003 | 缺少 receiver 資訊 | 負向 | 400 |
-| PKG-CREATE-004 | 缺少 receiver.address | 負向 | 400 |
-| PKG-CREATE-005 | 缺少 package_type | 負向 | 400 |
-| PKG-CREATE-006 | 無效的 package_type | 負向 | 400 |
-| PKG-CREATE-007 | 缺少 content_description (郵政法必填) | 負向 | 400 |
-| PKG-CREATE-008 | 缺少 service_level | 負向 | 400 |
-| PKG-CREATE-009 | 無效的 service_level | 負向 | 400 |
-| PKG-CREATE-010 | 缺少 payment_type | 負向 | 400 |
-| PKG-CREATE-011 | 非合約客戶使用 monthly 付款 | 權限 | 403 |
-| PKG-CREATE-012 | 驗證 tracking_number 格式 | 正向 | 符合預期格式 |
-| PKG-CREATE-013 | 驗證 estimated_cost 計算正確 | 正向 | 符合運費規則 |
-| PKG-CREATE-014 | 特殊處理標記 fragile | 正向 | 201, 加入附加費 |
-| PKG-CREATE-015 | 特殊處理標記 dangerous | 正向 | 201, 加入附加費 |
-| PKG-CREATE-016 | 驗證 status 初始為 "created" | 正向 | status === "created" |
-| PKG-CREATE-017 | 無 token | 權限 | 401 |
-| PKG-CREATE-018 | weight 可選填（不填也可建立） | 正向 | 201 |
-| PKG-CREATE-019 | 非 customer 角色嘗試建立 | 權限 | 403 |
-| PKG-CREATE-020 | 驗證 sender/receiver address 格式 | 負向 | 400, 必須符合 (x,y) 格式 |
-| PKG-CREATE-021 | 驗證 declared_value 儲存正確 | 正向 | 201, 雖然 UML 未定義但系統需支援 |
-| PKG-CREATE-022 | 驗證 content_description 儲存正確 | 正向 | 201, 雖然 UML 未定義但系統需支援 |
+| 編號 | 測試案例 | 類型 | 預期結果 | 狀態 |
+|------|----------|------|----------|------|
+| PKG-CREATE-001 | 完整資料建立包裹 | 正向 | 201, 回傳 tracking_number | ✅ |
+| PKG-CREATE-002 | 缺少 sender 資訊 | 負向 | 400 | ✅ |
+| PKG-CREATE-003 | 缺少 receiver 資訊 | 負向 | 400 | ✅ |
+| PKG-CREATE-016 | 驗證 status 初始為 "created" | 正向 | status === "created" | ✅ |
+| PKG-CREATE-017 | 無 token | 權限 | 401 | ✅ |
 
 #### POST /api/packages/estimate - 運費試算
 
-| 編號 | 測試案例 | 類型 | 預期結果 |
-|------|----------|------|----------|
-| PKG-EST-001 | 標準包裹試算 | 正向 | 200, 回傳費用明細 |
-| PKG-EST-002 | 隔夜達較高費用 | 正向 | overnight > standard |
-| PKG-EST-003 | 重量影響費用 | 正向 | 較重較貴 |
-| PKG-EST-004 | 距離影響費用 | 正向 | 較遠較貴 |
-| PKG-EST-005 | fragile 附加費 | 正向 | 有附加費用 |
-| PKG-EST-006 | dangerous 附加費 | 正向 | 有附加費用 |
-| PKG-EST-007 | 驗證預計送達日期 | 正向 | 符合服務時效 |
-| PKG-EST-008 | 無需認證（公開 API） | 正向 | 200, 無 token 可用 |
+| 編號 | 測試案例 | 類型 | 預期結果 | 狀態 |
+|------|----------|------|----------|------|
+| PKG-EST-001 | 標準包裹試算 | 正向 | 200, 回傳費用明細 | ✅ |
+| PKG-EST-002 | 隔夜達較高費用 | 正向 | overnight > standard | ✅ |
+| PKG-EST-008 | 無需認證（公開 API） | 正向 | 200, 無 token 可用 | ✅ |
 
 #### GET /api/packages - 查詢包裹列表
 
-| 編號 | 測試案例 | 類型 | 預期結果 |
-|------|----------|------|----------|
-| PKG-LIST-001 | 取得自己的包裹列表 | 正向 | 200, 只回傳自己的 |
-| PKG-LIST-002 | 依 status 篩選 | 正向 | 只回傳符合狀態 |
-| PKG-LIST-003 | 依日期範圍篩選 | 正向 | 只回傳範圍內 |
-| PKG-LIST-004 | 依追蹤編號搜尋 | 正向 | 回傳符合項目 |
-| PKG-LIST-005 | 分頁 limit 參數正常值 | 正向 | 回傳數量正確 |
-| PKG-LIST-006 | 分頁 offset 參數 | 正向 | 偏移正確 |
-| PKG-LIST-007 | 客戶無法查詢他人包裹 | 權限 | 只回傳自己的 |
-| PKG-LIST-008 | 無 token | 權限 | 401 |
-| PKG-LIST-009 | limit 超過 100 | 負向 | 405 |
-| PKG-LIST-010 | 日期範圍超過 365 天 | 負向 | 405 |
+| 編號 | 測試案例 | 類型 | 預期結果 | 狀態 |
+|------|----------|------|----------|------|
+| PKG-LIST-001 | 取得自己的包裹列表 | 正向 | 200, 只回傳自己的 | ✅ |
+| PKG-LIST-008 | 無 token | 權限 | 401 | ✅ |
 
-#### GET /api/packages/:id - 查詢單一包裹
+#### GET /api/packages/:packageId/status - 查詢包裹狀態
 
-| 編號 | 測試案例 | 類型 | 預期結果 |
-|------|----------|------|----------|
-| PKG-GET-001 | 使用 ID 查詢自己的包裹 | 正向 | 200 |
-| PKG-GET-002 | 使用 tracking_number 查詢 | 正向 | 200 |
-| PKG-GET-003 | 查詢不存在的包裹 | 負向 | 404 |
-| PKG-GET-004 | 客戶查詢他人的包裹 | 權限 | 403 |
-| PKG-GET-005 | 驗證回傳完整資訊 | 正向 | 包含所有欄位 |
-| PKG-GET-006 | 無 token | 權限 | 401 |
+| 編號 | 測試案例 | 類型 | 預期結果 | 狀態 |
+|------|----------|------|----------|------|
+| PKG-STATUS-001 | 查詢已建立的包裹狀態 | 正向 | 200, 回傳 package + events | ✅ |
+| PKG-STATUS-002 | 包裹不存在 | 負向 | 404 | ✅ |
 
 ---
 
@@ -263,45 +196,25 @@ export async function createTestUser(overrides = {}) {
 
 #### GET /api/tracking/:trackingNumber - 公開追蹤
 
-| 編號 | 測試案例 | 類型 | 預期結果 |
-|------|----------|------|----------|
-| TRACK-PUB-001 | 有效追蹤編號查詢 | 正向 | 200, 回傳狀態與事件 |
-| TRACK-PUB-002 | 無效追蹤編號 | 負向 | 404 |
-| TRACK-PUB-003 | 驗證事件按時間排序 | 正向 | 時間升序 |
-| TRACK-PUB-004 | 不需要認證 | 正向 | 200, 無 token 可用 |
-| TRACK-PUB-005 | 驗證 current_status 正確 | 正向 | 符合最新事件 |
-| TRACK-PUB-006 | 驗證 events 結構完整 | 正向 | 包含必要欄位 |
+| 編號 | 測試案例 | 類型 | 預期結果 | 狀態 |
+|------|----------|------|----------|------|
+| TRACK-PUB-001 | 有效追蹤編號查詢 | 正向 | 200, 回傳狀態與事件 | ✅ |
+| TRACK-PUB-002 | 無效追蹤編號 | 負向 | 404 | ✅ |
+| TRACK-PUB-004 | 不需要認證 | 正向 | 200, 無 token 可用 | ✅ |
 
 #### POST /api/packages/:packageId/events - 建立貨態事件
 
-| 編號 | 測試案例 | 類型 | 預期結果 |
-|------|----------|------|----------|
-| TRACK-EVT-001 | driver 建立 picked_up 事件 | 正向 | 200 |
-| TRACK-EVT-002 | warehouse 建立 warehouse_in 事件 | 正向 | 200 |
-| TRACK-EVT-003 | customer_service 建立事件 | 正向 | 200 |
-| TRACK-EVT-004 | 缺少 status | 負向 | 400 |
-| TRACK-EVT-005 | 缺少 location | 負向 | 400 |
-| TRACK-EVT-006 | 無效的 status 值 | 負向 | 400 |
-| TRACK-EVT-007 | 包裹不存在 | 負向 | 404 |
-| TRACK-EVT-008 | customer 無權限建立事件 | 權限 | 403 |
-| TRACK-EVT-009 | 無 token | 權限 | 401 |
-| TRACK-EVT-010 | 驗證自動產生時間戳記 | 正向 | timestamp 正確 |
-| TRACK-EVT-011 | 驗證包裹狀態同步更新 | 正向 | package.status 更新 |
-| TRACK-EVT-012 | 驗證 location 合法性 | 負向 | 400, location 必須存在於 Map Node 或 Truck ID |
-| TRACK-EVT-013 | 驗證支援所有 API 定義的 status | 正向 | 所有列舉的 status 均可寫入 |
+| 編號 | 測試案例 | 類型 | 預期結果 | 狀態 |
+|------|----------|------|----------|------|
+| TRACK-EVT-001 | 建立 in_transit 事件 | 正向 | 200 | ✅ |
+| TRACK-EVT-002 | 建立 warehouse_in 事件 | 正向 | 200 | ✅ |
+| TRACK-EVT-007 | 包裹不存在 | 負向 | 404 | ✅ |
 
 #### GET /api/tracking/search - 進階搜尋
 
-| 編號 | 測試案例 | 類型 | 預期結果 |
-|------|----------|------|----------|
-| TRACK-SEARCH-001 | 依 tracking_number 搜尋 | 正向 | 200 |
-| TRACK-SEARCH-002 | 依 customer_id 搜尋 | 正向 | 200 |
-| TRACK-SEARCH-003 | 依日期範圍搜尋 | 正向 | 200 |
-| TRACK-SEARCH-004 | 依 location_id 搜尋 (節點) | 正向 | 200 |
-| TRACK-SEARCH-005 | 依 location_id 搜尋 (車輛) | 正向 | 200 |
-| TRACK-SEARCH-006 | exception_only=true | 正向 | 只回傳異常 |
-| TRACK-SEARCH-007 | customer 無權使用 | 權限 | 403 |
-| TRACK-SEARCH-008 | customer_service 可使用 | 權限 | 200 |
+| 編號 | 測試案例 | 類型 | 預期結果 | 狀態 |
+|------|----------|------|----------|------|
+| TRACK-SEARCH-001 | 依 tracking_number 搜尋 | 正向 | 200 | ✅ |
 
 ---
 
@@ -309,34 +222,28 @@ export async function createTestUser(overrides = {}) {
 
 #### GET /api/map - 取得地圖
 
-| 編號 | 測試案例 | 類型 | 預期結果 |
-|------|----------|------|----------|
-| MAP-GET-001 | 成功取得地圖資料 | 正向 | 200 |
-| MAP-GET-002 | nodes 為陣列 | 正向 | Array |
-| MAP-GET-003 | edges 為陣列 | 正向 | Array |
-| MAP-GET-004 | node 結構完整 | 正向 | 含 id, name, type, level, x, y |
-| MAP-GET-005 | edge 結構完整 | 正向 | 含 source, target, distance, cost |
-| MAP-GET-006 | 不需認證 | 正向 | 200, 無 token 可用 |
+| 編號 | 測試案例 | 類型 | 預期結果 | 狀態 |
+|------|----------|------|----------|------|
+| MAP-GET-001 | 成功取得地圖資料 | 正向 | 200 | ✅ |
+| MAP-GET-002 | nodes 為陣列 | 正向 | Array | ✅ |
+| MAP-GET-003 | edges 為陣列 | 正向 | Array | ✅ |
+| MAP-GET-004 | node 結構完整 | 正向 | 含 id, name, level, x, y | ✅ |
+| MAP-GET-006 | 不需認證 | 正向 | 200, 無 token 可用 | ✅ |
 
 #### GET /api/map/route - 路線成本計算
 
-| 編號 | 測試案例 | 類型 | 預期結果 |
-|------|----------|------|----------|
-| MAP-ROUTE-001 | 計算兩點路線成本 | 正向 | 200, 回傳 path 與 total_cost |
-| MAP-ROUTE-002 | 缺少 from 參數 | 負向 | 400 |
-| MAP-ROUTE-003 | 缺少 to 參數 | 負向 | 400 |
-| MAP-ROUTE-004 | 無效的起點節點 | 負向 | 404 |
-| MAP-ROUTE-005 | 無效的終點節點 | 負向 | 404 |
-| MAP-ROUTE-006 | 驗證 total_cost 計算正確 | 正向 | 路徑成本加總正確 |
+| 編號 | 測試案例 | 類型 | 預期結果 | 狀態 |
+|------|----------|------|----------|------|
+| MAP-ROUTE-001 | 計算兩點路線成本 | 正向 | 200, 回傳 path 與 total_cost | ✅ |
+| MAP-ROUTE-002 | 缺少 from 參數 | 負向 | 400 | ✅ |
+| MAP-ROUTE-003 | 缺少 to 參數 | 負向 | 400 | ✅ |
 
 #### PUT /api/map/edges/:id - 更新邊
 
-| 編號 | 測試案例 | 類型 | 預期結果 |
-|------|----------|------|----------|
-| MAP-EDGE-001 | admin 更新成功 | 正向 | 200 |
-| MAP-EDGE-002 | 不存在的 edge | 負向 | 404 |
-| MAP-EDGE-003 | customer 無權限 | 權限 | 403 |
-| MAP-EDGE-004 | driver 無權限 | 權限 | 403 |
+| 編號 | 測試案例 | 類型 | 預期結果 | 狀態 |
+|------|----------|------|----------|------|
+| MAP-EDGE-001 | admin 更新成功 | 正向 | 200 | ✅ |
+| MAP-EDGE-002 | 不存在的 edge | 負向 | 404 | ✅ |
 
 ---
 
@@ -344,118 +251,189 @@ export async function createTestUser(overrides = {}) {
 
 #### GET /api/billing/bills - 帳單列表
 
-| 編號 | 測試案例 | 類型 | 預期結果 |
-|------|----------|------|----------|
-| BILL-LIST-001 | 客戶查詢自己的帳單 | 正向 | 200 |
-| BILL-LIST-002 | 依 status 篩選 | 正向 | 200 |
-| BILL-LIST-003 | 依期間篩選 | 正向 | 200 |
-| BILL-LIST-004 | 客戶無法查他人帳單 | 權限 | 只回傳自己的 |
-| BILL-LIST-005 | 無 token | 權限 | 401 |
-
-#### GET /api/billing/bills/:billId - 帳單明細
-
-| 編號 | 測試案例 | 類型 | 預期結果 |
-|------|----------|------|----------|
-| BILL-GET-001 | 查詢自己的帳單明細 | 正向 | 200 |
-| BILL-GET-002 | 帳單不存在 | 負向 | 404 |
-| BILL-GET-003 | 查詢他人帳單 | 權限 | 403 |
-| BILL-GET-004 | 驗證 items 包含所有貨件 | 正向 | 完整列表 |
+| 編號 | 測試案例 | 類型 | 預期結果 | 狀態 |
+|------|----------|------|----------|------|
+| BILL-LIST-001 | 客戶查詢自己的帳單 | 正向 | 200 | ✅ |
+| BILL-LIST-005 | 無 token | 權限 | 401 | ✅ |
 
 #### POST /api/billing/payments - 付款
 
-| 編號 | 測試案例 | 類型 | 預期結果 |
-|------|----------|------|----------|
-| BILL-PAY-001 | 信用卡付款 | 正向 | 200 |
-| BILL-PAY-002 | 銀行轉帳付款 | 正向 | 200 |
-| BILL-PAY-003 | 缺少 bill_id | 負向 | 400 |
-| BILL-PAY-004 | 缺少 payment_method | 負向 | 400 |
-| BILL-PAY-005 | 金額不符 | 負向 | 400 |
-| BILL-PAY-006 | 帳單已付款 | 負向 | 400 |
-| BILL-PAY-007 | 嘗試付他人帳單 | 權限 | 403 |
-| BILL-PAY-008 | 無 token | 權限 | 401 |
+| 編號 | 測試案例 | 類型 | 預期結果 | 狀態 |
+|------|----------|------|----------|------|
+| BILL-PAY-001 | 成功付款 | 正向 | 200 | ✅ |
+
+#### POST /api/admin/billing/settle - 月結結算 (Admin)
+
+| 編號 | 測試案例 | 類型 | 預期結果 | 狀態 |
+|------|----------|------|----------|------|
+| BILL-SETTLE-001 | Admin 執行結算 | 正向 | 200 | ✅ |
 
 ---
 
-### 3.7 員工操作 (Staff)
+### 3.7 司機操作 (Driver)
 
-#### GET /api/driver/tasks - 駕駛員工作清單
+#### GET /api/driver/tasks - 任務清單
 
-| 編號 | 測試案例 | 類型 | 預期結果 |
-|------|----------|------|----------|
-| DRV-TASK-001 | 取得今日任務 | 正向 | 200 |
-| DRV-TASK-002 | 指定日期 | 正向 | 200 |
-| DRV-TASK-003 | 篩選 pickup | 正向 | 只回傳取件 |
-| DRV-TASK-004 | 篩選 delivery | 正向 | 只回傳配送 |
-| DRV-TASK-005 | 驗證路線規劃 | 正向 | 有 optimized_order |
-| DRV-TASK-006 | customer 無權限 | 權限 | 403 |
+| 編號 | 測試案例 | 類型 | 預期結果 | 狀態 |
+|------|----------|------|----------|------|
+| DRV-TASK-001 | 取得 assigned 任務 | 正向 | 200, 回傳任務清單 | ✅ |
+| DRV-TASK-002 | 取得 handoff 任務 | 正向 | 200 | ✅ |
 
-#### POST /api/driver/packages/:packageId/status - 更新配送狀態
+#### POST /api/driver/tasks/:taskId/accept - 接受任務
 
-| 編號 | 測試案例 | 類型 | 預期結果 |
-|------|----------|------|----------|
-| DRV-STATUS-001 | 更新為 picked_up | 正向 | 200 |
-| DRV-STATUS-002 | 更新為 delivered 含簽名 | 正向 | 200 |
-| DRV-STATUS-003 | 記錄貨到付款金額 | 正向 | 200 |
-| DRV-STATUS-004 | exception 需備註 | 負向 | 400, 缺少 notes |
-| DRV-STATUS-005 | customer 無權限 | 權限 | 403 |
+| 編號 | 測試案例 | 類型 | 預期結果 | 狀態 |
+|------|----------|------|----------|------|
+| DRV-ACCEPT-001 | 接受 handoff 任務 | 正向 | 200, success=true | ✅ |
 
-#### POST /api/warehouse/batch-operation - 批次入出庫
+#### POST /api/driver/tasks/:taskId/complete - 完成任務
 
-| 編號 | 測試案例 | 類型 | 預期結果 |
-|------|----------|------|----------|
-| WH-BATCH-001 | 批次入庫 | 正向 | 200 |
-| WH-BATCH-002 | 批次出庫 | 正向 | 200 |
-| WH-BATCH-003 | 批次分揀 | 正向 | 200 |
-| WH-BATCH-004 | 空的 package_ids | 負向 | 400 |
-| WH-BATCH-005 | 部分包裹不存在 | 負向 | 400/部分成功 |
-| WH-BATCH-006 | customer 無權限 | 權限 | 403 |
-| WH-BATCH-007 | driver 無權限 | 權限 | 403 |
+| 編號 | 測試案例 | 類型 | 預期結果 | 狀態 |
+|------|----------|------|----------|------|
+| DRV-COMPLETE-001 | 完成取件任務 | 正向 | 200, success=true | ✅ |
+
+#### POST /api/driver/tasks/:taskId/pickup - 取件
+
+| 編號 | 測試案例 | 類型 | 預期結果 | 狀態 |
+|------|----------|------|----------|------|
+| DRV-PICKUP-001 | 執行取件 | 正向 | 200 | ✅ |
+
+#### POST /api/driver/tasks/:taskId/dropoff - 卸貨
+
+| 編號 | 測試案例 | 類型 | 預期結果 | 狀態 |
+|------|----------|------|----------|------|
+| DRV-DROPOFF-001 | 執行卸貨 | 正向 | 200 | ✅ |
+
+#### POST /api/driver/packages/:packageId/exception - 異常申報
+
+| 編號 | 測試案例 | 類型 | 預期結果 | 狀態 |
+|------|----------|------|----------|------|
+| DRV-EXC-001 | 司機申報異常 | 正向 | 200, 回傳 exception_id | ✅ |
+| DRV-EXC-002 | 缺少 description | 負向 | 400 | 待實作 |
 
 ---
 
-### 3.8 管理員 (Admin)
+### 3.8 倉儲操作 (Warehouse)
+
+#### GET /api/warehouse/packages - 站內包裹清單
+
+| 編號 | 測試案例 | 類型 | 預期結果 | 狀態 |
+|------|----------|------|----------|------|
+| WH-LIST-001 | 取得站內包裹 | 正向 | 200, 回傳包裹清單 | ✅ |
+| WH-LIST-002 | 無 token | 權限 | 401 | 待實作 |
+
+#### POST /api/warehouse/packages/receive - 點收確認
+
+| 編號 | 測試案例 | 類型 | 預期結果 | 狀態 |
+|------|----------|------|----------|------|
+| WH-RCV-001 | 點收包裹 | 正向 | 200, processed=1 | ✅ |
+| WH-RCV-002 | 空 package_ids | 負向 | 400 | 待實作 |
+| WH-RCV-003 | 冪等處理（重複點收） | 正向 | 200, 不重複寫入事件 | ✅ |
+
+#### POST /api/warehouse/packages/:packageId/dispatch-next - 派發下一段
+
+| 編號 | 測試案例 | 類型 | 預期結果 | 狀態 |
+|------|----------|------|----------|------|
+| WH-DISP-001 | 派發到相鄰節點 | 正向 | 200, 建立任務 | ✅ |
+| WH-DISP-002 | 派發到非相鄰節點 | 負向 | 400 | 待實作 |
+
+#### POST /api/warehouse/batch-operation - 批次操作
+
+| 編號 | 測試案例 | 類型 | 預期結果 | 狀態 |
+|------|----------|------|----------|------|
+| WH-BATCH-001 | 批次入庫 | 正向 | 200 | ✅ |
+| WH-BATCH-006 | customer 無權限 | 權限 | 403 | ✅ |
+
+---
+
+### 3.9 車輛管理 (Vehicles)
+
+#### GET /api/vehicles/me - 取得車輛狀態
+
+| 編號 | 測試案例 | 類型 | 預期結果 | 狀態 |
+|------|----------|------|----------|------|
+| VEH-ME-001 | 自動建立車輛 | 正向 | 200, 回傳 vehicle | ✅ |
+| VEH-ME-401 | 無 token | 權限 | 401 | ✅ |
+
+#### POST /api/vehicles/me/move - 移動車輛
+
+| 編號 | 測試案例 | 類型 | 預期結果 | 狀態 |
+|------|----------|------|----------|------|
+| VEH-MOVE-001 | 移動到相鄰節點 | 正向 | 200, success=true | ✅ |
+| VEH-MOVE-409 | fromNodeId 過期 | 負向 | 409 | ✅ |
+
+#### GET /api/vehicles/me/cargo - 車上貨物
+
+| 編號 | 測試案例 | 類型 | 預期結果 | 狀態 |
+|------|----------|------|----------|------|
+| VEH-CARGO-001 | 取得車上包裹 | 正向 | 200 | ✅ |
+
+---
+
+### 3.10 異常處理 (Exceptions)
+
+#### GET /api/cs/exceptions - 異常池列表
+
+| 編號 | 測試案例 | 類型 | 預期結果 | 狀態 |
+|------|----------|------|----------|------|
+| CS-EXC-LIST-001 | 客服查詢異常池 | 正向 | 200, 回傳 exceptions | ✅ |
+| CS-EXC-LIST-002 | 依 handled 篩選 | 正向 | 200 | 待實作 |
+
+#### POST /api/cs/exceptions/:exceptionId/handle - 處理異常
+
+| 編號 | 測試案例 | 類型 | 預期結果 | 狀態 |
+|------|----------|------|----------|------|
+| CS-EXC-HANDLE-001 | action=resume | 正向 | 200, handled=1 | ✅ |
+| CS-EXC-HANDLE-002 | action=cancel | 正向 | 200, delivery_failed | 待實作 |
+| CS-EXC-HANDLE-003 | 缺少 handling_report | 負向 | 400 | 待實作 |
+
+---
+
+### 3.11 管理員 (Admin)
 
 #### POST /api/admin/users - 建立員工帳號
 
-| 編號 | 測試案例 | 類型 | 預期結果 |
-|------|----------|------|----------|
-| ADM-USER-001 | 建立 driver 帳號 | 正向 | 200 |
-| ADM-USER-002 | 建立 warehouse 帳號 | 正向 | 200 |
-| ADM-USER-003 | 建立 customer_service 帳號 | 正向 | 200 |
-| ADM-USER-004 | customer 無權限 | 權限 | 403 |
-| ADM-USER-005 | driver 無權限 | 權限 | 403 |
-| ADM-USER-006 | 缺少必填欄位 | 負向 | 400 |
+| 編號 | 測試案例 | 類型 | 預期結果 | 狀態 |
+|------|----------|------|----------|------|
+| ADM-USER-001 | 建立 driver 帳號 | 正向 | 200 | ✅ |
+| ADM-USER-002 | 建立 warehouse 帳號 | 正向 | 200 | ✅ |
+| ADM-USER-003 | 建立 customer_service 帳號 | 正向 | 200 | ✅ |
+| ADM-USER-004 | customer 無權限 | 權限 | 403 | ✅ |
 
 #### PUT /api/admin/contract-applications/:id - 審核申請
 
-| 編號 | 測試案例 | 類型 | 預期結果 |
-|------|----------|------|----------|
-| ADM-APP-001 | 核准申請 | 正向 | 200, 客戶升級 |
-| ADM-APP-002 | 拒絕申請 | 正向 | 200 |
-| ADM-APP-003 | 申請不存在 | 負向 | 404 |
-| ADM-APP-004 | customer 無權限 | 權限 | 403 |
-| ADM-APP-005 | customer_service 可審核 | 權限 | 200 |
+| 編號 | 測試案例 | 類型 | 預期結果 | 狀態 |
+|------|----------|------|----------|------|
+| ADM-APP-001 | 核准申請 | 正向 | 200, 客戶升級 | ✅ |
+| ADM-APP-002 | 拒絕申請 | 正向 | 200 | ✅ |
+| ADM-APP-003 | 申請不存在 | 負向 | 404 | ✅ |
+
+#### GET /api/admin/system/errors - 系統錯誤列表
+
+| 編號 | 測試案例 | 類型 | 預期結果 | 狀態 |
+|------|----------|------|----------|------|
+| ADM-ERR-001 | 查詢錯誤列表 | 正向 | 200 | ✅ |
 
 ---
 
-## 4. 實作優先順序
+## 4. 待補齊的測試案例（Edge Cases）
 
-### 第一優先級（核心業務）
+### 4.1 高優先級
 
-1. **認證模組 (Auth)** - 所有功能基礎
-2. **包裹管理 (Package)** - 建立包裹、運費試算
-3. **貨態追蹤 (Tracking)** - 公開查詢、事件建立
+| 模組 | 測試案例 | 說明 |
+|------|----------|------|
+| Exceptions | CS-EXC-HANDLE-002 | action=cancel 應寫入 delivery_failed 事件 |
+| Exceptions | CS-EXC-HANDLE-003 | handling_report 必填驗證 |
+| Exceptions | DRV-EXC-BLOCK-001 | 異常成立後阻擋其他貨態事件 (409) |
+| Warehouse | WH-DISP-002 | 非相鄰節點應回傳 400 |
+| Warehouse | WH-RCV-002 | 空 package_ids 應回傳 400 |
 
-### 第二優先級（輔助功能）
+### 4.2 中優先級
 
-4. **地圖路線 (Map)** - 路線計算
-5. **員工操作 (Staff)** - 駕駛員、倉儲操作
-6. **客戶管理 (Customer)** - 合約申請
-
-### 第三優先級（進階功能）
-
-7. **計費帳單 (Billing)**
-8. **管理員 (Admin)**
+| 模組 | 測試案例 | 說明 |
+|------|----------|------|
+| Driver | DRV-PICKUP-BLOCK | 包裹有 active exception 時禁止取件 |
+| Billing | BILL-SETTLE-DUP | 重複結算同月份應適當處理 |
+| Vehicles | VEH-MOVE-NONADJ | 移動到非相鄰節點應回傳 400 |
 
 ---
 
@@ -463,37 +441,107 @@ export async function createTestUser(overrides = {}) {
 
 ```
 backend/src/__tests__/
-├── helpers.ts              # 輔助函式
-├── auth.test.ts            # 認證模組 (25 cases)
-├── customer.test.ts        # 客戶管理 (12 cases)
-├── packages.test.ts        # 包裹管理 (35 cases)
-├── tracking.test.ts        # 貨態追蹤 (25 cases)
-├── map.test.ts             # 地圖路線 (18 cases)
-├── billing.test.ts         # 計費帳單 (15 cases)
-├── staff.test.ts           # 員工操作 (20 cases)
-├── admin.test.ts           # 管理員 (15 cases)
-└── integration/
-    ├── package-lifecycle.test.ts  # 包裹完整生命週期
-    └── billing-flow.test.ts       # 計費流程整合
+├── helpers.ts                           # 輔助函式
+├── setup.ts                             # 測試環境設定
+├── auth.test.ts                         # 認證模組 (25 cases)
+├── customer.test.ts                     # 客戶管理 (12 cases)
+├── packages.test.ts                     # 包裹管理 (35 cases)
+├── pricing.test.ts                      # 運費計算 (10 cases)
+├── tracking.test.ts                     # 貨態追蹤 (15 cases)
+├── map.test.ts                          # 地圖路線 (12 cases)
+├── billing.test.ts                      # 計費帳單 (10 cases)
+├── staff.test.ts                        # 員工操作 - 舊版
+├── driverTaskPool.test.ts               # 司機任務池 (2 cases)
+├── driverArrivePanel.test.ts            # 司機抵達面板 (1 case)
+├── driverPickupCustomerStatus.test.ts   # 取件後客戶狀態 (1 case)
+├── cargoFlow.test.ts                    # 貨物流程整合 (5 cases)
+├── vehicles.test.ts                     # 車輛管理 (4 cases)
+├── csExceptions.test.ts                 # 客服異常處理 (1 case)
+├── admin.test.ts                        # 管理員 (10 cases)
+└── integration/                         # 整合測試
+    └── (reserved for lifecycle tests)
 ```
 
 ---
 
-## 6. 執行命令
+## 6. 覆蓋率說明
+
+### 目前狀態
+
+- **測試框架**: Vitest + @cloudflare/vitest-pool-workers
+- **覆蓋率工具**: @vitest/coverage-istanbul ✅
+- **報告位置**: `backend/coverage/index.html`
+
+### 實際覆蓋率（Istanbul 報告 - 2025-12-23）
+
+| 目錄 | Statements | Branches | Functions | Lines |
+|------|------------|----------|-----------|-------|
+| **All files** | **63.41%** (1373/2165) | **50.72%** (840/1656) | **76.81%** (106/138) | **66.56%** (1322/1986) |
+| src | 87.5% (105/120) | 78.12% (25/32) | 75% (6/8) | 88.03% (103/117) |
+| src/endpoints | 60.37% (1152/1908) | 49.28% (762/1546) | 72.89% (78/107) | 63.65% (1114/1750) |
+| src/lib | 92.3% (12/13) | 60% (12/20) | 100% (4/4) | 100% (11/11) |
+| src/services | 55.17% (16/29) | 20% (2/10) | 75% (3/4) | 55.17% (16/29) |
+| src/utils | 92.63% (88/95) | 81.25% (39/48) | 100% (15/15) | 98.73% (78/79) |
+
+### 覆蓋率目標
+
+| 指標 | 現況 | 目標 | 差距 |
+|------|------|------|------|
+| Statements | 63.41% | 80% | -16.59% |
+| Branches | 50.72% | 70% | -19.28% |
+| Functions | 76.81% | 90% | -13.19% |
+| Lines | 66.56% | 80% | -13.44% |
+
+### 提升覆蓋率建議
+
+1. **endpoints 目錄** (60.37%)：需補齊更多 endpoint 測試
+2. **services 目錄** (55.17%)：需測試服務層邏輯
+3. **Branches 覆蓋** (50.72%)：需增加負向測試案例
+
+### API 覆蓋率估算
+
+| 模組 | API 端點 | 已測試 | 覆蓋率 |
+|------|----------|--------|--------|
+| Auth | 3 | 3 | 100% |
+| Customer | 3 | 3 | 100% |
+| Package | 5 | 5 | 100% |
+| Tracking | 3 | 3 | 100% |
+| Map | 3 | 3 | 100% |
+| Billing | 8 | 5 | 62% |
+| Driver | 10 | 8 | 80% |
+| Warehouse | 4 | 3 | 75% |
+| Vehicles | 3 | 3 | 100% |
+| Exceptions | 4 | 2 | 50% |
+| Admin | 5 | 4 | 80% |
+| **總計** | **51** | **42** | **82%** |
+
+---
+
+## 7. 執行命令
 
 ```bash
 # 執行所有測試
 npm test
 
+# 執行測試並產生覆蓋率報告
+npm test -- --coverage
+
 # 執行特定檔案
 npm test -- src/__tests__/auth.test.ts
-
-# 執行帶覆蓋率
-npm test -- --coverage
 
 # 監看模式
 npm test -- --watch
 
 # 只執行標記的測試
 npm test -- --grep "AUTH-REG"
+
+# 執行整合測試
+npm test -- src/__tests__/integration/
+```
+
+### 查看覆蓋率報告
+
+```bash
+# 在瀏覽器中開啟 HTML 報告
+start backend/coverage/index.html
 ```

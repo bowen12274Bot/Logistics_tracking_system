@@ -68,7 +68,6 @@ frontend/src/
 │   ├── CustomerSendView.vue        # 寄件建立頁面
 │   ├── CustomerPaymentView.vue     # 付款頁面
 │   ├── CustomerContractView.vue    # 合約申請頁面
-│   ├── CustomerScheduleView.vue    # 排程取件頁面
 │   │
 │   ├── EmployeeDriverView.vue          # 駕駛員頁面
 │   ├── EmployeeWarehouseView.vue       # 倉儲人員頁面

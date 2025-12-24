@@ -9,6 +9,7 @@ import {
   getAdminToken,
   getDriverToken,
 } from "./helpers";
+import { describe401Tests } from "./authTestUtils";
 
 describe("Driver tasks (segmented assignment + handoff)", () => {
   let customerToken: string;
@@ -184,4 +185,11 @@ describe("Driver tasks (segmented assignment + handoff)", () => {
     const list: any[] = assigned.data.tasks ?? [];
     expect(list.some((t) => t.id === taskId)).toBe(true);
   });
+  describe401Tests([
+    { method: "GET", path: "/api/driver/tasks" },
+    { method: "POST", path: "/api/driver/tasks/123/accept" },
+    { method: "POST", path: "/api/driver/tasks/123/pickup" }, // In driverTaskCargo.ts
+    { method: "POST", path: "/api/driver/tasks/123/dropoff" }, // In driverTaskCargo.ts
+    { method: "POST", path: "/api/driver/tasks/123/complete" },
+  ]);
 });

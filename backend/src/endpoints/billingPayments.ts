@@ -1,6 +1,7 @@
 import { OpenAPIRoute } from "chanfana";
 import { z } from "zod";
 import type { AppContext } from "../types";
+import { requireAuth } from "../utils/authUtils";
 
 // POST /api/billing/payments - 付款
 export class BillingPaymentCreate extends OpenAPIRoute {
@@ -41,20 +42,9 @@ export class BillingPaymentCreate extends OpenAPIRoute {
   };
 
   async handle(c: AppContext) {
-    const authHeader = c.req.header("Authorization");
-    
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return c.json({ error: "Token 缺失" }, 401);
-    }
-
-    const token = authHeader.replace("Bearer ", "");
-    const tokenRecord = await c.env.DB.prepare(
-      "SELECT user_id FROM tokens WHERE id = ?"
-    ).bind(token).first<{ user_id: string }>();
-
-    if (!tokenRecord) {
-      return c.json({ error: "Token 無效" }, 401);
-    }
+    const auth = await requireAuth(c);
+    if (auth.ok === false) return (auth as any).res;
+    const user = auth.user;
 
     const body = await c.req.json<{
       bill_id: string;
@@ -77,7 +67,7 @@ export class BillingPaymentCreate extends OpenAPIRoute {
     }
 
     // 權限檢查：只能付自己的帳單
-    if (bill.customer_id !== tokenRecord.user_id) {
+    if (bill.customer_id !== user.id) {
       return c.json({ error: "無權付款此帳單" }, 403);
     }
 
@@ -136,20 +126,9 @@ export class BillingPaymentList extends OpenAPIRoute {
   };
 
   async handle(c: AppContext) {
-    const authHeader = c.req.header("Authorization");
-    
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return c.json({ error: "Token 缺失" }, 401);
-    }
-
-    const token = authHeader.replace("Bearer ", "");
-    const tokenRecord = await c.env.DB.prepare(
-      "SELECT user_id FROM tokens WHERE id = ?"
-    ).bind(token).first<{ user_id: string }>();
-
-    if (!tokenRecord) {
-      return c.json({ error: "Token 無效" }, 401);
-    }
+    const auth = await requireAuth(c);
+    if (auth.ok === false) return (auth as any).res;
+    const user = auth.user;
 
     const query = c.req.query();
 
@@ -159,7 +138,7 @@ export class BillingPaymentList extends OpenAPIRoute {
       FROM monthly_billing mb
       WHERE mb.customer_id = ? AND mb.status = 'paid'
     `;
-    const params: string[] = [tokenRecord.user_id];
+    const params: string[] = [user.id];
 
     if (query.bill_id) {
       sql += " AND mb.id = ?";

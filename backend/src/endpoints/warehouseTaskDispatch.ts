@@ -122,7 +122,7 @@ export class WarehouseDispatchNextTask extends OpenAPIRoute {
 
   async handle(c: AppContext) {
     const auth = await requireWarehouse(c);
-    if (!auth.ok) return auth.res;
+    if (!auth.ok) return (auth as any).res;
 
     const data = await this.getValidatedData<typeof this.schema>();
     const packageId = String(data.params.packageId).trim();

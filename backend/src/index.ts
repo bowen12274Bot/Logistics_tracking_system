@@ -300,11 +300,22 @@ openapi.post("/api/warehouse/batch-operation", WarehouseBatchOperation);
 openapi.post("/api/warehouse/packages/:packageId/dispatch-next", WarehouseDispatchNextTask);
 openapi.post("/api/warehouse/packages/:packageId/exception", WarehousePackageExceptionCreate);
 
+import { BillingSettle } from "./endpoints/billingCycle";
+import { BillingAdminUpdate, BillingAdminAddItem, BillingAdminRemoveItem } from "./endpoints/billingAdmin";
+
+// ... existing code ...
+
 // Billing APIs
 openapi.get("/api/billing/bills", BillingBillList);
 openapi.get("/api/billing/bills/:billId", BillingBillDetail);
 openapi.post("/api/billing/payments", BillingPaymentCreate);
 openapi.get("/api/billing/payments", BillingPaymentList);
+
+// Admin Billing APIs
+openapi.post("/api/admin/billing/settle", BillingSettle);
+openapi.patch("/api/admin/billing/bills/:billId", BillingAdminUpdate);
+openapi.post("/api/admin/billing/bills/:billId/items", BillingAdminAddItem);
+openapi.delete("/api/admin/billing/bills/:billId/items/:itemId", BillingAdminRemoveItem);
 
 // Admin APIs
 openapi.post("/api/admin/users", AdminUserCreate);

@@ -1,31 +1,9 @@
 import { OpenAPIRoute, Str } from "chanfana";
 import { z } from "zod";
 import { type AppContext, Package, PackageEvent } from "../types";
+import { requireAuth } from "../utils/authUtils";
 import { getActiveException } from "../lib/packageGuards";
 
-async function requireUser(c: AppContext) {
-	const authHeader = c.req.header("Authorization");
-	if (!authHeader || !authHeader.startsWith("Bearer ")) {
-		return { ok: false as const, res: c.json({ error: "Token missing" }, 401) };
-	}
-
-	const token = authHeader.replace("Bearer ", "");
-	const tokenRecord = await c.env.DB.prepare("SELECT user_id FROM tokens WHERE id = ?")
-		.bind(token)
-		.first<{ user_id: string }>();
-	if (!tokenRecord) {
-		return { ok: false as const, res: c.json({ error: "Invalid token" }, 401) };
-	}
-
-	const user = await c.env.DB.prepare("SELECT id, user_type, user_class FROM users WHERE id = ?")
-		.bind(tokenRecord.user_id)
-		.first<{ id: string; user_type: string; user_class: string }>();
-	if (!user) {
-		return { ok: false as const, res: c.json({ error: "User not found" }, 401) };
-	}
-
-	return { ok: true as const, user };
-}
 
 export class PackageStatusQuery extends OpenAPIRoute {
 	schema = {
@@ -74,8 +52,8 @@ export class PackageStatusQuery extends OpenAPIRoute {
 	};
 
 	async handle(c: AppContext) {
-		const auth = await requireUser(c);
-		if (!auth.ok) return auth.res;
+		const auth = await requireAuth(c);
+		if (auth.ok === false) return (auth as any).res;
 
 		const data = await this.getValidatedData<typeof this.schema>();
 		const { packageId } = data.params;
@@ -226,8 +204,8 @@ export class PackageList extends OpenAPIRoute {
 	};
 
 	async handle(c: AppContext) {
-		const auth = await requireUser(c);
-		if (!auth.ok) return auth.res;
+		const auth = await requireAuth(c);
+		if (auth.ok === false) return (auth as any).res;
 
 		const data = await this.getValidatedData<typeof this.schema>();
 		const { customer_id, limit } = data.query;

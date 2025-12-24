@@ -1,8 +1,8 @@
 import { OpenAPIRoute } from "chanfana";
 import { z } from "zod";
 import type { AppContext } from "../types";
+import { requireWarehouse, type AuthUser } from "../utils/authUtils";
 
-type AuthUser = { id: string; user_class: string; address: string | null };
 type PackageRow = {
   id: string;
   tracking_number: string | null;
@@ -25,35 +25,16 @@ function normalizeNodeId(value: string | null | undefined) {
   return String(value ?? "").trim().toUpperCase();
 }
 
-async function requireWarehouse(c: AppContext) {
-  const authHeader = c.req.header("Authorization");
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return { ok: false as const, res: c.json({ error: "Token missing" }, 401) };
-  }
+async function requireWarehouseWithNode(c: AppContext) {
+  const auth = await requireWarehouse(c);
+  if (auth.ok === false) return auth;
 
-  const token = authHeader.replace("Bearer ", "");
-  const tokenRecord = await c.env.DB.prepare("SELECT user_id FROM tokens WHERE id = ?")
-    .bind(token)
-    .first<{ user_id: string }>();
-
-  if (!tokenRecord) {
-    return { ok: false as const, res: c.json({ error: "Invalid token" }, 401) };
-  }
-
-  const user = await c.env.DB.prepare("SELECT id, user_class, address FROM users WHERE id = ?")
-    .bind(tokenRecord.user_id)
-    .first<AuthUser>();
-
-  if (!user || user.user_class !== "warehouse_staff") {
-    return { ok: false as const, res: c.json({ error: "Forbidden" }, 403) };
-  }
-
-  const nodeId = normalizeNodeId(user.address);
+  const nodeId = normalizeNodeId(auth.user.address);
   if (!nodeId) {
     return { ok: false as const, res: c.json({ error: "Warehouse has no node (users.address)" }, 400) };
   }
 
-  return { ok: true as const, user: { ...user, address: nodeId } };
+  return { ok: true as const, user: { ...auth.user, address: nodeId } };
 }
 
 function buildGraph(nodes: NodeRow[], edges: EdgeRow[]) {
@@ -132,8 +113,8 @@ export class WarehousePackagesList extends OpenAPIRoute {
   };
 
   async handle(c: AppContext) {
-    const auth = await requireWarehouse(c);
-    if (!auth.ok) return auth.res;
+    const auth = await requireWarehouseWithNode(c);
+    if (auth.ok === false) return (auth as any).res;
     const nodeId = auth.user.address!;
 
     const data = await this.getValidatedData<typeof this.schema>();

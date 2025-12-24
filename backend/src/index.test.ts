@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { apiRequest, uniqueEmail } from "./__tests__/helpers";
+import { apiRequest, uniqueEmail, authenticatedRequest } from "./__tests__/helpers";
 
 describe("Backend API Tests", () => {
   // ========== Hello API ==========
@@ -108,27 +108,31 @@ describe("Backend API Tests", () => {
       });
       const customerId = regResponse.data.user.id;
 
-      const { status, data } = await apiRequest<{ success: boolean; package: any }>(`/api/packages`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          customer_id: customerId,
-          sender: senderName,
-          receiver: "Receiver Test",
-          weight: 5,
-          size: "medium",
-          delivery_time: "standard",
-          payment_type: "prepaid",
-          payment_method: "credit_card",
-          dangerous_materials: false,
-          fragile_items: true,
-          international_shipments: false,
-          pickup_date: "2025-01-01",
-          pickup_time_window: "09:00-12:00",
-          pickup_notes: "請提前聯絡",
-          route_path: '["HUB_0","REG_1"]',
-        }),
-      });
+      const { status, data } = await authenticatedRequest<{ success: boolean; package: any }>(
+        `/api/packages`,
+        regResponse.data.token,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            customer_id: customerId,
+            sender: senderName,
+            receiver: "Receiver Test",
+            weight: 5,
+            size: "medium",
+            delivery_time: "standard",
+            payment_type: "prepaid",
+            payment_method: "credit_card",
+            dangerous_materials: false,
+            fragile_items: true,
+            international_shipments: false,
+            pickup_date: "2025-01-01",
+            pickup_time_window: "09:00-12:00",
+            pickup_notes: "請提前聯絡",
+            route_path: '["HUB_0","REG_1"]',
+          }),
+        }
+      );
 
       expect(status).toBe(200);
       expect(data.success).toBe(true);

@@ -2,34 +2,8 @@ import { OpenAPIRoute } from "chanfana";
 import { z } from "zod";
 import type { AppContext } from "../types";
 import { getTerminalStatus, hasActiveException } from "../lib/packageGuards";
+import { requireDriver, type AuthUser } from "../utils/authUtils";
 
-type AuthUser = { id: string; user_class: string };
-
-async function requireDriver(c: AppContext) {
-  const authHeader = c.req.header("Authorization");
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return { ok: false as const, res: c.json({ error: "Token missing" }, 401) };
-  }
-
-  const token = authHeader.replace("Bearer ", "");
-  const tokenRecord = await c.env.DB.prepare("SELECT user_id FROM tokens WHERE id = ?")
-    .bind(token)
-    .first<{ user_id: string }>();
-
-  if (!tokenRecord) {
-    return { ok: false as const, res: c.json({ error: "Invalid token" }, 401) };
-  }
-
-  const user = await c.env.DB.prepare("SELECT id, user_class FROM users WHERE id = ?")
-    .bind(tokenRecord.user_id)
-    .first<AuthUser>();
-
-  if (!user || user.user_class !== "driver") {
-    return { ok: false as const, res: c.json({ error: "Forbidden" }, 403) };
-  }
-
-  return { ok: true as const, user };
-}
 
 // POST /api/driver/packages/:packageId/exception - driver report exception (creates package_exceptions + event)
 export class DriverPackageExceptionCreate extends OpenAPIRoute {
@@ -64,7 +38,7 @@ export class DriverPackageExceptionCreate extends OpenAPIRoute {
 
   async handle(c: AppContext) {
     const auth = await requireDriver(c);
-    if (!auth.ok) return auth.res;
+    if (!auth.ok) return (auth as any).res;
 
     const data = await this.getValidatedData<typeof this.schema>();
     const packageId = String(data.params.packageId).trim();
@@ -247,7 +221,7 @@ export class DriverPackageExceptionList extends OpenAPIRoute {
 
   async handle(c: AppContext) {
     const auth = await requireDriver(c);
-    if (!auth.ok) return auth.res;
+    if (!auth.ok) return (auth as any).res;
 
     const data = await this.getValidatedData<typeof this.schema>();
     const limit = data.query.limit;
