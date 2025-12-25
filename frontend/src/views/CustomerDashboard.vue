@@ -23,9 +23,7 @@ const quickLinksBase: Link[] = [
   { title: '付款', to: '/customer/payment', description: '在付款清單付款、付款紀錄查詢。' },
 ]
 
-const hasUnpaid = computed(() =>
-  packageStore.unpaidPackages.some((pkg) => !auth.user || pkg.customer_id === auth.user.id),
-)
+const hasUnpaid = computed(() => packageStore.unpaidPackages.length > 0)
 
 const quickLinks = computed<Link[]>(() =>
   quickLinksBase.map((link) =>

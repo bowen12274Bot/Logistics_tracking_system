@@ -99,6 +99,7 @@ export class PackageCreate extends OpenAPIRoute {
 							receiver_name: Str({ required: false, description: "Receiver name" }),
 							receiver_phone: Str({ required: false, description: "Receiver phone" }),
 							receiver_address: Str({ required: false, description: "Receiver address" }),
+							receiver_user_id: Str({ required: false, description: "Receiver user id (COD payer binding)" }),
 
 							weight: z.coerce.number().int().optional(),
 							size: Str({ required: false, description: "Package size (legacy)" }),
@@ -181,6 +182,7 @@ export class PackageCreate extends OpenAPIRoute {
 
 		const pickupType = (body.metadata as any)?.pickup_type;
 		const destinationType = (body.metadata as any)?.destination_type;
+		let resolvedCodReceiverCustomerId: string | null = null;
 
 		try {
 			if (pickupType === "home") await validateEndpointAddress(normalizedSenderAddress, "home");
@@ -195,6 +197,19 @@ export class PackageCreate extends OpenAPIRoute {
 		}
 
 		if (body.payment_type === "cod") {
+			if (body.receiver_user_id) {
+				const receiverCustomer = await c.env.DB.prepare(
+					"SELECT id FROM users WHERE id = ? AND user_type = 'customer' LIMIT 1",
+				)
+					.bind(String(body.receiver_user_id).trim())
+					.first<{ id: string }>();
+
+				if (!receiverCustomer) {
+					return c.json({ success: false, error: "Receiver must be a registered customer to use COD" }, 400);
+				}
+
+				resolvedCodReceiverCustomerId = receiverCustomer.id;
+			} else {
 			const receiverPhone = (body.receiver_phone ?? "").trim();
 			const receiverName = (resolvedReceiverName ?? "").trim();
 
@@ -224,6 +239,9 @@ export class PackageCreate extends OpenAPIRoute {
 					{ success: false, error: "Receiver must be a registered customer to use COD" },
 					400,
 				);
+			}
+
+			resolvedCodReceiverCustomerId = receiverCustomer.id;
 			}
 		}
 
@@ -381,14 +399,22 @@ export class PackageCreate extends OpenAPIRoute {
 				international_shipments: body.international_shipments,
 			});
 			const paymentId = crypto.randomUUID();
+			const payerUserId =
+				body.payment_type === "cod"
+					? resolvedCodReceiverCustomerId
+					: resolvedCustomerId;
+			if (!payerUserId) {
+				return c.json({ success: false, error: "Payment payer cannot be resolved" }, 400);
+			}
 			await c.env.DB.prepare(
 				`INSERT INTO payments (
-					id, total_amount, service_fee, distance_fee, weight_volume_fee, special_fee,
+					id, payer_user_id, total_amount, service_fee, distance_fee, weight_volume_fee, special_fee,
 					calculated_at, paid_at, collected_by, package_id
-				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			)
 				.bind(
 					paymentId,
+					payerUserId,
 					pricing.totalCost,
 					null,
 					null,

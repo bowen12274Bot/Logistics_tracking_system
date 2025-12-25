@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { api, type PackageRecord } from '../services/api'
+import { api, type PackagePayableItem, type PackageRecord } from '../services/api'
 
 export type PaymentMethod =
   | 'cash'
@@ -13,22 +13,23 @@ export type StoredPackage = PackageRecord
 export const usePackageStore = defineStore('packages', {
   state: () => ({
     packages: [] as StoredPackage[],
+    payableItems: [] as PackagePayableItem[],
     isLoading: false,
     error: '' as string | null,
   }),
   getters: {
-    unpaidPackages: (state) =>
-      state.packages.filter((pkg) => pkg.payment_type !== 'cod'),
+    unpaidPackages: (state) => state.payableItems.map((i) => i.package),
   },
   actions: {
-    async fetchUnpaid(customerId?: string) {
+    async fetchUnpaid(_customerId?: string) {
       this.isLoading = true
       this.error = null
       try {
-        const res = await api.getPackages(customerId)
-        this.packages = res.packages ?? []
+        const res = await api.getPackagePayables({ include_paid: false, limit: 100 })
+        this.payableItems = res.items ?? []
+        this.packages = this.payableItems.map((i) => i.package)
       } catch (err: any) {
-        this.error = err?.message || '無法取得待付貨件'
+        this.error = err?.message || '載入待付款項目失敗'
       } finally {
         this.isLoading = false
       }
@@ -41,3 +42,4 @@ export const usePackageStore = defineStore('packages', {
     },
   },
 })
+

@@ -120,6 +120,7 @@ CREATE INDEX IF NOT EXISTS idx_package_events_location ON package_events(locatio
 ```sql
 CREATE TABLE IF NOT EXISTS payments (
   id TEXT PRIMARY KEY,
+  payer_user_id TEXT,
   total_amount INTEGER,
   service_fee INTEGER,
   distance_fee INTEGER,
@@ -390,4 +391,3 @@ erDiagram
 | 版本 | 日期 | 說明 |
 |---|---|---|
 | 1.0 | 2025-12-24 | 同步到目前 migrations，補齊 `vehicles` / `vehicle_cargo` 文件 |
-

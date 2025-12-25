@@ -1,5 +1,6 @@
 CREATE TABLE IF NOT EXISTS payments (
   id TEXT PRIMARY KEY,
+  payer_user_id TEXT,
   total_amount INTEGER,
   service_fee INTEGER,
   distance_fee INTEGER,

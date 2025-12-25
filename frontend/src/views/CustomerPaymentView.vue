@@ -20,9 +20,7 @@ const paymentLabel: Record<PaymentMethod, string> = {
 }
 
 const unpaidPackages = computed<StoredPackage[]>(() => packageStore.unpaidPackages)
-const myUnpaidPackages = computed<StoredPackage[]>(() =>
-  unpaidPackages.value.filter((pkg) => !auth.user || pkg.customer_id === auth.user.id),
-)
+const myUnpaidPackages = computed<StoredPackage[]>(() => unpaidPackages.value)
 const expandedIds = ref<Set<string>>(new Set())
 const paymentChoices = ref<Record<string, PaymentMethod>>({})
 const feedbacks = ref<Record<string, string>>({})
@@ -194,8 +192,20 @@ const decodeTrackingTimestamp = (tracking?: string) => {
   }
 }
 
-const confirmPay = (pkg: StoredPackage) => {
-  feedbacks.value[pkg.id] = '已按下確認付款（功能尚待串接）。'
+const confirmPay = async (pkg: StoredPackage) => {
+  feedbacks.value[pkg.id] = ''
+  const choice = paymentChoices.value[pkg.id] ?? resolveMethod(pkg.payment_method)
+  if (choice === 'monthly_billing') {
+    feedbacks.value[pkg.id] = '月結請在帳單區域繳費。'
+    return
+  }
+  try {
+    await api.payPackage(pkg.id, { payment_method: choice as any })
+    feedbacks.value[pkg.id] = '付款成功。'
+    await packageStore.fetchUnpaid(auth.user?.id)
+  } catch (err: any) {
+    feedbacks.value[pkg.id] = err?.message || '付款失敗'
+  }
 }
 
 const loadPendingBills = async () => {
