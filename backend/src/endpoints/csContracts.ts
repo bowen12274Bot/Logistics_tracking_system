@@ -1,6 +1,7 @@
 import { OpenAPIRoute } from "chanfana";
 import { z } from "zod";
 import type { AppContext } from "../types";
+import { createMonthlyBillForCustomer, getBillingCycle } from "../services/billingService";
 
 type AuthUser = { id: string; user_class: string };
 
@@ -161,6 +162,10 @@ export class CustomerServiceContractReview extends OpenAPIRoute {
       await c.env.DB.prepare("UPDATE users SET user_class = 'contract_customer', billing_preference = 'monthly' WHERE id = ?")
         .bind(application.customer_id)
         .run();
+
+      // Create current-cycle bill immediately (same behavior as admin approval).
+      const { start, end } = getBillingCycle(new Date());
+      await createMonthlyBillForCustomer(c.env.DB, application.customer_id, start, end);
     }
 
     return c.json({
