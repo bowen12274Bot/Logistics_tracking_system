@@ -32,10 +32,25 @@ const criticalAlerts = [
 ]
 
 const quickActions = [
-  { title: '服務規則與計價', detail: '維護尺寸、時效、特殊標記的費率組合', cta: '檢視草稿' },
+  {
+    title: '服務規則與計價',
+    detail: '維護尺寸、時效、特殊標記的費率組合',
+    cta: '檢視草稿',
+    to: { path: '/admin', hash: '#section-service-rules' },
+  },
   { title: '虛擬地圖', detail: '調整中心、轉運站、門市、車隊位置', cta: '前往地圖', to: '/map' },
-  { title: '角色與權限', detail: '稽核 user_class、測試帳號、強制登出', cta: '管理用戶' },
-  { title: '帳務維護', detail: '重新產生月結、處理貨到付款對帳', cta: '檢視作業' },
+  {
+    title: '角色與權限',
+    detail: '稽核 user_class、測試帳號、強制登出',
+    cta: '管理用戶',
+    to: { path: '/admin', hash: '#section-user-permissions' },
+  },
+  {
+    title: '帳務維護',
+    detail: '重新產生月結、處理貨到付款對帳',
+    cta: '檢視作業',
+    to: { path: '/admin', hash: '#section-queue' },
+  },
 ]
 
 const workflow = [
@@ -205,7 +220,7 @@ const mockAction = (msg: string) => window.alert(msg)
     </div>
   </section>
 
-  <section class="page-shell">
+  <section class="page-shell" id="section-user-permissions">
     <header class="section-header">
       <h2>使用者與權限</h2>
       <p class="hint">員工列表、搜尋、角色/站點篩選，後續串 /api/admin/users。</p>
@@ -259,7 +274,7 @@ const mockAction = (msg: string) => window.alert(msg)
     </div>
   </section>
 
-  <section class="page-shell">
+  <section class="page-shell" id="section-service-rules">
     <header class="section-header">
       <h2>服務規則設定</h2>
       <p class="hint">運費與服務參數，後續可串 service_rules API / S3 / S5。</p>
@@ -327,7 +342,7 @@ const mockAction = (msg: string) => window.alert(msg)
     </div>
   </section>
 
-  <section class="page-shell">
+  <section class="page-shell" id="section-queue">
     <header class="section-header">
       <h2>待處理隊列</h2>
       <p class="hint">尚未完成的維運項目，後續可接上工單/通知 API。</p>
