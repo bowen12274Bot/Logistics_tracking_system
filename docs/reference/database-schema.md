@@ -121,6 +121,7 @@ CREATE INDEX IF NOT EXISTS idx_package_events_location ON package_events(locatio
 CREATE TABLE IF NOT EXISTS payments (
   id TEXT PRIMARY KEY,
   payer_user_id TEXT,
+  payment_method TEXT,
   total_amount INTEGER,
   service_fee INTEGER,
   distance_fee INTEGER,
@@ -148,6 +149,7 @@ CREATE TABLE IF NOT EXISTS monthly_billing (
   total_amount INTEGER DEFAULT 0,
   due_date TEXT,
   paid_at TEXT,
+  paid_method TEXT,
   created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
 

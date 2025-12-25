@@ -3,18 +3,28 @@ import { z } from "zod";
 import type { AppContext } from "../types";
 import { requireAuth } from "../utils/authUtils";
 
-type PaymentMethod = "cash" | "credit_card" | "online_bank" | "third_party";
+type PaymentMethod = "cash" | "credit_card" | "bank_transfer" | "third_party_payment";
+type LegacyPaymentMethod = "online_bank" | "third_party";
+
+function normalizePaymentMethod(method: string | null | undefined): PaymentMethod | null {
+  const raw = String(method ?? "").trim();
+  if (raw === "cash" || raw === "credit_card" || raw === "bank_transfer" || raw === "third_party_payment") return raw;
+  if (raw === "online_bank") return "bank_transfer";
+  if (raw === "third_party") return "third_party_payment";
+  return null;
+}
 
 function extractPaymentMethodFromDescriptionJson(descriptionJson: unknown): PaymentMethod | null {
   if (!descriptionJson || typeof descriptionJson !== "object") return null;
-  const method = (descriptionJson as any).payment_method;
-  if (method === "cash" || method === "credit_card" || method === "online_bank" || method === "third_party") return method;
-  return null;
+  const method = (descriptionJson as any).payment_method as PaymentMethod | LegacyPaymentMethod | null | undefined;
+  return normalizePaymentMethod(method);
 }
 
 async function getNodeSubtype(db: D1Database, nodeId: string | null): Promise<"home" | "store" | null> {
   const id = String(nodeId ?? "").trim();
   if (!id) return null;
+  if (id.toUpperCase().startsWith("END_STORE_")) return "store";
+  if (id.toUpperCase().startsWith("END_HOME_")) return "home";
   const row = await db.prepare("SELECT subtype FROM nodes WHERE id = ? LIMIT 1").bind(id).first<{ subtype: string | null }>();
   const subtype = String(row?.subtype ?? "").trim().toLowerCase();
   if (subtype === "home" || subtype === "store") return subtype as any;
@@ -40,12 +50,20 @@ async function computePayableNow(db: D1Database, pkg: any, paymentMethod: Paymen
     return { ok: true as const, payable_now: false, reason: "Monthly billing is paid by bill" };
   }
 
-  // Non-cash (mock) still needs to respect COD timing.
   if (paymentType === "cod") {
-    const delivered = await hasEvent(db, packageId, "delivered");
-    return delivered
+    const receiverSubtype = await getNodeSubtype(db, pkg?.receiver_address ?? null);
+    if (receiverSubtype === "store") {
+      const delivered = await hasEvent(db, packageId, "delivered");
+      return delivered
+        ? { ok: true as const, payable_now: true, reason: null }
+        : { ok: true as const, payable_now: false, reason: "COD at store is payable after delivered at END_STORE_*" };
+    }
+
+    // home (or unknown): payable when driver arrives at destination (before unloading/handing over).
+    const arrived = await hasEvent(db, packageId, "arrived_delivery");
+    return arrived
       ? { ok: true as const, payable_now: true, reason: null }
-      : { ok: true as const, payable_now: false, reason: "COD is payable after delivered" };
+      : { ok: true as const, payable_now: false, reason: "COD at home is payable after arrived_delivery" };
   }
 
   if (paymentType === "prepaid") {
@@ -54,10 +72,11 @@ async function computePayableNow(db: D1Database, pkg: any, paymentMethod: Paymen
     const senderSubtype = await getNodeSubtype(db, pkg?.sender_address ?? null);
     if (senderSubtype === "store") return { ok: true as const, payable_now: true, reason: null };
 
-    const pickedUp = await hasEvent(db, packageId, "picked_up");
-    return pickedUp
+    // home: cash is collected when driver arrives (before pickup).
+    const arrived = await hasEvent(db, packageId, "arrived_pickup");
+    return arrived
       ? { ok: true as const, payable_now: true, reason: null }
-      : { ok: true as const, payable_now: false, reason: "Cash prepaid at home is payable after picked_up" };
+      : { ok: true as const, payable_now: false, reason: "Cash prepaid at home is payable after arrived_pickup" };
   }
 
   // Unknown payment_type: treat as not payable (safe default).
@@ -107,7 +126,8 @@ export class PackagePaymentList extends OpenAPIRoute {
         p.*,
         pay.total_amount AS total_amount,
         pay.paid_at AS paid_at,
-        pay.payer_user_id AS payer_user_id
+        pay.payer_user_id AS payer_user_id,
+        pay.payment_method AS payment_method
       FROM payments pay
       JOIN packages p ON p.id = pay.package_id
       WHERE ${where.join(" AND ")}
@@ -127,7 +147,8 @@ export class PackagePaymentList extends OpenAPIRoute {
         description = null;
       }
 
-      const paymentMethod = extractPaymentMethodFromDescriptionJson(description);
+      const fallbackMethod = extractPaymentMethodFromDescriptionJson(description);
+      const paymentMethod = normalizePaymentMethod(row.payment_method) ?? fallbackMethod;
       const { payable_now, reason } = await computePayableNow(c.env.DB, row, paymentMethod);
 
       items.push({
@@ -160,7 +181,14 @@ export class PackagePaymentPay extends OpenAPIRoute {
         content: {
           "application/json": {
             schema: z.object({
-              payment_method: z.enum(["cash", "credit_card", "online_bank", "third_party"]),
+              payment_method: z.enum([
+                "cash",
+                "credit_card",
+                "bank_transfer",
+                "third_party_payment",
+                "online_bank",
+                "third_party",
+              ]),
             }),
           },
         },
@@ -181,7 +209,10 @@ export class PackagePaymentPay extends OpenAPIRoute {
 
     const data = await this.getValidatedData<typeof this.schema>();
     const packageId = String(data.params.packageId).trim();
-    const body = data.body as { payment_method: PaymentMethod };
+    const body = data.body as { payment_method: PaymentMethod | LegacyPaymentMethod };
+
+    const normalizedMethod = normalizePaymentMethod(body.payment_method);
+    if (!normalizedMethod) return c.json({ error: "Invalid payment_method" }, 400);
 
     const row = await c.env.DB.prepare(
       `
@@ -207,12 +238,12 @@ export class PackagePaymentPay extends OpenAPIRoute {
     }
 
     const storedMethod = extractPaymentMethodFromDescriptionJson(description);
-    const { payable_now, reason } = await computePayableNow(c.env.DB, row, body.payment_method ?? storedMethod);
+    const { payable_now, reason } = await computePayableNow(c.env.DB, row, normalizedMethod ?? storedMethod);
     if (!payable_now) return c.json({ error: reason || "Not payable yet" }, 409);
 
     const now = new Date().toISOString();
-    await c.env.DB.prepare("UPDATE payments SET paid_at = ?, collected_by = ? WHERE id = ?")
-      .bind(now, auth.user.id, row.payment_id)
+    await c.env.DB.prepare("UPDATE payments SET paid_at = ?, payment_method = ?, collected_by = ? WHERE id = ?")
+      .bind(now, normalizedMethod, auth.user.id, row.payment_id)
       .run();
 
     // Optional event for COD payment collection.

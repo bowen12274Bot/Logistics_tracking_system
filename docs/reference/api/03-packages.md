@@ -41,7 +41,8 @@
   "content_description": "書籍",
   "service_level": "overnight | two_day | standard | economy",
   "special_handling": ["fragile", "dangerous", "international"],
-  "payment_type": "cash | credit_card | bank_transfer | monthly_billing | third_party_payment"
+  "payment_type": "prepaid | cod",
+  "payment_method": "cash | credit_card | bank_transfer | monthly_billing | third_party_payment"
 }
 ```
 
@@ -57,7 +58,8 @@
 | `content_description` | string | ✅ | 內容物描述（依郵政法規必填） |
 | `service_level` | string | ✅ | 配送時效：`overnight`(隔夜)、`two_day`(兩日)、`standard`(標準)、`economy`(經濟) |
 | `special_handling` | array | ❌ | 特殊處理標記：`fragile`(易碎)、`dangerous`(危險品)、`international`(國際) |
-| `payment_type` | string | ✅ | 付款方式：`cash`(現金支付)、`credit_card`(信用卡)、`bank_transfer`(網路銀行)、`monthly`(月結帳單) 僅限合約客戶、`third_party_payment`(第三方支付) |
+| `payment_type` | string | ✅ | 付款責任：`prepaid`(寄件者付)、`cod`(收件者付；收件者需為系統內客戶) |
+| `payment_method` | string | ✅ | 付款方式：`cash`(現金)、`credit_card`(信用卡)、`bank_transfer`(網銀)、`third_party_payment`(第三方)、`monthly_billing`(月結；僅合約客戶) |
 
 #### 輸出格式 (Success Response - 201)
 
@@ -84,7 +86,7 @@
 |--------|------|
 | 400 | 必填欄位缺失、無效的 package_type/service_level |
 | 401 | 未認證 |
-| 403 | 非合約客戶嘗試使用 `payment_type = monthly`、或非 customer 角色 |
+| 403 | 非合約客戶嘗試使用 `payment_method = monthly_billing`、或非 customer 角色 |
 
 ---
 

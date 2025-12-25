@@ -14,9 +14,9 @@ const router = useRouter()
 const paymentLabel: Record<PaymentMethod, string> = {
   cash: '現金支付',
   credit_card: '信用卡',
-  online_bank: '網路銀行',
+  bank_transfer: '網路銀行',
   monthly_billing: '月結訂單',
-  third_party: '第三方支付',
+  third_party_payment: '第三方支付',
 }
 
 const unpaidPackages = computed<StoredPackage[]>(() => packageStore.unpaidPackages)
@@ -143,7 +143,7 @@ const savePaymentChoiceFor = (pkg: StoredPackage) => {
   feedbacks.value[pkg.id] = `已為包裹設定付款方式：${paymentLabel[choice]}。`
 }
 
-const methodOptions: PaymentMethod[] = ['cash', 'credit_card', 'online_bank', 'monthly_billing', 'third_party']
+const methodOptions: PaymentMethod[] = ['cash', 'credit_card', 'bank_transfer', 'monthly_billing', 'third_party_payment']
 
 const formatCreatedAt = (value?: string | number | Date) => {
   if (!value) return '剛建立'
@@ -197,6 +197,10 @@ const confirmPay = async (pkg: StoredPackage) => {
   const choice = paymentChoices.value[pkg.id] ?? resolveMethod(pkg.payment_method)
   if (choice === 'monthly_billing') {
     feedbacks.value[pkg.id] = '月結請在帳單區域繳費。'
+    return
+  }
+  if (!canPayNow(pkg)) {
+    feedbacks.value[pkg.id] = payableReasonFor(pkg) ?? '尚未達付款條件。'
     return
   }
   try {
@@ -267,6 +271,22 @@ const allowedMethodsFor = (pkg: StoredPackage) =>
     }
     return true
   })
+
+const getPayableSnapshot = (pkg: StoredPackage) => packageStore.payableFor(pkg.id)
+
+const canPayNow = (pkg: StoredPackage) => {
+  const choice = paymentChoices.value[pkg.id] ?? resolveMethod(pkg.payment_method)
+  if (choice === 'monthly_billing') return false
+  if (pkg.payment_type === 'prepaid' && choice !== 'cash') return true
+  return getPayableSnapshot(pkg)?.payable_now ?? true
+}
+
+const payableReasonFor = (pkg: StoredPackage) => {
+  const choice = paymentChoices.value[pkg.id] ?? resolveMethod(pkg.payment_method)
+  if (choice === 'monthly_billing') return '月結請在帳單區域繳費。'
+  if (pkg.payment_type === 'prepaid' && choice !== 'cash') return null
+  return getPayableSnapshot(pkg)?.reason ?? null
+}
 </script>
 
 <template>
@@ -364,6 +384,7 @@ const allowedMethodsFor = (pkg: StoredPackage) =>
           <button type="button" class="row-btn" @click="togglePackage(pkg)">
             <span class="tracking">{{ billTypeLabel(pkg) }} | {{ pkg.tracking_number || pkg.id }}</span>
             <span class="pill">{{ paymentLabel[resolveMethod(pkg.payment_method)] }}</span>
+            <span v-if="!canPayNow(pkg)" class="pill danger">未達付款條件</span>
             <span class="meta">建立：{{ formatCreatedAt(resolveCreatedAt(pkg)) }}</span>
           </button>
           <div v-if="expandedIds.has(pkg.id)" class="package-detail">
@@ -372,6 +393,7 @@ const allowedMethodsFor = (pkg: StoredPackage) =>
               配送 {{ pkg.delivery_time || '未選擇' }}
             </p>
             <p class="meta">目前付款方式：{{ paymentLabel[resolveMethod(pkg.payment_method)] }}</p>
+            <p v-if="!canPayNow(pkg) && payableReasonFor(pkg)" class="chip danger">{{ payableReasonFor(pkg) }}</p>
             <label class="form-field">
               <span>付款方式</span>
                 <select v-model="paymentChoices[pkg.id]" name="paymentChoice">
@@ -382,7 +404,7 @@ const allowedMethodsFor = (pkg: StoredPackage) =>
             </label>
             <div class="actions">
               <button class="primary-btn" type="button" @click="savePaymentChoiceFor(pkg)">更新付款方式</button>
-              <button class="ghost-btn" type="button" @click="confirmPay(pkg)">確認付款</button>
+              <button class="ghost-btn" type="button" :disabled="!canPayNow(pkg)" @click="confirmPay(pkg)">確認付款</button>
             </div>
             <p v-if="feedbacks[pkg.id]" class="hint">{{ feedbacks[pkg.id] }}</p>
           </div>
@@ -535,6 +557,11 @@ const allowedMethodsFor = (pkg: StoredPackage) =>
   font-size: 13px;
 }
 
+.pill.danger {
+  background: rgba(161, 60, 60, 0.1);
+  color: #7a2e2e;
+}
+
 .package-detail {
   padding: 12px;
   border-top: 1px dashed var(--surface-stroke);
@@ -582,5 +609,10 @@ const allowedMethodsFor = (pkg: StoredPackage) =>
   border: 1px solid currentColor;
   padding: 8px 12px;
   border-radius: 10px;
+}
+
+.ghost-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 </style>

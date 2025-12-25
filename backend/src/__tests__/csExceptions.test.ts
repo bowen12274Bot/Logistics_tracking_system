@@ -435,7 +435,7 @@ describe("Customer service exception pool", () => {
     const pkg = await createTestPackage(customerToken, { sender_address: "END_HOME_1", receiver_address: "END_HOME_2" });
 
     // Simulate package arrived at HUB_0 but not yet received by warehouse staff.
-    const evt = await apiRequest<any>(`/api/packages/${encodeURIComponent(pkg.id)}/events`, {
+    const evt = await authenticatedRequest<any>(`/api/packages/${encodeURIComponent(pkg.id)}/events`, warehouseToken, {
       method: "POST",
       body: JSON.stringify({ delivery_status: "warehouse_in", location: "HUB_0" }),
     });

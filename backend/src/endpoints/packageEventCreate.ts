@@ -1,155 +1,113 @@
 import { OpenAPIRoute, Str } from "chanfana";
 import { z } from "zod";
-import { type AppContext, PackageEvent } from "../types";
+import { type AppContext } from "../types";
 import { getTerminalStatus, hasActiveException } from "../lib/packageGuards";
+import { requireAuth } from "../utils/authUtils";
 
 const DeliveryStatusEnum = z.enum([
-	"created",
-	"picked_up",
-	"in_transit",
-	"sorting",
-	"warehouse_in",
-	"warehouse_received",
-	"warehouse_out",
-	"out_for_delivery",
-	"delivered",
-	"delivery_failed",
-	"exception",
-	"exception_resolved",
-	"route_decided",
-	"sorting_started",
-	"sorting_completed",
-	"enroute_pickup",
-	"arrived_pickup",
-	"payment_collected_prepaid",
-	"enroute_delivery",
-	"arrived_delivery",
-	"payment_collected_cod",
+  "created",
+  "picked_up",
+  "in_transit",
+  "sorting",
+  "warehouse_in",
+  "warehouse_received",
+  "warehouse_out",
+  "out_for_delivery",
+  "delivered",
+  "delivery_failed",
+  "exception",
+  "exception_resolved",
+  "route_decided",
+  "sorting_started",
+  "sorting_completed",
+  "enroute_pickup",
+  "arrived_pickup",
+  "payment_collected_prepaid",
+  "enroute_delivery",
+  "arrived_delivery",
+  "payment_collected_cod",
 ]);
 
 export class PackageEventCreate extends OpenAPIRoute {
-	schema = {
-		tags: ["Packages"],
-		summary: "建立貨態事件 (T3)",
-		description: "建立包裹事件並更新追蹤資訊。",
-		request: {
-			params: z.object({
-				packageId: Str({ description: "包裹 ID" }),
-			}),
-			body: {
-				content: {
-					"application/json": {
-						schema: z.object({
-							delivery_status: DeliveryStatusEnum.describe("事件狀態"),
-							delivery_details: Str({
-								description: "事件說明",
-								required: false,
-							}),
-							location: Str({
-								description: "位置或載具識別碼（節點 ID / 貨車編號）",
-								required: false,
-							}),
-						}),
-					},
-				},
-			},
-		},
-		responses: {
-			"200": {
-				description: "事件建立成功",
-				content: {
-					"application/json": {
-						schema: z.object({
-							success: z.boolean(),
-							event_id: z.string(),
-							message: z.string(),
-						}),
-					},
-				},
-			},
-			"404": {
-				description: "包裹不存在",
-			},
-		},
-	};
+  schema = {
+    tags: ["Packages"],
+    summary: "Create package event (T3)",
+    description: "Create a package event (employee-only).",
+    security: [{ bearerAuth: [] }],
+    request: {
+      params: z.object({
+        packageId: Str({ description: "Package ID" }),
+      }),
+      body: {
+        content: {
+          "application/json": {
+            schema: z.object({
+              delivery_status: DeliveryStatusEnum.describe("Event status"),
+              delivery_details: Str({ required: false, description: "Event details" }),
+              location: Str({ required: false, description: "Location (node id / vehicle code)" }),
+            }),
+          },
+        },
+      },
+    },
+    responses: {
+      "200": { description: "OK" },
+      "400": { description: "Bad request" },
+      "401": { description: "Unauthorized" },
+      "403": { description: "Forbidden" },
+      "404": { description: "Not found" },
+      "409": { description: "Conflict" },
+    },
+  };
 
-	async handle(c: AppContext) {
-		const data = await this.getValidatedData<typeof this.schema>();
-		const { packageId } = data.params;
-		const { delivery_status, delivery_details, location } = data.body;
+  async handle(c: AppContext) {
+    const auth = await requireAuth(c);
+    if (auth.ok === false) return (auth as any).res;
+    if (auth.user.user_type !== "employee") return c.json({ success: false, error: "Forbidden" }, 403);
 
-		// Keep exception flow consistent: exception events must always have a corresponding package_exceptions record.
-		// Use dedicated endpoints instead of the generic event endpoint.
-		if (delivery_status === "exception") {
-			return c.json(
-				{
-					success: false,
-					error: "請使用 /api/driver/packages/:packageId/exception（或未來的倉儲/客服異常端點）建立異常，避免事件與異常池不一致",
-				},
-				400,
-			);
-		}
-		if (delivery_status === "exception_resolved") {
-			return c.json(
-				{ success: false, error: "請使用 /api/cs/exceptions/:exceptionId/handle 處理異常並寫入解除事件" },
-				400,
-			);
-		}
-		if (delivery_status === "delivery_failed") {
-			return c.json(
-				{ success: false, error: "請使用 /api/cs/exceptions/:exceptionId/handle (cancel) 結案並寫入配送失敗" },
-				400,
-			);
-		}
+    const data = await this.getValidatedData<typeof this.schema>();
+    const { packageId } = data.params;
+    const { delivery_status, delivery_details, location } = data.body;
 
-		if (
-			delivery_status === "in_transit" &&
-			!(
-				String(delivery_details ?? "").match(/(?:\u524d\u5f80|\u4e0b\u4e00\u7ad9)\s*[A-Z0-9_]+/i)
-			)
-		) {
-			return c.json(
-				{ success: false, error: "in_transit 必須在 delivery_details 內包含目的地（例如：前往 HUB_0 / 下一站 REG_1）" },
-				400,
-			);
-		}
+    if (delivery_status === "exception") {
+      return c.json(
+        {
+          success: false,
+          error:
+            "Use /api/driver/packages/:packageId/exception or /api/warehouse/packages/:packageId/exception instead of manual exception events.",
+        },
+        400,
+      );
+    }
+    if (delivery_status === "exception_resolved") {
+      return c.json({ success: false, error: "Use /api/cs/exceptions/:exceptionId/handle instead." }, 400);
+    }
+    if (delivery_status === "delivery_failed") {
+      return c.json({ success: false, error: "Use /api/cs/exceptions/:exceptionId/handle (cancel) instead." }, 400);
+    }
 
-		const pkg = await c.env.DB.prepare("SELECT * FROM packages WHERE id = ?")
-			.bind(packageId)
-			.first();
+    if (delivery_status === "in_transit") {
+      const details = String(delivery_details ?? "").trim();
+      const ok = /(destination|dest|目的地)\s*[:：]?\s*[A-Z0-9_]+/i.test(details);
+      if (!ok) return c.json({ success: false, error: "in_transit requires delivery_details containing destination" }, 400);
+    }
 
-		if (!pkg) {
-			return c.json({ success: false, error: "Package not found" }, 404);
-		}
+    const pkg = await c.env.DB.prepare("SELECT 1 AS ok FROM packages WHERE id = ? LIMIT 1").bind(packageId).first();
+    if (!pkg) return c.json({ success: false, error: "Package not found" }, 404);
 
-		const terminal = await getTerminalStatus(c.env.DB, packageId);
-		if (terminal) {
-			return c.json({ success: false, error: "Package is terminal", status: terminal }, 409);
-		}
-		if (await hasActiveException(c.env.DB, packageId)) {
-			return c.json({ success: false, error: "Package has active exception" }, 409);
-		}
+    const terminal = await getTerminalStatus(c.env.DB, packageId);
+    if (terminal) return c.json({ success: false, error: "Package is terminal", status: terminal }, 409);
+    if (await hasActiveException(c.env.DB, packageId)) return c.json({ success: false, error: "Package has active exception" }, 409);
 
-		const eventId = crypto.randomUUID();
-		const eventsAt = new Date().toISOString();
+    const eventId = crypto.randomUUID();
+    const eventsAt = new Date().toISOString();
+    await c.env.DB.prepare(
+      "INSERT INTO package_events (id, package_id, delivery_status, delivery_details, events_at, location) VALUES (?, ?, ?, ?, ?, ?)",
+    )
+      .bind(eventId, packageId, delivery_status, delivery_details ?? null, eventsAt, location ?? null)
+      .run();
 
-		await c.env.DB.prepare(
-			"INSERT INTO package_events (id, package_id, delivery_status, delivery_details, events_at, location) VALUES (?, ?, ?, ?, ?, ?)"
-		)
-			.bind(
-				eventId,
-				packageId,
-				delivery_status,
-				delivery_details ?? null,
-				eventsAt,
-				location ?? null
-			)
-			.run();
-
-		return {
-			success: true,
-			event_id: eventId,
-			message: "事件建立成功",
-		};
-	}
+    return c.json({ success: true, event_id: eventId, message: "Event created" });
+  }
 }
+

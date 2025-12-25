@@ -49,17 +49,17 @@ describe("Warehouse Functional Tests", () => {
     // Dispatch endpoint requires status to be 'sorting' or 'warehouse_received'
     // So we invoke receive API or manually insert events. Manual is easier for setup speed.
     const now = new Date().toISOString();
-    await apiRequest<any>(`/api/packages/${encodeURIComponent(pkg.id)}/events`, {
+    await authenticatedRequest<any>(`/api/packages/${encodeURIComponent(pkg.id)}/events`, warehouseToken, {
       method: "POST",
       body: JSON.stringify({ delivery_status: "warehouse_in", location: "HUB_0" }),
     });
     // Insert warehouse_received
-    await apiRequest<any>(`/api/packages/${encodeURIComponent(pkg.id)}/events`, {
+    await authenticatedRequest<any>(`/api/packages/${encodeURIComponent(pkg.id)}/events`, warehouseToken, {
       method: "POST",
       body: JSON.stringify({ delivery_status: "warehouse_received", location: "HUB_0" }),
     });
     // Insert sorting
-    await apiRequest<any>(`/api/packages/${encodeURIComponent(pkg.id)}/events`, {
+    await authenticatedRequest<any>(`/api/packages/${encodeURIComponent(pkg.id)}/events`, warehouseToken, {
       method: "POST",
       body: JSON.stringify({ delivery_status: "sorting", location: "HUB_0" }),
     });
@@ -95,7 +95,7 @@ describe("Warehouse Functional Tests", () => {
     // Let's use `setTimeout` delay before calling apiRequest.
     await new Promise(r => setTimeout(r, 100)); // 100ms delay
 
-    await apiRequest<any>(`/api/packages/${encodeURIComponent(pkg.id)}/events`, {
+    await authenticatedRequest<any>(`/api/packages/${encodeURIComponent(pkg.id)}/events`, warehouseToken, {
       method: "POST",
       body: JSON.stringify({ delivery_status: "warehouse_received", location: "HUB_0" }), 
     });
@@ -120,11 +120,11 @@ describe("Warehouse Functional Tests", () => {
   it("WH-EXC-001: warehouse can report exception and list it", async () => {
     const pkg = await createTestPackage(customerToken, { sender_address: "END_HOME_1", receiver_address: "END_HOME_2" });
 
-    await apiRequest<any>(`/api/packages/${encodeURIComponent(pkg.id)}/events`, {
+    await authenticatedRequest<any>(`/api/packages/${encodeURIComponent(pkg.id)}/events`, warehouseToken, {
       method: "POST",
       body: JSON.stringify({ delivery_status: "warehouse_received", location: "HUB_0" }),
     });
-    await apiRequest<any>(`/api/packages/${encodeURIComponent(pkg.id)}/events`, {
+    await authenticatedRequest<any>(`/api/packages/${encodeURIComponent(pkg.id)}/events`, warehouseToken, {
       method: "POST",
       body: JSON.stringify({ delivery_status: "sorting", location: "HUB_0" }),
     });

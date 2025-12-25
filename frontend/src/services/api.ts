@@ -148,7 +148,7 @@ export type PackagePayablesResponse = {
 };
 
 export type PackagePayPayload = {
-  payment_method: "cash" | "credit_card" | "online_bank" | "third_party";
+  payment_method: "cash" | "credit_card" | "bank_transfer" | "third_party_payment";
 };
 
 export type PackagePayResponse = {

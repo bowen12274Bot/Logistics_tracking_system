@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { apiRequest, authenticatedRequest, createTestUser } from "./helpers";
+import { authenticatedRequest, createTestUser, getAdminToken } from "./helpers";
 
 describe("Package charge payments (prepaid/COD)", () => {
-  it("PAY-PKG-001: COD package payable by receiver after delivered", async () => {
+  it("PAY-PKG-001: COD package payable by receiver after arrived_delivery", async () => {
+    const adminToken = await getAdminToken();
     const sender = await createTestUser({ user_name: "sender_user" });
     const receiver = await createTestUser({ user_name: "receiver_user" });
 
@@ -41,11 +42,11 @@ describe("Package charge payments (prepaid/COD)", () => {
     });
     expect(payTooEarly.status).toBe(409);
 
-    const delivered = await apiRequest<any>(`/api/packages/${encodeURIComponent(packageId)}/events`, {
+    const arrived = await authenticatedRequest<any>(`/api/packages/${encodeURIComponent(packageId)}/events`, adminToken, {
       method: "POST",
-      body: JSON.stringify({ delivery_status: "delivered", location: "END_HOME_2" }),
+      body: JSON.stringify({ delivery_status: "arrived_delivery", location: "END_HOME_2" }),
     });
-    expect(delivered.status).toBe(200);
+    expect(arrived.status).toBe(200);
 
     const payOk = await authenticatedRequest<any>(`/api/payments/packages/${encodeURIComponent(packageId)}`, receiver.token, {
       method: "POST",

@@ -136,7 +136,7 @@ describe("Driver tasks (segmented assignment + handoff)", () => {
     const warehouse = await createEmployeeUser(adminToken, "warehouse_staff", { address: String(handoffNode) });
 
     // Simulate truck unloading at this node so warehouse can receive it.
-    const arrive = await apiRequest<any>(`/api/packages/${encodeURIComponent(pkg.id)}/events`, {
+    const arrive = await authenticatedRequest<any>(`/api/packages/${encodeURIComponent(pkg.id)}/events`, warehouse.token, {
       method: "POST",
       body: JSON.stringify({ delivery_status: "warehouse_in", location: handoffNode }),
     });

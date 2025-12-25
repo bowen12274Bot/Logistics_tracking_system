@@ -38,6 +38,7 @@ import { DriverPackageExceptionCreate, DriverPackageExceptionList } from "./endp
 import { VehicleMeCargoList } from "./endpoints/vehiclesCargoMe";
 import { DriverTaskPickup, DriverTaskDropoff } from "./endpoints/driverTaskCargo";
 import { DriverTaskEnRoute } from "./endpoints/driverTaskEnRoute";
+import { DriverTaskArrive } from "./endpoints/driverTaskArrive";
 import { CustomerServiceExceptionHandle, CustomerServiceExceptionList } from "./endpoints/csExceptions";
 import { CustomerServiceContractList, CustomerServiceContractReview } from "./endpoints/csContracts";
 import { settleBillingCycle } from "./services/billingService";
@@ -290,6 +291,7 @@ openapi.post("/api/driver/tasks/:taskId/complete", DriverTaskComplete);
 openapi.post("/api/driver/tasks/:taskId/pickup", DriverTaskPickup);
 openapi.post("/api/driver/tasks/:taskId/dropoff", DriverTaskDropoff);
 openapi.post("/api/driver/tasks/:taskId/enroute", DriverTaskEnRoute);
+openapi.post("/api/driver/tasks/:taskId/arrive", DriverTaskArrive);
 openapi.post("/api/driver/packages/:packageId/status", DriverUpdateStatus);
 openapi.post("/api/driver/packages/:packageId/exception", DriverPackageExceptionCreate);
 openapi.get("/api/driver/exceptions", DriverPackageExceptionList);

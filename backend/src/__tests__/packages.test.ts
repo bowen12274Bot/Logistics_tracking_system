@@ -184,7 +184,7 @@ describe("包裹管理 (Package)", () => {
 
       expect(status).toBe(200);
       expect(data.success).toBe(true);
-      expect(data.package.payment_method).toBe("online_bank");
+      expect(data.package.payment_method).toBe("bank_transfer");
     });
     
     it("PKG-CREATE-021: 支援 length/width/height 參數並影響計價", async () => {
