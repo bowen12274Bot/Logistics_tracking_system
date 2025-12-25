@@ -1,36 +1,34 @@
 ﻿<script setup lang="ts">
 import { computed, reactive, ref } from 'vue'
+import { api } from '../services/api'
+import type { PackageEstimatePayload, PackageEstimateResponse, SpecialMark } from '../services/api'
 
-type DeliveryType = 'economy' | 'standard' | 'two_day' | 'overnight'
-type BoxType = 'envelope' | 'S' | 'M' | 'L'
+type DeliveryType = PackageEstimatePayload['deliveryType']
+type BoxType = PackageEstimateResponse['estimate']['box_type']
 
+// 用於 fallback（API 失敗時）保持與客戶端相同邏輯的計算常數
 const K = 5200
 const INTERNATIONAL_MULTIPLIER = 1.8
-
+const baseFee: Record<BoxType, number> = { envelope: 30, S: 70, M: 110, L: 160 }
+const ratePerCost: Record<BoxType, number> = { envelope: 90, S: 170, M: 260, L: 380 }
 const serviceMultiplier: Record<DeliveryType, number> = {
   economy: 1,
   standard: 1.25,
   two_day: 1.55,
   overnight: 2,
 }
-
-const baseFee: Record<BoxType, number> = { envelope: 30, S: 70, M: 110, L: 160 }
-const ratePerCost: Record<BoxType, number> = { envelope: 90, S: 170, M: 260, L: 380 }
-
 const minPrice: Record<BoxType, Record<DeliveryType, number>> = {
   envelope: { economy: 50, standard: 70, two_day: 90, overnight: 120 },
   S: { economy: 120, standard: 160, two_day: 210, overnight: 280 },
   M: { economy: 200, standard: 260, two_day: 340, overnight: 450 },
   L: { economy: 320, standard: 420, two_day: 550, overnight: 750 },
 }
-
 const maxPrice: Record<BoxType, Record<DeliveryType, number>> = {
   envelope: { economy: 400, standard: 550, two_day: 700, overnight: 950 },
   S: { economy: 900, standard: 1200, two_day: 1500, overnight: 1900 },
   M: { economy: 1400, standard: 1850, two_day: 2350, overnight: 2900 },
   L: { economy: 2200, standard: 2900, two_day: 3700, overnight: 4600 },
 }
-
 const includedWeightKg: Record<BoxType, number> = { envelope: 0.5, S: 3, M: 10, L: 25 }
 const perKgFee: Record<BoxType, number> = { envelope: 0, S: 18, M: 15, L: 12 }
 
@@ -53,27 +51,8 @@ const loading = ref(false)
 const error = ref('')
 const routeCost = ref<number | null>(null)
 const fallbackUsed = ref(false)
-const result = ref<
-  | null
-  | {
-      finalPrice: number
-      boxType: BoxType
-      billableWeightKg: number
-      volumetricWeightKg: number
-      routeCost: number
-      routeCostNorm: number
-      base: number
-      shippingBase: number
-      weightSurcharge: number
-      internationalApplied: boolean
-      markFee: number
-      subtotal: number
-      floor: number
-      cap: number
-      deliveryType: DeliveryType
-      specialMarks: string[]
-    }
->(null)
+const result = ref<PackageEstimateResponse['estimate'] | null>(null)
+const lastSpecialMarks = ref<SpecialMark[]>([])
 
 const volumetricWeightKg = computed(() => {
   const vol = (form.lengthCm || 0) * (form.widthCm || 0) * (form.heightCm || 0)
@@ -95,7 +74,6 @@ function pickBoxType(l: number, w: number, h: number, billableWeight: number): B
 }
 
 async function fetchRouteCost(fromId: string, toId: string): Promise<{ cost: number; fallback: boolean }> {
-  // 後端尚未完整實作時，使用 mock 常態值 5200 作為 fallback
   try {
     const res = await fetch(`/api/map/route?from=${encodeURIComponent(fromId)}&to=${encodeURIComponent(toId)}`)
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
@@ -118,13 +96,17 @@ function calculatePrice({
   boxType,
   billableWeightKg,
   specialMarks,
+  fromNodeId,
+  toNodeId,
 }: {
   routeCost: number
   deliveryType: DeliveryType
   boxType: BoxType
   billableWeightKg: number
-  specialMarks: string[]
-}) {
+  specialMarks: SpecialMark[]
+  fromNodeId: string
+  toNodeId: string
+}): PackageEstimateResponse['estimate'] {
   const routeCostNorm = clamp(routeCost / K, 0.3, 1.6)
   const base = baseFee[boxType] + routeCostNorm * ratePerCost[boxType]
   const shippingBase = Math.ceil(base * serviceMultiplier[deliveryType])
@@ -144,22 +126,22 @@ function calculatePrice({
   const finalPrice = Math.min(Math.max(calculatedPrice, floor), cap)
 
   return {
-    finalPrice,
-    boxType,
-    billableWeightKg,
-    volumetricWeightKg: volumetricWeightKg.value,
-    routeCost,
-    routeCostNorm,
+    fromNodeId,
+    toNodeId,
+    route_cost: routeCost,
+    route_path: [],
+    route_cost_norm: routeCostNorm,
+    box_type: boxType,
     base,
-    shippingBase,
-    weightSurcharge,
-    internationalApplied,
-    markFee,
-    subtotal,
-    floor,
-    cap,
-    deliveryType,
-    specialMarks,
+    shipping: shippingBase,
+    weight_surcharge: weightSurcharge,
+    international_multiplier_applied: internationalApplied ? INTERNATIONAL_MULTIPLIER : 1,
+    mark_fee: markFee,
+    calculated_price: calculatedPrice,
+    min_price: floor,
+    max_price: cap,
+    total_cost: finalPrice,
+    estimated_delivery_date: '',
   }
 }
 
@@ -168,6 +150,7 @@ async function handleSubmit() {
   result.value = null
   routeCost.value = null
   fallbackUsed.value = false
+  lastSpecialMarks.value = []
 
   if (!form.fromNodeId || !form.toNodeId) {
     error.value = '請輸入起訖節點 ID（fromNodeId / toNodeId）。'
@@ -180,21 +163,46 @@ async function handleSubmit() {
 
   loading.value = true
   try {
-    const { cost, fallback } = await fetchRouteCost(form.fromNodeId, form.toNodeId)
-    routeCost.value = cost
-    fallbackUsed.value = fallback
-    const specialMarks = Object.entries(form.specialMarks)
-      .filter(([, v]) => v)
-      .map(([k]) => k)
-    result.value = calculatePrice({
-      routeCost: cost,
+    const payload: PackageEstimatePayload = {
+      fromNodeId: form.fromNodeId,
+      toNodeId: form.toNodeId,
+      weightKg: form.weightKg,
+      dimensionsCm: { length: form.lengthCm, width: form.widthCm, height: form.heightCm },
       deliveryType: form.deliveryType,
-      boxType: boxType.value,
-      billableWeightKg: billableWeightKg.value,
-      specialMarks,
-    })
+      specialMarks: Object.entries(form.specialMarks)
+        .filter(([, v]) => v)
+        .map(([k]) => k as SpecialMark),
+    }
+
+    const res = await api.estimatePackage(payload)
+    routeCost.value = res.estimate.route_cost
+    result.value = res.estimate
+    lastSpecialMarks.value = payload.specialMarks ?? []
   } catch (e: any) {
-    error.value = e?.message ?? '試算失敗，請稍後再試。'
+    error.value = e?.message ?? '試算失敗，請稍後再試。改用 fallback 試算。'
+    try {
+      const { cost, fallback } = await fetchRouteCost(form.fromNodeId, form.toNodeId)
+      routeCost.value = cost
+      fallbackUsed.value = fallback
+      const specialMarks = Object.entries(form.specialMarks)
+        .filter(([, v]) => v)
+        .map(([k]) => k as SpecialMark)
+      lastSpecialMarks.value = specialMarks
+      result.value = calculatePrice({
+        routeCost: cost,
+        deliveryType: form.deliveryType,
+        boxType: boxType.value!,
+        billableWeightKg: billableWeightKg.value,
+        specialMarks,
+        fromNodeId: form.fromNodeId,
+        toNodeId: form.toNodeId,
+      })
+      if (fallbackUsed.value) {
+        error.value = 'API 失敗，已暫用 mock 5200 試算。'
+      }
+    } catch (_fallbackErr) {
+      // 保持 error 訊息
+    }
   } finally {
     loading.value = false
   }
@@ -284,40 +292,40 @@ async function handleSubmit() {
       <div v-if="result" class="result card">
         <header class="result-head">
           <h3>試算結果</h3>
-          <span class="pill">應收：{{ result.finalPrice }} 元</span>
+          <span class="pill">應收：{{ result.total_cost }} 元</span>
         </header>
         <div class="grid">
           <div>
             <p class="eyebrow">路線成本</p>
-            <p>routeCost: {{ result.routeCost }}</p>
-            <p>routeCostNorm (clamp 0.3~1.6): {{ result.routeCostNorm.toFixed(2) }}</p>
+            <p>routeCost: {{ result.route_cost }}</p>
+            <p>routeCostNorm (clamp 0.3~1.6): {{ result.route_cost_norm.toFixed(2) }}</p>
           </div>
           <div>
             <p class="eyebrow">箱型與重量</p>
-            <p>箱型: {{ result.boxType }}</p>
-            <p>billable 重量: {{ result.billableWeightKg.toFixed(2) }} kg (材積 {{ result.volumetricWeightKg.toFixed(2) }} kg)</p>
+            <p>箱型: {{ result.box_type }}</p>
+            <p>billable 重量: {{ billableWeightKg.toFixed(2) }} kg (材積 {{ volumetricWeightKg.toFixed(2) }} kg)</p>
           </div>
           <div>
             <p class="eyebrow">基礎與時效</p>
             <p>base: {{ result.base.toFixed(2) }}</p>
-            <p>service multiplier ({{ result.deliveryType }}): {{ serviceMultiplier[result.deliveryType] }}</p>
-            <p>shipping 基礎: {{ result.shippingBase }}</p>
+            <p>配送型態: {{ form.deliveryType }}</p>
+            <p>shipping 基礎: {{ result.shipping }}</p>
           </div>
           <div>
             <p class="eyebrow">加價</p>
-            <p>重量加價: {{ result.weightSurcharge }}</p>
-            <p>國際件×1.8: {{ result.internationalApplied ? '是' : '否' }}</p>
-            <p>標記加價 (危/碎): {{ result.markFee }}</p>
+            <p>重量加價: {{ result.weight_surcharge }}</p>
+            <p>國際件×1.8: {{ result.international_multiplier_applied > 1 ? '是' : '否' }}</p>
+            <p>標記加價 (危/碎): {{ result.mark_fee }}</p>
           </div>
           <div>
             <p class="eyebrow">floor / cap</p>
-            <p>subtotal: {{ result.subtotal }}</p>
-            <p>floor: {{ result.floor }}，cap: {{ result.cap }}</p>
-            <p>final: {{ result.finalPrice }}</p>
+            <p>subtotal: {{ result.calculated_price }}</p>
+            <p>floor: {{ result.min_price }}，cap: {{ result.max_price }}</p>
+            <p>final: {{ result.total_cost }}</p>
           </div>
           <div>
             <p class="eyebrow">特殊標記</p>
-            <p>{{ result.specialMarks.length ? result.specialMarks.join(', ') : '無' }}</p>
+            <p>{{ lastSpecialMarks.length ? lastSpecialMarks.join(', ') : '無' }}</p>
           </div>
         </div>
       </div>
