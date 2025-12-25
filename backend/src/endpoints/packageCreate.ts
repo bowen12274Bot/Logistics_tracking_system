@@ -43,7 +43,17 @@ async function computeInitialPaymentAmount(
       height: Number(payload.height)
     };
   } else if (payload.size) {
-    dimensions = guessDimensionsFromBoxType(payload.size);
+    const raw = String(payload.size).trim();
+    const match = raw.match(/(\d+(?:\.\d+)?)\s*[xX*×]\s*(\d+(?:\.\d+)?)\s*[xX*×]\s*(\d+(?:\.\d+)?)/);
+    if (match) {
+      dimensions = {
+        length: Number(match[1]),
+        width: Number(match[2]),
+        height: Number(match[3]),
+      };
+    } else {
+      dimensions = guessDimensionsFromBoxType(raw);
+    }
   }
 
   const weightKg = Number(payload.weight ?? 0);

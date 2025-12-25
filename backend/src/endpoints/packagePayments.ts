@@ -14,10 +14,18 @@ function normalizePaymentMethod(method: string | null | undefined): PaymentMetho
   return null;
 }
 
-function extractPaymentMethodFromDescriptionJson(descriptionJson: unknown): PaymentMethod | null {
+type PackagePaymentMethod = PaymentMethod | "monthly_billing";
+
+function normalizePackagePaymentMethod(method: string | null | undefined): PackagePaymentMethod | null {
+  const raw = String(method ?? "").trim();
+  if (raw === "monthly_billing") return "monthly_billing";
+  return normalizePaymentMethod(raw);
+}
+
+function extractPaymentMethodFromDescriptionJson(descriptionJson: unknown): PackagePaymentMethod | null {
   if (!descriptionJson || typeof descriptionJson !== "object") return null;
-  const method = (descriptionJson as any).payment_method as PaymentMethod | LegacyPaymentMethod | null | undefined;
-  return normalizePaymentMethod(method);
+  const method = (descriptionJson as any).payment_method as PackagePaymentMethod | PaymentMethod | LegacyPaymentMethod | null | undefined;
+  return normalizePackagePaymentMethod(method);
 }
 
 async function getNodeSubtype(db: D1Database, nodeId: string | null): Promise<"home" | "store" | null> {
@@ -40,14 +48,17 @@ async function hasEvent(db: D1Database, packageId: string, status: string) {
   return !!row;
 }
 
-async function computePayableNow(db: D1Database, pkg: any, paymentMethod: PaymentMethod | null) {
+async function computePayableNow(db: D1Database, pkg: any, paymentMethod: PackagePaymentMethod | null) {
   const paymentType = String(pkg?.payment_type ?? "").trim();
   const packageId = String(pkg?.id ?? "").trim();
   if (!packageId) return { ok: false as const, payable_now: false, reason: "Package not found" };
 
-  // We do not allow paying monthly billing per-package here.
-  if (paymentType === "monthly_billing") {
-    return { ok: true as const, payable_now: false, reason: "Monthly billing is paid by bill" };
+  // Monthly billing is confirmed by customer click (mock pay) and is always payable for prepaid.
+  if (paymentMethod === "monthly_billing") {
+    if (String(paymentType).toLowerCase() !== "prepaid") {
+      return { ok: true as const, payable_now: false, reason: "monthly_billing is only available for prepaid" };
+    }
+    return { ok: true as const, payable_now: true, reason: null };
   }
 
   if (paymentType === "cod") {
@@ -148,7 +159,7 @@ export class PackagePaymentList extends OpenAPIRoute {
       }
 
       const fallbackMethod = extractPaymentMethodFromDescriptionJson(description);
-      const paymentMethod = normalizePaymentMethod(row.payment_method) ?? fallbackMethod;
+      const paymentMethod = (normalizePackagePaymentMethod(row.payment_method) ?? fallbackMethod) as any;
       const { payable_now, reason } = await computePayableNow(c.env.DB, row, paymentMethod);
 
       items.push({
@@ -186,6 +197,7 @@ export class PackagePaymentPay extends OpenAPIRoute {
                 "credit_card",
                 "bank_transfer",
                 "third_party_payment",
+                "monthly_billing",
                 "online_bank",
                 "third_party",
               ]),
@@ -209,9 +221,9 @@ export class PackagePaymentPay extends OpenAPIRoute {
 
     const data = await this.getValidatedData<typeof this.schema>();
     const packageId = String(data.params.packageId).trim();
-    const body = data.body as { payment_method: PaymentMethod | LegacyPaymentMethod };
+    const body = data.body as { payment_method: PaymentMethod | PackagePaymentMethod | LegacyPaymentMethod };
 
-    const normalizedMethod = normalizePaymentMethod(body.payment_method);
+    const normalizedMethod = normalizePackagePaymentMethod(body.payment_method);
     if (!normalizedMethod) return c.json({ error: "Invalid payment_method" }, 400);
 
     const row = await c.env.DB.prepare(
@@ -230,6 +242,12 @@ export class PackagePaymentPay extends OpenAPIRoute {
     if (String(row.payer_user_id) !== auth.user.id) return c.json({ error: "Forbidden" }, 403);
     if (row.paid_at) return c.json({ error: "Already paid" }, 409);
 
+    const paymentType = String(row.payment_type ?? "").trim().toLowerCase();
+    if (normalizedMethod === "monthly_billing") {
+      if (paymentType !== "prepaid") return c.json({ error: "monthly_billing is only available for prepaid" }, 409);
+      if (auth.user.user_class !== "contract_customer") return c.json({ error: "monthly_billing requires contract_customer" }, 403);
+    }
+
     let description: any = null;
     try {
       description = row.description_json ? JSON.parse(String(row.description_json)) : null;
@@ -242,12 +260,18 @@ export class PackagePaymentPay extends OpenAPIRoute {
     if (!payable_now) return c.json({ error: reason || "Not payable yet" }, 409);
 
     const now = new Date().toISOString();
+
+    if (normalizedMethod === "monthly_billing") {
+      const { addPackageToBill } = await import("../services/billingService");
+      await addPackageToBill(c.env.DB, auth.user.id, packageId, now);
+    }
+
     await c.env.DB.prepare("UPDATE payments SET paid_at = ?, payment_method = ?, collected_by = ? WHERE id = ?")
       .bind(now, normalizedMethod, auth.user.id, row.payment_id)
       .run();
 
-    // Optional event for COD payment collection.
-    if (String(row.payment_type).toLowerCase() === "cod") {
+    // Optional event for payment collection.
+    if (paymentType === "cod" || (paymentType === "prepaid" && normalizedMethod === "cash")) {
       const latest = await c.env.DB.prepare(
         "SELECT location FROM package_events WHERE package_id = ? ORDER BY events_at DESC LIMIT 1",
       )
@@ -257,11 +281,116 @@ export class PackagePaymentPay extends OpenAPIRoute {
       await c.env.DB.prepare(
         "INSERT INTO package_events (id, package_id, delivery_status, delivery_details, events_at, location) VALUES (?, ?, ?, ?, ?, ?)",
       )
-        .bind(eventId, packageId, "payment_collected_cod", "COD payment collected", now, latest?.location ?? null)
+        .bind(
+          eventId,
+          packageId,
+          paymentType === "cod" ? "payment_collected_cod" : "payment_collected_prepaid",
+          paymentType === "cod" ? "COD payment collected" : "Prepaid cash collected",
+          now,
+          latest?.location ?? null,
+        )
         .run();
     }
 
     return c.json({ success: true, paid_at: now });
+  }
+}
+
+// POST /api/payments/packages/:packageId/method - update/confirm payment method for an unpaid package charge
+export class PackagePaymentUpdateMethod extends OpenAPIRoute {
+  schema = {
+    tags: ["Payments"],
+    summary: "Update package payment method (confirm/intent)",
+    security: [{ bearerAuth: [] }],
+    request: {
+      params: z.object({ packageId: z.string().min(1) }),
+      body: {
+        content: {
+          "application/json": {
+            schema: z.object({
+              payment_method: z.enum([
+                "cash",
+                "credit_card",
+                "bank_transfer",
+                "third_party_payment",
+                "monthly_billing",
+                "online_bank",
+                "third_party",
+              ]),
+            }),
+          },
+        },
+      },
+    },
+    responses: {
+      "200": { description: "OK" },
+      "400": { description: "Bad request" },
+      "401": { description: "Unauthorized" },
+      "403": { description: "Forbidden" },
+      "404": { description: "Not found" },
+      "409": { description: "Conflict" },
+    },
+  };
+
+  async handle(c: AppContext) {
+    const auth = await requireAuth(c);
+    if (auth.ok === false) return (auth as any).res;
+
+    const data = await this.getValidatedData<typeof this.schema>();
+    const packageId = String(data.params.packageId).trim();
+    const body = data.body as { payment_method: string };
+
+    const nextMethod = normalizePackagePaymentMethod(body.payment_method);
+    if (!nextMethod) return c.json({ error: "Invalid payment_method" }, 400);
+
+    const row = await c.env.DB.prepare(
+      `
+      SELECT
+        pay.id AS payment_id,
+        pay.payer_user_id AS payer_user_id,
+        pay.paid_at AS paid_at,
+        pay.total_amount AS total_amount,
+        pay.payment_method AS payment_method,
+        p.payment_type AS payment_type,
+        p.customer_id AS customer_id,
+        p.description_json AS description_json
+      FROM payments pay
+      JOIN packages p ON p.id = pay.package_id
+      WHERE p.id = ?
+      LIMIT 1
+      `,
+    )
+      .bind(packageId)
+      .first<any>();
+
+    if (!row) return c.json({ error: "Package not found" }, 404);
+    if (String(row.payer_user_id) !== auth.user.id) return c.json({ error: "Forbidden" }, 403);
+    if (row.paid_at) return c.json({ error: "Already paid" }, 409);
+
+    const paymentType = String(row.payment_type ?? "").trim().toLowerCase();
+    if (nextMethod === "monthly_billing") {
+      if (paymentType !== "prepaid") return c.json({ error: "monthly_billing is only available for prepaid" }, 409);
+      if (auth.user.user_class !== "contract_customer") return c.json({ error: "monthly_billing requires contract_customer" }, 403);
+    }
+
+    const now = new Date().toISOString();
+
+    // Update payments record (intent) and also package description_json for UI fields.
+    // Note: customer can change methods freely BEFORE payment; once paid_at is set, it is immutable.
+    await c.env.DB.prepare("UPDATE payments SET payment_method = ? WHERE id = ?").bind(nextMethod, row.payment_id).run();
+
+    let description: any = null;
+    try {
+      description = row.description_json ? JSON.parse(String(row.description_json)) : null;
+    } catch {
+      description = null;
+    }
+    if (!description || typeof description !== "object") description = {};
+    description.payment_method = nextMethod;
+
+    await c.env.DB.prepare("UPDATE packages SET description_json = ? WHERE id = ?").bind(JSON.stringify(description), packageId).run();
+
+    return c.json({ success: true, payment_method: nextMethod, updated_at: now });
   }
 }
 

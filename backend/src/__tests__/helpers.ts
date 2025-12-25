@@ -99,6 +99,7 @@ export async function createTestPackage(token: string, overrides: Record<string,
     size: "medium",
     delivery_time: "standard",
     payment_type: "prepaid",
+    payment_method: "credit_card",
     contents_description: "測試包裹內容",
     ...overrides,
   };
@@ -109,6 +110,18 @@ export async function createTestPackage(token: string, overrides: Record<string,
   });
 
   if (status !== 200 || !data.success) throw new Error(`Failed to create test package: ${JSON.stringify(data)}`);
+
+  // Most logistics tests focus on flow; auto-settle prepaid non-cash charges so driver pickup gating doesn't block.
+  if (String(packageData.payment_type).toLowerCase() === "prepaid") {
+    const method = String(packageData.payment_method ?? "").trim();
+    if (method && method !== "cash" && method !== "monthly_billing") {
+      await authenticatedRequest<any>(`/api/payments/packages/${encodeURIComponent(data.package.id)}`, token, {
+        method: "POST",
+        body: JSON.stringify({ payment_method: method }),
+      });
+    }
+  }
+
   return data.package;
 }
 

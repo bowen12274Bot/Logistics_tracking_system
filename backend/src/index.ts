@@ -28,7 +28,7 @@ import { WarehouseDispatchNextTask } from "./endpoints/warehouseTaskDispatch";
 import { WarehousePackageExceptionCreate, WarehousePackageExceptionList } from "./endpoints/warehousePackageException";
 import { BillingBillList, BillingBillDetail } from "./endpoints/billingBills";
 import { BillingPaymentCreate, BillingPaymentList } from "./endpoints/billingPayments";
-import { PackagePaymentList, PackagePaymentPay } from "./endpoints/packagePayments";
+import { PackagePaymentList, PackagePaymentPay, PackagePaymentUpdateMethod } from "./endpoints/packagePayments";
 import { AdminUserCreate } from "./endpoints/adminUsers";
 import { AdminUserList, AdminUserDetails, AdminUserUpdate, AdminUserSuspend, AdminUserActivate, AdminUserDelete, AdminUserResetPassword, AdminUserAssignVehicle, AdminUserWorkStats } from "./endpoints/adminUserMgmt";
 import { AdminContractList, AdminContractReview } from "./endpoints/adminContracts";
@@ -37,6 +37,7 @@ import { VehicleMeGet, VehicleMeMove } from "./endpoints/vehiclesMe";
 import { DriverPackageExceptionCreate, DriverPackageExceptionList } from "./endpoints/driverPackageException";
 import { VehicleMeCargoList } from "./endpoints/vehiclesCargoMe";
 import { DriverTaskPickup, DriverTaskDropoff } from "./endpoints/driverTaskCargo";
+import { DriverCollectCash } from "./endpoints/driverCollectCash";
 import { DriverTaskEnRoute } from "./endpoints/driverTaskEnRoute";
 import { DriverTaskArrive } from "./endpoints/driverTaskArrive";
 import { CustomerServiceExceptionHandle, CustomerServiceExceptionList } from "./endpoints/csExceptions";
@@ -292,6 +293,7 @@ openapi.post("/api/driver/tasks/:taskId/pickup", DriverTaskPickup);
 openapi.post("/api/driver/tasks/:taskId/dropoff", DriverTaskDropoff);
 openapi.post("/api/driver/tasks/:taskId/enroute", DriverTaskEnRoute);
 openapi.post("/api/driver/tasks/:taskId/arrive", DriverTaskArrive);
+openapi.post("/api/driver/packages/:packageId/collect-cash", DriverCollectCash);
 openapi.post("/api/driver/packages/:packageId/status", DriverUpdateStatus);
 openapi.post("/api/driver/packages/:packageId/exception", DriverPackageExceptionCreate);
 openapi.get("/api/driver/exceptions", DriverPackageExceptionList);
@@ -320,6 +322,7 @@ openapi.get("/api/billing/payments", BillingPaymentList);
 // Package charge payment APIs (prepaid / COD)
 openapi.get("/api/payments/packages", PackagePaymentList);
 openapi.post("/api/payments/packages/:packageId", PackagePaymentPay);
+openapi.post("/api/payments/packages/:packageId/method", PackagePaymentUpdateMethod);
 
 // Admin Billing APIs
 openapi.post("/api/admin/billing/settle", BillingSettle);
