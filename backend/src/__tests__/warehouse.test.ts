@@ -6,9 +6,11 @@ import { expect, it, beforeAll } from "vitest";
 describe("Warehouse API Authentication", () => {
   describe401Tests([
     { method: "GET", path: "/api/warehouse/packages" },
+    { method: "GET", path: "/api/warehouse/exceptions" },
     { method: "POST", path: "/api/warehouse/packages/receive", body: { package_ids: ["PKG123"] } },
     { method: "POST", path: "/api/warehouse/batch-operation", body: { operation: "receive", package_ids: ["PKG123"] } },
     { method: "POST", path: "/api/warehouse/packages/PKG123/dispatch-next", body: { toNodeId: "HUB_1" } },
+    { method: "POST", path: "/api/warehouse/packages/PKG123/exception", body: { reason_code: "lost", description: "missing" } },
   ]);
 });
 
@@ -113,5 +115,36 @@ describe("Warehouse Functional Tests", () => {
         // console.log("Package not found in list:", res.data.packages);
     }
     expect(found).toBeDefined();
+  });
+
+  it("WH-EXC-001: warehouse can report exception and list it", async () => {
+    const pkg = await createTestPackage(customerToken, { sender_address: "END_HOME_1", receiver_address: "END_HOME_2" });
+
+    await apiRequest<any>(`/api/packages/${encodeURIComponent(pkg.id)}/events`, {
+      method: "POST",
+      body: JSON.stringify({ delivery_status: "warehouse_received", location: "HUB_0" }),
+    });
+    await apiRequest<any>(`/api/packages/${encodeURIComponent(pkg.id)}/events`, {
+      method: "POST",
+      body: JSON.stringify({ delivery_status: "sorting", location: "HUB_0" }),
+    });
+
+    const reportRes = await authenticatedRequest<any>(
+      `/api/warehouse/packages/${encodeURIComponent(pkg.id)}/exception`,
+      warehouseToken,
+      { method: "POST", body: JSON.stringify({ reason_code: "lost", description: "站內找不到包裹" }) },
+    );
+    expect(reportRes.status).toBe(200);
+    expect(reportRes.data?.success).toBe(true);
+
+    const listRes = await authenticatedRequest<any>(
+      "/api/warehouse/exceptions?limit=50",
+      warehouseToken,
+      { method: "GET" },
+    );
+    expect(listRes.status).toBe(200);
+    const found = (listRes.data.exceptions ?? []).find((r: any) => r.package_id === pkg.id);
+    expect(found).toBeDefined();
+    expect(String(found.reason_code ?? "")).toBe("lost");
   });
 });

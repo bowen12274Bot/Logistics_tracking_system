@@ -1,5 +1,13 @@
 import { describe, it, expect, beforeAll } from "vitest";
-import { apiRequest, authenticatedRequest, createTestPackage, createTestUser, getCustomerServiceToken, getDriverToken } from "./helpers";
+import {
+  apiRequest,
+  authenticatedRequest,
+  createTestPackage,
+  createTestUser,
+  getCustomerServiceToken,
+  getDriverToken,
+  getWarehouseToken,
+} from "./helpers";
 
 async function loginDriver(hubId: string) {
   const { status, data } = await apiRequest<{ token: string }>(`/api/auth/login`, {
@@ -38,12 +46,14 @@ describe("Customer service exception pool", () => {
   let customerToken: string;
   let driverToken: string;
   let csToken: string;
+  let warehouseToken: string;
 
   beforeAll(async () => {
     const user = await createTestUser({ address: "END_HOME_1" });
     customerToken = user.token;
     driverToken = await getDriverToken();
     csToken = await getCustomerServiceToken();
+    warehouseToken = await getWarehouseToken();
   });
 
   it("CS-EXC-001: driver reports exception -> CS can list and handle it (resume)", async () => {
@@ -419,6 +429,53 @@ describe("Customer service exception pool", () => {
       { method: "POST", body: JSON.stringify({ action: "resume", location: "HUB_0" }) } // missing handling_report
     );
     expect(res.status).toBe(400);
+  });
+
+  it("CS-EXC-WH-001: resume warehouse exception before receive restores warehouse_in (no driver task)", async () => {
+    const pkg = await createTestPackage(customerToken, { sender_address: "END_HOME_1", receiver_address: "END_HOME_2" });
+
+    // Simulate package arrived at HUB_0 but not yet received by warehouse staff.
+    const evt = await apiRequest<any>(`/api/packages/${encodeURIComponent(pkg.id)}/events`, {
+      method: "POST",
+      body: JSON.stringify({ delivery_status: "warehouse_in", location: "HUB_0" }),
+    });
+    expect(evt.status).toBe(200);
+
+    // Warehouse reports exception before receive.
+    const report = await authenticatedRequest<any>(
+      `/api/warehouse/packages/${encodeURIComponent(pkg.id)}/exception`,
+      warehouseToken,
+      { method: "POST", body: JSON.stringify({ reason_code: "lost", description: "站內找不到包裹" }) },
+    );
+    expect(report.status).toBe(200);
+    expect(report.data.success).toBe(true);
+
+    // CS finds the exception and resumes it.
+    const list = await authenticatedRequest<any>("/api/cs/exceptions", csToken);
+    expect(list.status).toBe(200);
+    const items: any[] = list.data.exceptions ?? [];
+    const hit = items.find((e) => String(e.package_id) === pkg.id && String(e.reported_role) === "warehouse_staff");
+    expect(hit).toBeTruthy();
+
+    const handle = await authenticatedRequest<any>(
+      `/api/cs/exceptions/${encodeURIComponent(String(hit.id))}/handle`,
+      csToken,
+      { method: "POST", body: JSON.stringify({ action: "resume", resume_mode: "continue_segment", handling_report: "已排除", location: "HUB_0" }) },
+    );
+    expect(handle.status).toBe(200);
+    expect(handle.data.success).toBe(true);
+
+    // After resume, it should stay in warehouse workflow (await_receive), not jump to driver delivery task pool.
+    const whList = await authenticatedRequest<any>("/api/warehouse/packages?limit=200", warehouseToken, { method: "GET" });
+    expect(whList.status).toBe(200);
+    const whPkg = (whList.data.packages ?? []).find((p: any) => String(p.id) === pkg.id);
+    expect(whPkg).toBeTruthy();
+    expect(String(whPkg.latest_event?.delivery_status ?? "").trim().toLowerCase()).toBe("warehouse_in");
+    expect(String(whPkg.ui_state ?? "")).toBe("await_receive");
+
+    const drvAssigned = await authenticatedRequest<any>("/api/driver/tasks?scope=assigned", driverToken);
+    expect(drvAssigned.status).toBe(200);
+    expect((drvAssigned.data.tasks ?? []).some((t: any) => String(t.package_id) === pkg.id)).toBe(false);
   });
 
   it("CS-EXC-LIST-002: filter by handled status", async () => {

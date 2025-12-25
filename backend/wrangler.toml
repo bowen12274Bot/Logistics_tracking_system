@@ -6,3 +6,7 @@ compatibility_date = "2024-11-26"
 binding = "DB"
 database_name = "local-db2"
 database_id = "51f0397b-8c9e-4773-9c15-e3483d6527f6"
+
+[triggers]
+# Run monthly billing settlement on the 1st day of month (UTC), so bills get due_date and appear in pending list.
+crons = ["5 0 1 * *"]

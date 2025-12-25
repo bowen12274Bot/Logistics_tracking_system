@@ -25,7 +25,7 @@ import { WarehouseBatchOperation } from "./endpoints/warehouseOperations";
 import { WarehousePackagesList } from "./endpoints/warehousePackages";
 import { WarehousePackagesReceive } from "./endpoints/warehouseReceive";
 import { WarehouseDispatchNextTask } from "./endpoints/warehouseTaskDispatch";
-import { WarehousePackageExceptionCreate } from "./endpoints/warehousePackageException";
+import { WarehousePackageExceptionCreate, WarehousePackageExceptionList } from "./endpoints/warehousePackageException";
 import { BillingBillList, BillingBillDetail } from "./endpoints/billingBills";
 import { BillingPaymentCreate, BillingPaymentList } from "./endpoints/billingPayments";
 import { AdminUserCreate } from "./endpoints/adminUsers";
@@ -39,6 +39,7 @@ import { DriverTaskPickup, DriverTaskDropoff } from "./endpoints/driverTaskCargo
 import { DriverTaskEnRoute } from "./endpoints/driverTaskEnRoute";
 import { CustomerServiceExceptionHandle, CustomerServiceExceptionList } from "./endpoints/csExceptions";
 import { CustomerServiceContractList, CustomerServiceContractReview } from "./endpoints/csContracts";
+import { settleBillingCycle } from "./services/billingService";
 
 type Bindings = {
   DB: D1Database;
@@ -296,6 +297,7 @@ openapi.post("/api/cs/exceptions/:exceptionId/handle", CustomerServiceExceptionH
 openapi.get("/api/cs/contract-applications", CustomerServiceContractList);
 openapi.put("/api/cs/contract-applications/:id", CustomerServiceContractReview);
 openapi.get("/api/warehouse/packages", WarehousePackagesList);
+openapi.get("/api/warehouse/exceptions", WarehousePackageExceptionList);
 openapi.post("/api/warehouse/packages/receive", WarehousePackagesReceive);
 openapi.post("/api/warehouse/batch-operation", WarehouseBatchOperation);
 openapi.post("/api/warehouse/packages/:packageId/dispatch-next", WarehouseDispatchNextTask);
@@ -334,4 +336,22 @@ openapi.put("/api/admin/contract-applications/:id", AdminContractReview);
 openapi.get("/api/admin/system/errors", AdminSystemErrors);
 
 // Export the Hono app
-export default app;
+export default {
+  fetch: app.fetch,
+  async scheduled(event: any, env: Bindings, ctx: ExecutionContext) {
+    ctx.waitUntil(
+      (async () => {
+        const now = new Date(Number(event?.scheduledTime ?? Date.now()));
+        // Safety check in case this handler is reused for other schedules.
+        if (now.getUTCDate() !== 1) return;
+
+        const firstOfThisMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0, 0));
+        firstOfThisMonth.setUTCMonth(firstOfThisMonth.getUTCMonth() - 1);
+        const year = firstOfThisMonth.getUTCFullYear();
+        const month = firstOfThisMonth.getUTCMonth() + 1; // 1-12
+
+        await settleBillingCycle(env.DB, year, month);
+      })(),
+    );
+  },
+};

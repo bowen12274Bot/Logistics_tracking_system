@@ -4,6 +4,7 @@ import { computed, reactive, ref, watch, onMounted, nextTick } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { usePackageStore, type PaymentMethod, type StoredPackage } from '../stores/packages'
 import { useAuthStore } from '../stores/auth'
+import { api, type BillingBillListItem } from '../services/api'
 
 const packageStore = usePackageStore()
 const auth = useAuthStore()
@@ -35,6 +36,11 @@ const loadError = computed(() => packageStore.error)
 const hasAutoFocused = ref(false)
 const highlightedPackageId = ref('')
 const focusNotice = ref('')
+const isLoadingBills = ref(false)
+const billsError = ref('')
+const pendingBills = ref<BillingBillListItem[]>([])
+const billPaymentMethods = ref<Record<string, 'credit_card' | 'bank_transfer'>>({})
+const billFeedbacks = ref<Record<string, string>>({})
 
 const focusedPackageId = computed(() => {
   const raw = route.query.package_id
@@ -43,6 +49,7 @@ const focusedPackageId = computed(() => {
 
 onMounted(() => {
   packageStore.fetchUnpaid(auth.user?.id)
+  loadPendingBills()
 })
 
 const resolveMethod = (method?: string | null): PaymentMethod => {
@@ -191,6 +198,46 @@ const confirmPay = (pkg: StoredPackage) => {
   feedbacks.value[pkg.id] = '已按下確認付款（功能尚待串接）。'
 }
 
+const loadPendingBills = async () => {
+  billsError.value = ''
+  pendingBills.value = []
+  billFeedbacks.value = {}
+
+  if (auth.user?.user_class !== 'contract_customer') return
+
+  isLoadingBills.value = true
+  try {
+    const res = await api.getBillingBills({ status: 'pending' })
+    const ready = (res.bills ?? []).filter((b) => Boolean(b.due_date))
+    pendingBills.value = ready
+    for (const bill of ready) {
+      if (!billPaymentMethods.value[bill.id]) {
+        billPaymentMethods.value[bill.id] = 'credit_card'
+      }
+    }
+  } catch (err: any) {
+    billsError.value = err?.message || '載入待付款帳單失敗'
+  } finally {
+    isLoadingBills.value = false
+  }
+}
+
+const confirmPayBill = async (bill: BillingBillListItem) => {
+  billFeedbacks.value[bill.id] = ''
+  const method = billPaymentMethods.value[bill.id] ?? 'credit_card'
+  try {
+    const res = await api.payBillingBill({
+      bill_id: bill.id,
+      payment_method: method,
+      amount: bill.total_amount,
+    })
+    billFeedbacks.value[bill.id] = res.message || '付款成功'
+    await loadPendingBills()
+  } catch (err: any) {
+    billFeedbacks.value[bill.id] = err?.message || '付款失敗'
+  }
+}
+
 const isSystemMonthlyInvoice = (pkg: StoredPackage) => {
   const fromMetadata =
     typeof pkg.description_json === 'object' && pkg.description_json !== null
@@ -243,6 +290,44 @@ const allowedMethodsFor = (pkg: StoredPackage) =>
       <div class="legend">
         <p class="eyebrow">付款清單</p>
         <p class="hint">列出需要你付款的貨件，顯示編號與建立時間；點擊後選擇付款方式。</p>
+      </div>
+
+      <div v-if="auth.user?.user_class === 'contract_customer'" class="bill-block">
+        <div class="legend" style="margin-bottom: 6px">
+          <p class="eyebrow">待付款帳單</p>
+          <p class="hint">月底結算後，月結帳單會出現在此清單。</p>
+        </div>
+
+        <div v-if="isLoadingBills" class="empty-state">
+          <p>讀取帳單中，請稍候...</p>
+        </div>
+        <div v-else-if="billsError" class="empty-state">
+          <p>{{ billsError }}</p>
+          <button class="ghost-btn" type="button" @click="loadPendingBills">重新載入</button>
+        </div>
+        <div v-else-if="!pendingBills.length" class="empty-state">
+          <p>目前沒有待付款帳單。</p>
+        </div>
+        <ul v-else class="bill-list">
+          <li v-for="bill in pendingBills" :key="bill.id" class="bill-row">
+            <div class="bill-row-main">
+              <strong>帳單 | {{ bill.period }}</strong>
+              <span class="pill">金額：{{ bill.total_amount }} 元</span>
+            </div>
+            <p class="meta">繳費期限：{{ bill.due_date || '--' }} · 包裹數：{{ bill.package_count ?? 0 }}</p>
+            <div class="actions">
+              <label class="form-field" style="margin: 0; min-width: 220px">
+                <span>付款方式</span>
+                <select v-model="billPaymentMethods[bill.id]" name="billPaymentMethod">
+                  <option value="credit_card">信用卡</option>
+                  <option value="bank_transfer">匯款</option>
+                </select>
+              </label>
+              <button class="primary-btn" type="button" @click="confirmPayBill(bill)">繳費</button>
+            </div>
+            <p v-if="billFeedbacks[bill.id]" class="hint">{{ billFeedbacks[bill.id] }}</p>
+          </li>
+        </ul>
       </div>
 
       <p v-if="focusNotice" class="hint" style="margin-bottom: 10px">{{ focusNotice }}</p>
@@ -360,6 +445,36 @@ const allowedMethodsFor = (pkg: StoredPackage) =>
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 12px;
   margin-bottom: 12px;
+}
+
+.bill-block {
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px dashed var(--surface-stroke);
+}
+
+.bill-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.bill-row {
+  border: 1px solid var(--surface-stroke);
+  border-radius: 12px;
+  padding: 12px;
+  background: #fff;
+}
+
+.bill-row-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
 }
 
 .package-list {

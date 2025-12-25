@@ -69,6 +69,66 @@ export type ContractApplicationStatus = {
   status?: string;
 };
 
+export type BillingBillStatus = "pending" | "paid" | "overdue";
+
+export type BillingBillsQuery = {
+  status?: BillingBillStatus;
+  period_from?: string;
+  period_to?: string;
+  customer_id?: string;
+};
+
+export type BillingBillListItem = {
+  id: string;
+  customer_id: string;
+  customer_name?: string;
+  period: string;
+  total_amount: number;
+  package_count: number;
+  status: BillingBillStatus;
+  due_date?: string | null;
+  created_at?: string | null;
+};
+
+export type BillingBillsResponse = {
+  success: boolean;
+  bills: BillingBillListItem[];
+};
+
+export type BillingBillDetailItem = {
+  package_id: string;
+  tracking_number?: string | null;
+  service_level?: string | null;
+  cost: number;
+  shipped_at?: string | null;
+};
+
+export type BillingBillDetailResponse = {
+  success: boolean;
+  bill: {
+    id: string;
+    period: string;
+    customer: { id: string; name: string };
+    total_amount: number;
+    status: BillingBillStatus;
+    items: BillingBillDetailItem[];
+    due_date?: string | null;
+  };
+};
+
+export type BillingPaymentPayload = {
+  bill_id: string;
+  payment_method: "credit_card" | "bank_transfer";
+  amount: number;
+};
+
+export type BillingPaymentResponse = {
+  success: boolean;
+  payment_id: string;
+  status: string;
+  message: string;
+};
+
 export type CreatePackagePayload = {
   customer_id?: string;
   sender?: string;
@@ -276,6 +336,18 @@ export type DeliveryTaskRecord = {
 };
 
 export type DriverExceptionRecord = {
+  id: string;
+  package_id: string;
+  tracking_number?: string | null;
+  package_status?: string | null;
+  reason_code?: string | null;
+  description?: string | null;
+  reported_at?: string | null;
+  handled?: number | null;
+  handled_at?: string | null;
+};
+
+export type WarehouseExceptionRecord = {
   id: string;
   package_id: string;
   tracking_number?: string | null;
@@ -571,6 +643,13 @@ export const api = {
       const qs = new URLSearchParams({ limit: String(limit) });
       return request<WarehousePackagesResponse>(`/api/warehouse/packages?${qs.toString()}`, { method: "GET" });
     },
+    getWarehouseExceptionReports: (limit = 50) => {
+      const qs = new URLSearchParams({ limit: String(limit) });
+      return request<{ success: boolean; exceptions: WarehouseExceptionRecord[] }>(
+        `/api/warehouse/exceptions?${qs.toString()}`,
+        { method: "GET" },
+      );
+    },
   receiveWarehousePackages: (package_ids: string[]) =>
     request<WarehouseReceiveResponse>("/api/warehouse/packages/receive", {
       method: "POST",
@@ -581,9 +660,30 @@ export const api = {
       `/api/warehouse/packages/${encodeURIComponent(packageId)}/dispatch-next`,
       { method: "POST", body: JSON.stringify(payload) },
     ),
+  reportWarehouseException: (packageId: string, payload: { reason_code: string; description: string }) =>
+    request<{ success: boolean; exception_id: string; event_id: string }>(
+      `/api/warehouse/packages/${encodeURIComponent(packageId)}/exception`,
+      { method: "POST", body: JSON.stringify(payload) },
+    ),
   getMe: () =>
     request<{ success: boolean; user: User }>("/api/auth/me", {
       method: "GET",
+    }),
+  getBillingBills: (query: BillingBillsQuery = {}) => {
+    const qs = new URLSearchParams();
+    if (query.status) qs.set("status", query.status);
+    if (query.period_from) qs.set("period_from", query.period_from);
+    if (query.period_to) qs.set("period_to", query.period_to);
+    if (query.customer_id) qs.set("customer_id", query.customer_id);
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return request<BillingBillsResponse>(`/api/billing/bills${suffix}`, { method: "GET" });
+  },
+  getBillingBillDetail: (billId: string) =>
+    request<BillingBillDetailResponse>(`/api/billing/bills/${encodeURIComponent(billId)}`, { method: "GET" }),
+  payBillingBill: (payload: BillingPaymentPayload) =>
+    request<BillingPaymentResponse>("/api/billing/payments", {
+      method: "POST",
+      body: JSON.stringify(payload),
     }),
   customerExists: (query: { phone?: string; name?: string }) => {
     const params = new URLSearchParams();

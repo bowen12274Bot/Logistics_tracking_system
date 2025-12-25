@@ -2,39 +2,29 @@ import { OpenAPIRoute } from "chanfana";
 import { z } from "zod";
 import type { AppContext } from "../types";
 import { getTerminalStatus, hasActiveException } from "../lib/packageGuards";
+import { requireWarehouse, type AuthResult, type AuthUser } from "../utils/authUtils";
 
-type AuthUser = { id: string; user_class: string; address: string | null };
 type LatestEvent = { delivery_status: string | null; location: string | null; events_at: string | null };
+type WarehouseUserWithNode = AuthUser & { address: string };
+
+function authFailed<T>(auth: AuthResult<T>): auth is { ok: false; res: Response } {
+  return auth.ok === false;
+}
 
 function normalizeNodeId(value: string | null | undefined) {
   return String(value ?? "").trim().toUpperCase();
 }
 
-async function requireWarehouse(c: AppContext) {
-  const authHeader = c.req.header("Authorization");
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return { ok: false as const, res: c.json({ error: "Token missing" }, 401) };
-  }
+async function requireWarehouseWithNode(c: AppContext): Promise<AuthResult<WarehouseUserWithNode>> {
+  const auth = await requireWarehouse(c);
+  if (!auth.ok) return auth;
 
-  const token = authHeader.replace("Bearer ", "");
-  const tokenRecord = await c.env.DB.prepare("SELECT user_id FROM tokens WHERE id = ?")
-    .bind(token)
-    .first<{ user_id: string }>();
-  if (!tokenRecord) return { ok: false as const, res: c.json({ error: "Invalid token" }, 401) };
-
-  const user = await c.env.DB.prepare("SELECT id, user_class, address FROM users WHERE id = ?")
-    .bind(tokenRecord.user_id)
-    .first<AuthUser>();
-  if (!user || user.user_class !== "warehouse_staff") {
-    return { ok: false as const, res: c.json({ error: "Forbidden" }, 403) };
-  }
-
-  const nodeId = normalizeNodeId(user.address);
+  const nodeId = normalizeNodeId(auth.user.address);
   if (!nodeId) {
     return { ok: false as const, res: c.json({ error: "Warehouse has no node (users.address)" }, 400) };
   }
 
-  return { ok: true as const, user: { ...user, address: nodeId } };
+  return { ok: true as const, user: { ...auth.user, address: nodeId } };
 }
 
 // POST /api/warehouse/packages/:packageId/exception - warehouse staff report exception
@@ -69,8 +59,8 @@ export class WarehousePackageExceptionCreate extends OpenAPIRoute {
   };
 
   async handle(c: AppContext) {
-    const auth = await requireWarehouse(c);
-    if (!auth.ok) return auth.res;
+    const auth = await requireWarehouseWithNode(c);
+    if (authFailed(auth)) return auth.res;
 
     const data = await this.getValidatedData<typeof this.schema>();
     const packageId = String(data.params.packageId).trim();
@@ -150,6 +140,57 @@ export class WarehousePackageExceptionCreate extends OpenAPIRoute {
       .run();
 
     return c.json({ success: true, exception_id: exceptionId, event_id: eventId });
+  }
+}
+
+// GET /api/warehouse/exceptions - warehouse exception reports list
+export class WarehousePackageExceptionList extends OpenAPIRoute {
+  schema = {
+    tags: ["Staff"],
+    summary: "Warehouse exception reports list",
+    security: [{ bearerAuth: [] }],
+    request: {
+      query: z.object({
+        limit: z.coerce.number().int().min(1).max(200).optional().default(50),
+      }),
+    },
+    responses: {
+      "200": { description: "OK" },
+      "401": { description: "Unauthorized" },
+      "403": { description: "Forbidden" },
+    },
+  };
+
+  async handle(c: AppContext) {
+    const auth = await requireWarehouse(c);
+    if (authFailed(auth)) return auth.res;
+
+    const data = await this.getValidatedData<typeof this.schema>();
+    const limit = data.query.limit;
+
+    const rows = await c.env.DB.prepare(
+      `
+      SELECT
+        pe.id,
+        pe.package_id,
+        p.tracking_number,
+        p.status AS package_status,
+        pe.reason_code,
+        pe.description,
+        pe.reported_at,
+        pe.handled,
+        pe.handled_at
+      FROM package_exceptions pe
+      JOIN packages p ON p.id = pe.package_id
+      WHERE pe.reported_by = ? AND pe.reported_role = 'warehouse_staff'
+      ORDER BY COALESCE(pe.reported_at, '') DESC
+      LIMIT ?
+      `,
+    )
+      .bind(auth.user.id, limit)
+      .all();
+
+    return c.json({ success: true, exceptions: rows.results ?? [] });
   }
 }
 

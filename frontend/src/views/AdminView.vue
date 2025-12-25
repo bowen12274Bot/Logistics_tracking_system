@@ -9,7 +9,16 @@ const adminName = computed(() => auth.user?.user_name || '管理員')
 const adminEmail = computed(() => auth.user?.email || 'admin@example.com')
 const envMode = import.meta.env.MODE || 'development'
 
-const metrics = [
+type Metric = {
+  title: string
+  value: string
+  hint: string
+  trend?: string
+  severity?: 'medium' | 'high'
+  badge?: string
+}
+
+const metrics: Metric[] = [
   { title: '今日單量', value: '1,024', hint: '含 96 件 COD', trend: '+8% vs 昨日' },
   { title: '異常率', value: '2.4%', hint: '24 / 1,024 件', severity: 'medium' as const },
   { title: '營收 (估)', value: '$1.82M', hint: '含月結預估 $0.72M', trend: '+5% vs 昨日' },

@@ -2,7 +2,8 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from "vue";
 import { RouterLink } from "vue-router";
-import { api, type WarehousePackageRecord } from "../services/api";
+import { api, type WarehouseExceptionRecord, type WarehousePackageRecord } from "../services/api";
+import { exceptionReasonLabel, selectableReasonsFor } from "../lib/exceptionReasons";
 
 const loading = ref(true);
 const busy = ref(false);
@@ -12,6 +13,7 @@ const notice = ref<string | null>(null);
 const warehouseNodeId = ref<string | null>(null);
 const neighbors = ref<string[]>([]);
 const packages = ref<WarehousePackageRecord[]>([]);
+const exceptionReports = ref<WarehouseExceptionRecord[]>([]);
 
 const receiveSelection = reactive<Record<string, boolean>>({});
 const nextHopByPackageId = reactive<Record<string, string>>({});
@@ -19,6 +21,12 @@ const nextHopByPackageId = reactive<Record<string, string>>({});
 const awaitingReceive = computed(() => packages.value.filter((p) => p.ui_state === "await_receive"));
 const sorting = computed(() => packages.value.filter((p) => p.ui_state === "sorting"));
 const dispatched = computed(() => packages.value.filter((p) => p.ui_state === "dispatched"));
+
+const exceptionModalOpen = ref(false);
+const exceptionTarget = ref<WarehousePackageRecord | null>(null);
+const exceptionReasons = selectableReasonsFor("warehouse_staff").map((r) => ({ code: r.code, label: r.label }));
+const exceptionForm = reactive({ reason_code: "", description: "" });
+const exceptionSubmitError = ref<string | null>(null);
 
 const selectedReceiveIds = computed(() =>
   awaitingReceive.value.map((p) => p.id).filter((id) => receiveSelection[id]),
@@ -64,11 +72,12 @@ async function refresh() {
   error.value = null;
   notice.value = null;
   try {
-    const res = await api.getWarehousePackages(300);
+    const [res, exceptionRes] = await Promise.all([api.getWarehousePackages(300), api.getWarehouseExceptionReports(100)]);
     warehouseNodeId.value = res.warehouse_node_id ?? null;
     neighbors.value = res.neighbors ?? [];
     packages.value = res.packages ?? [];
     ensureNextHopDefaults(res.packages ?? [], res.neighbors ?? []);
+    exceptionReports.value = exceptionRes.exceptions ?? [];
   } catch (e: any) {
     error.value = String(e?.message ?? e);
   } finally {
@@ -113,6 +122,46 @@ async function dispatchOne(p: WarehousePackageRecord) {
     await refresh();
   } catch (e: any) {
     error.value = String(e?.message ?? e);
+  } finally {
+    busy.value = false;
+  }
+}
+
+function startException(p: WarehousePackageRecord) {
+  exceptionTarget.value = p;
+  exceptionForm.reason_code = "";
+  exceptionForm.description = "";
+  exceptionSubmitError.value = null;
+  exceptionModalOpen.value = true;
+}
+
+async function submitException() {
+  const target = exceptionTarget.value;
+  if (!target) return;
+
+  const reason = String(exceptionForm.reason_code ?? "").trim();
+  const description = String(exceptionForm.description ?? "").trim();
+  if (!reason) {
+    exceptionSubmitError.value = "請先選擇異常原因。";
+    return;
+  }
+  if (!description) {
+    exceptionSubmitError.value = "請填寫說明（必填）。";
+    return;
+  }
+
+  busy.value = true;
+  exceptionSubmitError.value = null;
+  error.value = null;
+  notice.value = null;
+  try {
+    await api.reportWarehouseException(target.id, { reason_code: reason, description });
+    notice.value = `已申報異常：${target.tracking_number ?? target.id}`;
+    exceptionModalOpen.value = false;
+    exceptionTarget.value = null;
+    await refresh();
+  } catch (e: any) {
+    exceptionSubmitError.value = String(e?.message ?? e);
   } finally {
     busy.value = false;
   }
@@ -174,7 +223,10 @@ onMounted(() => {
               <input v-model="receiveSelection[p.id]" type="checkbox" :disabled="busy" />
               <strong>{{ p.tracking_number ?? p.id }}</strong>
             </label>
-            <span class="hint">{{ p.latest_event.delivery_status ?? "-" }} · {{ p.latest_event.events_at ?? "-" }}</span>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center; justify-content: flex-end">
+              <span class="hint">{{ p.latest_event.delivery_status ?? "-" }} · {{ p.latest_event.events_at ?? "-" }}</span>
+              <button class="ghost-btn small-btn" type="button" :disabled="busy" @click="startException(p)">申報異常</button>
+            </div>
           </div>
           <div class="hint">{{ p.sender_address ?? "-" }} → {{ p.receiver_address ?? "-" }}</div>
         </li>
@@ -218,6 +270,7 @@ onMounted(() => {
                     <option v-for="opt in neighbors" :key="opt" :value="opt">{{ opt }}</option>
                   </select>
                   <button class="primary-btn small-btn" type="button" :disabled="busy" @click="dispatchOne(p)">派發</button>
+                  <button class="ghost-btn small-btn" type="button" :disabled="busy" @click="startException(p)">申報異常</button>
                 </div>
               </li>
             </ul>
@@ -231,7 +284,10 @@ onMounted(() => {
             <li v-for="p in dispatched" :key="p.id" style="display: grid; gap: 6px">
               <div style="display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap">
                 <strong>{{ p.tracking_number ?? p.id }}</strong>
-                <span class="hint">{{ p.latest_event.events_at ?? "-" }}</span>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center; justify-content: flex-end">
+                  <span class="hint">{{ p.latest_event.events_at ?? "-" }}</span>
+                  <button class="ghost-btn small-btn" type="button" :disabled="busy" @click="startException(p)">申報異常</button>
+                </div>
               </div>
               <div class="hint">{{ p.latest_event.delivery_details ?? "-" }}</div>
             </li>
@@ -239,5 +295,108 @@ onMounted(() => {
         </div>
       </div>
     </div>
+
+    <div class="card" style="margin-top: 16px">
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap">
+        <div>
+          <p class="eyebrow">異常申報紀錄</p>
+          <p class="hint" style="margin: 6px 0 0">僅顯示你提交的倉儲異常申報（是否已處理由客服結案）。</p>
+        </div>
+        <span class="hint">共 {{ exceptionReports.length }} 筆</span>
+      </div>
+
+      <div v-if="loading" class="hint" style="margin-top: 12px">載入中…</div>
+      <div v-else-if="exceptionReports.length === 0" class="hint" style="margin-top: 12px">目前沒有異常申報紀錄。</div>
+      <ul v-else class="task-list" style="margin-top: 12px">
+        <li v-for="r in exceptionReports" :key="r.id" style="display: grid; gap: 6px">
+          <div style="display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; align-items: baseline">
+            <strong>{{ r.tracking_number ?? r.package_id }}</strong>
+            <span class="hint">{{ (r.handled ?? 0) === 1 ? "已處理" : "未處理" }} · {{ r.reported_at ?? "-" }}</span>
+          </div>
+          <div class="hint">{{ exceptionReasonLabel(r.reason_code) }}</div>
+          <div class="hint">{{ r.description ?? "-" }}</div>
+        </li>
+      </ul>
+    </div>
+
+    <div v-if="exceptionModalOpen" class="arrive-modal" role="dialog" aria-label="report exception">
+      <div class="arrive-modal-card">
+        <div class="arrive-header" style="margin: 0">
+          <div>
+            <p class="eyebrow">申報異常</p>
+            <p class="hint" style="margin: 0">包裹：{{ exceptionTarget?.tracking_number ?? exceptionTarget?.id ?? "-" }}</p>
+          </div>
+          <button class="ghost-btn" type="button" :disabled="busy" @click="exceptionModalOpen = false">關閉</button>
+        </div>
+
+        <label class="hint" style="display: grid; gap: 6px; margin-top: 10px">
+          異常原因（必選）
+          <select v-model="exceptionForm.reason_code" class="text-input" :disabled="busy">
+            <option value="" disabled>請選擇異常原因</option>
+            <option v-for="r in exceptionReasons" :key="r.code" :value="r.code">{{ r.label }}</option>
+          </select>
+        </label>
+
+        <label class="hint" style="display: grid; gap: 6px; margin-top: 10px">
+          說明（必填）
+          <textarea
+            v-model="exceptionForm.description"
+            class="text-input"
+            rows="3"
+            :disabled="busy"
+            placeholder="例：站內找不到包裹；已確認交接清單與貨架區域，請客服協助追查。"
+          />
+        </label>
+
+        <p v-if="exceptionSubmitError" class="hint" style="margin-top: 10px; color: #b91c1c">{{ exceptionSubmitError }}</p>
+
+        <div class="arrive-task-actions" style="margin-top: 12px">
+          <button class="primary-btn small-btn" type="button" :disabled="busy" @click="submitException">送出</button>
+          <button class="ghost-btn small-btn" type="button" :disabled="busy" @click="exceptionModalOpen = false">取消</button>
+        </div>
+      </div>
+    </div>
   </section>
 </template>
+
+<style scoped>
+.arrive-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.arrive-task-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.arrive-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.4);
+  display: grid;
+  place-items: center;
+  z-index: 20;
+}
+
+.arrive-modal-card {
+  width: min(520px, calc(100vw - 32px));
+  background: white;
+  border-radius: 16px;
+  padding: 14px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  box-shadow: 0 30px 70px rgba(15, 23, 42, 0.25);
+}
+
+.text-input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(15, 23, 42, 0.16);
+  background: rgba(255, 255, 255, 0.96);
+}
+</style>

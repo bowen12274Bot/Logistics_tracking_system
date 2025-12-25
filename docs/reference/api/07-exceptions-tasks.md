@@ -156,6 +156,13 @@
 - `delivery_status='exception_resolved'`：
   - 僅應由客服處理端點產生（`POST /api/cs/exceptions/:exceptionId/handle`），避免「解除事件」與異常池狀態不一致。
 
+| 項目 | 說明 |
+|------|------|
+| **位置** | `GET /api/warehouse/exceptions` |
+| **功能** | 倉儲異常申報紀錄列表（僅回傳自己 reported 的 warehouse_staff 紀錄） |
+| **認證** | ✅ 需要 Token |
+| **權限** | `warehouse_staff` |
+
 ### 7.3 司機任務與車輛移動 `[已實作]`
 
 | 項目 | 說明 |

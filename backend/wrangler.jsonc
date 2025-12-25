@@ -20,6 +20,9 @@
       "head_sampling_rate": 1
     }
   },
+  "triggers": {
+    "crons": ["5 0 1 * *"]
+  },
   //"migrations_dir": "migrations",
   "d1_databases": [
     {
