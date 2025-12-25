@@ -65,7 +65,9 @@ const boxType = computed<BoxType | null>(() => pickBoxType(form.lengthCm, form.w
 
 function pickBoxType(l: number, w: number, h: number, billableWeight: number): BoxType | null {
   const dims = [l, w, h].sort((a, b) => b - a) // d1 >= d2 >= d3
-  const [d1, d2, d3] = dims
+  const d1 = dims[0] ?? 0
+  const d2 = dims[1] ?? 0
+  const d3 = dims[2] ?? 0
   if (d1 <= 30 && d3 <= 2 && billableWeight <= 0.5) return 'envelope'
   if (d1 <= 40 && d2 <= 30 && d3 <= 20 && billableWeight <= 5) return 'S'
   if (d1 <= 60 && d2 <= 40 && d3 <= 40 && billableWeight <= 20) return 'M'
