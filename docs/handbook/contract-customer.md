@@ -13,6 +13,7 @@
 - `billing_preference`：客戶的「預設偏好」（在建立訂單時可用來預設 `payment_method`）。
   - 值：`cash | credit_card | bank_transfer | monthly | third_party_payment`
   - 限制：非合約客戶不可設定 `monthly`（會被拒絕）。
+  - 注意：偏好用 `monthly`；實際付款方式用 `monthly_billing`（需在付款清單再次確認付款才會生效）。
 - `payment_method`：包裹付款的「實際付款方式」。
   - 值：`cash | credit_card | bank_transfer | third_party_payment | monthly_billing`
   - 限制：`monthly_billing` 僅合約客戶可選，且只適用 `payment_type = prepaid`。
@@ -94,5 +95,6 @@
 - 寄件/包裹（權威）：`docs/modules/shipping.md`
 - 追蹤顯示（權威）：`docs/modules/tracking.md`
 - 運費試算規格（權威）：`docs/modules/pricing.md`
+- 功能文檔：`docs/features/customer-profile-and-preference.md`、`docs/features/customer-estimate-shipping.md`、`docs/features/customer-create-package.md`、`docs/features/customer-pay-package.md`、`docs/features/customer-monthly-billing.md`、`docs/features/customer-track-package.md`
 - API（接口參考）：`docs/reference/api/03-packages.md`、`docs/reference/api/05-payments.md`、`docs/reference/api/01-users.md`
 

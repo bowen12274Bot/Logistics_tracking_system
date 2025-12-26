@@ -3,7 +3,7 @@
 > 來源：`docs/legacy/api-contract.legacy.md`（由 legacy 拆分）
 >
 > - 本頁定位：接口參考（endpoint / request/response schema / error codes）
-> - 規則/流程：`docs/modules/shipping.md`、`docs/modules/tracking.md`、`docs/modules/operations.md`、`docs/modules/exceptions.md`
+> - 規則/流程（權威）：`docs/modules/shipping.md`、`docs/modules/tracking.md`、`docs/modules/operations.md`、`docs/modules/exceptions.md`
 > - 若內容與現行實作衝突：以後端實作與 `docs/modules/` 為準
 
 ## 3. 包裹管理模組 (Package Module)

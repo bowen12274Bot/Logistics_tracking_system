@@ -52,5 +52,7 @@
 - 合約審核流程（權威）：`docs/modules/contracts.md`
 - 寄件/包裹（權威）：`docs/modules/shipping.md`
 - 追蹤顯示（權威）：`docs/modules/tracking.md`
-- API（接口參考）：`docs/reference/api/01-users.md`、`docs/reference/api/03-packages.md`
+- 金流與付款（權威）：`docs/modules/payments.md`
+- 功能文檔：`docs/features/customer-estimate-shipping.md`、`docs/features/customer-create-package.md`、`docs/features/customer-pay-package.md`、`docs/features/customer-track-package.md`、`docs/features/review-contract-application.md`
+- API（接口參考）：`docs/reference/api/01-users.md`、`docs/reference/api/03-packages.md`、`docs/reference/api/05-payments.md`、`docs/reference/api/02-review.md`
 

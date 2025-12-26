@@ -65,4 +65,7 @@
 - 顧客追蹤與 Stage（權威）：`docs/modules/tracking.md`
 - 使用者/權限規則權威：`docs/modules/users.md`
 - 合約審核規則權威：`docs/modules/contracts.md`
+- 金流與帳單（權威）：`docs/modules/payments.md`
+- 功能文檔：`docs/features/cs-exception-pool-and-handle.md`、`docs/features/cs-billing-support.md`、`docs/features/review-contract-application.md`
+- API（接口參考）：`docs/reference/api/07-exceptions.md`、`docs/reference/api/05-payments.md`、`docs/reference/api/02-review.md`
 - 舊入口（保留連結）：`docs/customer-service.md`

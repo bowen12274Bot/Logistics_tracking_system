@@ -32,3 +32,5 @@
 
 - 倉儲規則權威：`docs/modules/operations.md`
 - 異常規則權威：`docs/modules/exceptions.md`
+- 功能文檔：`docs/features/warehouse-receive-and-sorting.md`、`docs/features/warehouse-dispatch-next-task.md`、`docs/features/exception-report-and-handle.md`
+- API（接口參考）：`docs/reference/api/08-operations-tasks.md`、`docs/reference/api/07-exceptions.md`

@@ -43,5 +43,6 @@
 - 使用者與權限（權威）：`docs/modules/users.md`
 - 合約審核流程（權威）：`docs/modules/contracts.md`
 - 金流與帳單（權威）：`docs/modules/payments.md`
+- 功能文檔：`docs/features/admin-user-management.md`、`docs/features/admin-billing-operations.md`、`docs/features/review-contract-application.md`
 - API（接口參考）：`docs/reference/api/06-super-user.md`、`docs/reference/api/05-payments.md`、`docs/reference/api/02-review.md`
 

@@ -4,10 +4,18 @@
 
 快速定位：
 
+- 總索引：`docs/README.md`
 - `docs/handbook/`：角色操作手冊（怎麼做）
 - `docs/modules/`：規則權威（為什麼這樣做、門檻/限制）
 - `docs/reference/api/`：接口參考（endpoint / schema）
 - `docs/features/`：端到端功能（怎麼串起來）
+
+## 索引入口
+
+- 規則（modules）：`docs/modules/README.md`
+- 角色手冊（handbook）：`docs/handbook/README.md`
+- API 參考（reference）：`docs/reference/api/README.md`
+- API 契約索引：`docs/reference/api-contract.md`
 
 ## Customer
 
@@ -43,8 +51,8 @@
 
 | 功能 | UI | 規則 | API |
 |---|---|---|---|
-| 點收/分揀 | 倉儲作業台 | `docs/modules/operations.md`、`docs/modules/shipping.md` | `docs/reference/api/01-users.md`（warehouse 區段） |
-| 派發下一段任務 | 倉儲作業台 | `docs/modules/operations.md` | `docs/reference/api/01-users.md`（`POST /api/warehouse/packages/:packageId/dispatch-next`） |
+| 點收/分揀 | 倉儲作業台 | `docs/modules/operations.md`、`docs/modules/shipping.md` | `docs/reference/api/08-operations-tasks.md`（warehouse 區段） |
+| 派發下一段任務 | 倉儲作業台 | `docs/modules/operations.md` | `docs/reference/api/08-operations-tasks.md`（`POST /api/warehouse/packages/:packageId/dispatch-next`） |
 | 倉儲異常申報 | 倉儲作業台 | `docs/modules/exceptions.md` | `docs/reference/api/07-exceptions.md`（`POST /api/warehouse/packages/:packageId/exception`） |
 
 - `docs/features/warehouse-receive-and-sorting.md`
@@ -54,8 +62,8 @@
 
 | 功能 | UI | 規則 | API |
 |---|---|---|---|
-| 任務流程（V2 tasks） | 司機任務 | `docs/modules/operations.md` | `docs/reference/api/01-users.md`（driver 區段、`/api/driver/tasks/...`） |
-| 現金收款（預付/到府代收） | 司機任務 | `docs/modules/payments.md` | `docs/reference/api/01-users.md`（`POST /api/driver/packages/:packageId/collect-cash`） |
+| 任務流程（V2 tasks） | 司機任務 | `docs/modules/operations.md` | `docs/reference/api/08-operations-tasks.md`（driver 區段、`/api/driver/tasks/...`） |
+| 現金收款（預付/到府代收） | 司機任務 | `docs/modules/payments.md` | `docs/reference/api/08-operations-tasks.md`（`POST /api/driver/packages/:packageId/collect-cash`） |
 
 - `docs/features/driver-task-lifecycle.md`
 - `docs/features/driver-cash-collection.md`

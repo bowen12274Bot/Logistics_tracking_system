@@ -5,6 +5,7 @@
 > - 介面參考（拆分後）：`docs/reference/api/README.md`
 > - 規則/流程（權威來源）：`docs/modules/README.md`
 > - 顧客追蹤與 Stage（權威來源）：`docs/modules/tracking.md`
+> - 本文的「8. 待補齊 API (TODO)」為歷史遺留，不作為現況缺口依據；請以 `docs/reference/api-contract.md` / `docs/reference/api/` 為準。
 
 本文件依據 UML 類別圖、TermProject114 需求文件與 todoList.md 整理後端所有 API 接口規格。
 
@@ -19,7 +20,7 @@
 - [5. 金流模組 (Payment Module)](#5-金流模組-payment-module)
 - [6. 超級使用者管理模組 (Super User Management)](#6-超級使用者管理模組-super-user-management)
 - [7. 異常與任務模組 (Exceptions & Tasks)](#7-異常與任務模組-exceptions--tasks)
-- [8. 待補齊 API (TODO)](#8-待補齊-api-todo)
+- [8. 待補齊 API (Legacy TODO，不代表現況)](#8-待補齊-api-todo)
 
 ---
 
@@ -1618,6 +1619,8 @@ exception --(客服處理 action=cancel)-->（取消委託；不再派發任務�
 ---
 
 ## 8. 待補齊 API (TODO)
+
+> 註：此章節為 legacy 文件當時的 TODO 清單，可能已在現行文件補齊、調整或取消；請以 `docs/reference/api-contract.md` / `docs/reference/api/README.md` 的內容為準。
 
 以下 API 尚未在上述章節詳細定義，需後續補齊：
 

@@ -15,5 +15,8 @@
 ## Links
 
 - API：`docs/reference/api/04-map-routing.md`
+- 功能文檔：`docs/features/customer-estimate-shipping.md`、`docs/features/customer-create-package.md`
+- 客戶手冊：`docs/handbook/non-contract-customer.md`、`docs/handbook/contract-customer.md`
+- 運費/計價：`docs/modules/pricing.md`
 - 追蹤顯示：`docs/modules/tracking.md`
 - 作業執行（車輛只能走相鄰節點）：`docs/modules/operations.md`

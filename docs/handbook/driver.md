@@ -21,4 +21,7 @@
 - 任務/車輛/移動規則（權威）：`docs/modules/operations.md`
 - 地圖與路線（權威）：`docs/modules/map-routing.md`
 - 異常規則（權威）：`docs/modules/exceptions.md`
+- 金流與收款（權威）：`docs/modules/payments.md`
+- 功能文檔：`docs/features/driver-task-lifecycle.md`、`docs/features/driver-cash-collection.md`、`docs/features/exception-report-and-handle.md`
+- API（接口參考）：`docs/reference/api/08-operations-tasks.md`、`docs/reference/api/07-exceptions.md`、`docs/reference/api/05-payments.md`
 - 司機端地圖設計與提案（非規則）：`docs/design/driver-map.md`

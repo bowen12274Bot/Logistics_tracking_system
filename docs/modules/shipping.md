@@ -21,5 +21,8 @@
 ## Links
 
 - API：`docs/reference/api/03-packages.md`
+- 功能文檔：`docs/features/customer-create-package.md`、`docs/features/customer-estimate-shipping.md`
+- 客戶手冊：`docs/handbook/non-contract-customer.md`、`docs/handbook/contract-customer.md`
 - 作業執行：`docs/modules/operations.md`
 - 追蹤顯示：`docs/modules/tracking.md`
+- 運費/計價：`docs/modules/pricing.md`

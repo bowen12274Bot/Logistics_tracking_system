@@ -33,3 +33,6 @@
 
 - API：`docs/reference/api/02-review.md`、`docs/reference/api/01-users.md`
 - 客服作業手冊：`docs/handbook/customer-service.md`
+- 管理端手冊：`docs/handbook/admin.md`
+- 功能文檔：`docs/features/review-contract-application.md`
+- 金流/月結規則：`docs/modules/payments.md`

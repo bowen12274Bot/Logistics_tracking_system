@@ -23,6 +23,23 @@
 - 想以「功能」看端到端（UI→規則→API）：`docs/features/README.md`
 - 想對照 UI：`docs/design/ui-spec.md`（舊入口：`docs/ui-spec.md`）→ `docs/handbook/customer-service.md` / `docs/handbook/warehouse-staff.md` / `docs/handbook/driver.md` / `docs/handbook/non-contract-customer.md` / `docs/handbook/contract-customer.md` / `docs/handbook/admin.md`
 
+## 核心流程一頁式導覽（審核用）
+
+用「功能」串起 UI → 規則 → API 的最短路徑，方便審核時快速定位。
+
+| 流程 | 主要角色 | 功能文檔（端到端） | 規則（Modules） | API 參考（Reference） | UI 手冊（Handbook） |
+|---|---|---|---|---|---|
+| 建立包裹 | Customer | `docs/features/customer-create-package.md` | `docs/modules/shipping.md` / `docs/modules/pricing.md` | `docs/reference/api/03-packages.md` / `docs/reference/api/04-map-routing.md` | `docs/handbook/non-contract-customer.md` / `docs/handbook/contract-customer.md` |
+| 估算運費 | Customer | `docs/features/customer-estimate-shipping.md` | `docs/modules/pricing.md` | `docs/reference/api/04-map-routing.md` | `docs/handbook/non-contract-customer.md` / `docs/handbook/contract-customer.md` |
+| 包裹付款（含月結規則） | Customer / CS | `docs/features/customer-pay-package.md` / `docs/features/customer-monthly-billing.md` | `docs/modules/payments.md` | `docs/reference/api/05-payments.md` | `docs/handbook/non-contract-customer.md` / `docs/handbook/contract-customer.md` / `docs/handbook/customer-service.md` |
+| 申請/審核合約 | Customer / Admin | `docs/features/review-contract-application.md` | `docs/modules/contracts.md` | `docs/reference/api/02-review.md` | `docs/handbook/admin.md` |
+| 倉儲收貨/分揀 | Warehouse | `docs/features/warehouse-receive-and-sorting.md` | `docs/modules/operations.md` / `docs/modules/tracking.md` | `docs/reference/api/08-operations-tasks.md` / `docs/reference/api/03-packages.md` | `docs/handbook/warehouse-staff.md` |
+| 倉儲派下一站（改下一跳） | Warehouse | `docs/features/warehouse-dispatch-next-task.md` | `docs/modules/operations.md` | `docs/reference/api/08-operations-tasks.md` | `docs/handbook/warehouse-staff.md` |
+| 司機任務生命週期 | Driver | `docs/features/driver-task-lifecycle.md` | `docs/modules/operations.md` / `docs/modules/tracking.md` | `docs/reference/api/08-operations-tasks.md` | `docs/handbook/driver.md` |
+| 司機代收貨款（COD） | Driver / CS | `docs/features/driver-cash-collection.md` | `docs/modules/payments.md` | `docs/reference/api/05-payments.md` | `docs/handbook/driver.md` / `docs/handbook/customer-service.md` |
+| 顧客追蹤查詢 | Customer | `docs/features/customer-track-package.md` | `docs/modules/tracking.md` | `docs/reference/api/03-packages.md` | `docs/handbook/non-contract-customer.md` / `docs/handbook/contract-customer.md` |
+| 異常回報/處理 | Driver / Warehouse / CS | `docs/features/exception-report-and-handle.md` / `docs/features/cs-exception-pool-and-handle.md` | `docs/modules/exceptions.md` / `docs/modules/operations.md` | `docs/reference/api/07-exceptions.md` / `docs/reference/api/08-operations-tasks.md` | `docs/handbook/customer-service.md` / `docs/handbook/warehouse-staff.md` / `docs/handbook/driver.md` |
+
 ## 文檔衝突時的優先順序
 
 若不同文件對同一件事描述不一致，請依下列順序判定「哪個是準」：
@@ -53,6 +70,7 @@
 > 規則與一致性約束以 `docs/modules/` 為準；舊文件/舊入口保留以免連結失效。
 
 - 模組索引：`docs/modules/README.md`
+- 權限邊界總索引：`docs/modules/users.md`
 - 異常（新）：`docs/modules/exceptions.md`（來源：`docs/legacy/exception-handling.md`；舊入口：`docs/exception-handling.md`；手冊：`docs/handbook/customer-service.md`）
 - 作業/任務/車輛（新）：`docs/modules/operations.md`（操作手冊：`docs/handbook/warehouse-staff.md`、`docs/handbook/driver.md`；設計備忘：`docs/design/driver-map.md`）
 - 追蹤顯示（新）：`docs/modules/tracking.md`（來源：`docs/reference/api/03-packages.md`）
@@ -104,9 +122,3 @@ UML 的 5 大模組偏「領域（Domain）」；API 參考（`docs/reference/ap
 - Payment Module（UML）→ `docs/reference/api/05-payments.md`
 - Review Module（UML）→ `docs/reference/api/02-review.md`
 - Super User Management（UML）→ `docs/reference/api/06-super-user.md`
-
-## 後續重構方向（你可以先看這段是否同意）
-
-- 入口統一：`docs/README.md` 作為唯一導覽入口（本文件）
-- API/規則分離：`docs/reference/api-contract.md` 作為索引入口；接口與 schema 放在 `docs/reference/api/`；規則集中到模組文件（exceptions/operations/tracking/payment…）
-- 避免重複：同一條規則只在一個模組文件說明，其他文件用連結引用

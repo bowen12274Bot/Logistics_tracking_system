@@ -3,7 +3,7 @@
 > 來源：`docs/legacy/api-contract.legacy.md`（由 legacy 拆分）
 >
 > - 本頁定位：接口參考（endpoint / request/response schema / error codes）
-> - 規則/流程：`docs/modules/users.md`、`docs/modules/contracts.md`
+> - 規則/流程（權威）：`docs/modules/users.md`、`docs/modules/contracts.md`
 > - 若內容與現行實作衝突：以後端實作與 `docs/modules/` 為準
 
 ## 1. 使用者管理模組 (User Module)
@@ -168,7 +168,7 @@
   "user_name": "string",
   "phone_number": "string",
   "address": "string",
-  "billing_preference": "cash | credit_card | bank_transfer | monthly | third_party_payment |"
+  "billing_preference": "cash | credit_card | bank_transfer | monthly | third_party_payment"
 }
 ```
 
@@ -180,6 +180,11 @@
 | `phone_number` | string | ❌ | 電話號碼 |
 | `address` | string | ❌ | 預設地址 |
 | `billing_preference` | string | ❌ | 帳單偏好：`cash`(現金支付)、`credit_card`(信用卡)、`bank_transfer`(網路銀行)、`monthly`(月結帳單) 僅限合約客戶、`third_party_payment`(第三方支付) |
+
+Notes:
+
+- `billing_preference` 是「預設偏好」，會在建立包裹時用來預設 `packages.payment_method`；實際付款仍需在付款清單再次確認（見 `docs/modules/payments.md`）。
+- 注意命名差異：偏好用 `monthly`；實際付款方式用 `monthly_billing`（非合約客戶不可選）。
 
 #### 錯誤回應
 

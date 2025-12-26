@@ -90,9 +90,56 @@
   - 建立 `delivery_tasks` 新 segment：`from_location=<users.address>`、`to_location=<toNodeId>`、`status='pending'`，並讓 `segment_index`（同 package）遞增
   - 建議建立事件：`route_decided`（`location=<users.address>`），並在 `delivery_details` 記錄 next hop（例如 `next=REG_3`）
 
+## Write Points（寫入點對照：事件 vs 任務）
+
+同一個「員工動作」通常會同時影響多張表：任務（`delivery_tasks`）、事件（`package_events`）、車輛/載貨（`vehicles` / `vehicle_cargo`）。本節用表格把「寫入點」集中列出，避免只看其中一份文件時誤解流程。
+
+> 接口參考：`docs/reference/api/08-operations-tasks.md`、`docs/reference/api/07-exceptions.md`、`docs/reference/api/03-packages.md`
+
+### 1) Driver / Warehouse 的主要寫入點（建議走這套）
+
+| 動作/端點 | 角色 | `delivery_tasks` | `package_events` | `vehicles` / `vehicle_cargo` | 備註 |
+|---|---|---|---|---|---|
+| `POST /api/driver/tasks/:taskId/accept` | driver | ✅（接手/變更指派或狀態） | ❌ | ❌ | 交接接手（handoff） |
+| `POST /api/driver/tasks/:taskId/enroute` | driver | ✅ | ✅（`in_transit`） | ❌ | 進入在途（通常 location = `TRUCK_*`） |
+| `POST /api/driver/tasks/:taskId/arrive` | driver | ✅（可選） | ✅（`arrived_pickup` / `arrived_delivery`） | ❌ | 到站通知事件（可選但常用於付款門檻） |
+| `POST /api/driver/tasks/:taskId/pickup` | driver | ✅（進入 `in_progress`） | ✅（`picked_up`） | ✅（`vehicle_cargo.loaded_at`） | 取件/裝載 |
+| `POST /api/driver/tasks/:taskId/dropoff` | driver | ✅（完成該段） | ✅（`warehouse_in` 或 `delivered`） | ✅（`vehicle_cargo.unloaded_at`） | 卸貨/投遞 |
+| `POST /api/driver/tasks/:taskId/complete` | driver | ✅（`completed`） | ❌ | ❌ | 純任務完成標記（通常事件已在 pickup/dropoff 寫入） |
+| `POST /api/vehicles/me/move` | driver | ❌ | ❌ | ✅（`vehicles.current_node_id`） | 只能移動到相鄰節點（`edges`） |
+| `POST /api/warehouse/packages/receive` | warehouse_staff | ❌ | ✅（`warehouse_received` → `sorting`） | ❌ | 站內點收（以 `users.address` 為本站） |
+| `POST /api/warehouse/batch-operation` | warehouse_staff | ❌ | ✅（站內批次事件） | ❌ | 批次入庫/出庫/分揀（仍需站點綁定） |
+| `POST /api/warehouse/packages/:packageId/dispatch-next` | warehouse_staff | ✅（新建下一段 `pending`） | ✅（`route_decided`） | ❌ | 下一跳決策與派發（`toNodeId` 必須相鄰） |
+
+### 2) 異常流程的寫入點（會中止/恢復任務）
+
+| 動作/端點 | 角色 | `package_exceptions` | `delivery_tasks` | `package_events` | 備註 |
+|---|---|---|---|---|---|
+| `POST /api/driver/packages/:packageId/exception` | driver | ✅（建立異常池） | ✅（取消 active tasks） | ✅（`exception`） | 異常成立後 normal flow 需被封鎖 |
+| `POST /api/warehouse/packages/:packageId/exception` | warehouse_staff | ✅ | ✅ | ✅（`exception`） | 同上 |
+| `POST /api/cs/exceptions/:exceptionId/handle` | customer_service | ✅（結案） | ✅（resume 時可能重建；cancel 時取消） | ✅（`exception_resolved` 或 `delivery_failed`） | 結案決策：resume/cancel |
+
+### 3) 僅寫事件的端點（避免當作主流程）
+
+這些端點只會「插入事件」而不管理任務/載貨狀態，適合測試或 legacy 相容，不建議作為主要流程：
+
+- `POST /api/packages/:packageId/events`（內部/員工寫入事件）
+- `POST /api/driver/packages/:packageId/status`（driver legacy：直接寫事件，不管理 tasks/cargo）
+
 ## Links
 
 - 異常會中止 tasks：`docs/modules/exceptions.md`
+- 事件模型（貨態狀態機）：`docs/architecture/event-model-and-flows.md`
+- API（作業/任務/車輛）：`docs/reference/api/08-operations-tasks.md`
+- 功能文檔：`docs/features/driver-task-lifecycle.md`、`docs/features/warehouse-receive-and-sorting.md`、`docs/features/warehouse-dispatch-next-task.md`
+- 異常端到端：`docs/features/exception-report-and-handle.md`、`docs/features/cs-exception-pool-and-handle.md`
+- 操作手冊：`docs/handbook/driver.md`、`docs/handbook/warehouse-staff.md`、`docs/handbook/customer-service.md`
+- 地圖/相鄰性：`docs/modules/map-routing.md`
+- 寄件/初始任務：`docs/modules/shipping.md`
+- 付款門檻（arrived gate / 收款事件）：`docs/modules/payments.md`
+- 權限邊界（站點綁定/司機綁定）：`docs/modules/users.md`
+- 司機端地圖設計備忘：`docs/design/driver-map.md`
+
 ## 操作手冊（Legacy）
 
 - 倉儲作業手冊：`docs/handbook/warehouse-staff.md`（舊入口：`docs/warehouse-staff.md`）

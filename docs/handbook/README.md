@@ -2,6 +2,13 @@
 
 本資料夾放「角色端 UI/操作步驟」：怎麼按、怎麼填、怎麼走流程。規則與一致性（權威）以 `docs/modules/` 為準。
 
+## 索引入口
+
+- 總索引：`docs/README.md`
+- 功能（features）：`docs/features/README.md`
+- 規則（modules）：`docs/modules/README.md`
+- API 參考（reference）：`docs/reference/api/README.md`
+
 若想以「功能」看端到端（UI→規則→API），請先看：`docs/features/README.md`。
 
 - 司機（driver）：`docs/handbook/driver.md`

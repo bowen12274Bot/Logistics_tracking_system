@@ -4,6 +4,14 @@
 
 > 規則/流程請看 `docs/modules/`；端到端用例請看 `docs/features/README.md`；舊版單檔快照在 `docs/legacy/api-contract.legacy.md`。
 
+## 索引入口
+
+- 總索引：`docs/README.md`
+- Reference 索引：`docs/reference/README.md`
+- API 契約索引：`docs/reference/api-contract.md`
+- 規則（modules）：`docs/modules/README.md`
+- 功能（features）：`docs/features/README.md`
+
 ## 分頁
 
 - 通用（認證/錯誤/角色）：`docs/reference/api/00-common.md`

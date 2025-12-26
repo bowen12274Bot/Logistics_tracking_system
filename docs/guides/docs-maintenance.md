@@ -59,3 +59,15 @@
 - [ ] 若是規則：寫在 `docs/modules/`，並在需要被查找處加上連結（例如 `docs/README.md`、相關 `docs/reference/api/*.md`）
 - [ ] 若變更/新增端點：更新 `docs/reference/api/*.md`、`docs/reference/api/README.md`（分頁索引）與 `docs/reference/api-contract.md`（契約索引）
 - [ ] 若搬移文件：保留 stub + 更新引用
+
+---
+
+## 7. 審核 Checklist（EOL 版）
+
+此專案進入審核階段時，常見的「看不清楚/容易誤會」點可用下列清單快速確認：
+
+- [ ] 權威來源順序清楚：規則以 `docs/modules/` 為準；接口以 `docs/reference/api/` 為準；端到端以 `docs/features/` 為準；UI 步驟以 `docs/handbook/` 為準；`docs/legacy/` 非權威（見 `docs/README.md`）。
+- [ ] Legacy 不當缺口：`docs/legacy/api-contract.legacy.md` 的「TODO/待補齊」不代表現況缺失，現況以 `docs/reference/api-contract.md` 與 `docs/reference/api/README.md` 為準。
+- [ ] Demo 端點不被依賴：`docs/reference/api/09-internal-demo.md` 為 demo/scaffold 或開發用，正式流程/前端功能不應依賴。
+- [ ] 金流預期一致：`third_party_payment` 目前無外部金流串接（無導轉/webhook/callback），屬於支付方式枚舉；規則見 `docs/modules/payments.md`。
+- [ ] 命名差異已註明：`billing_preference=monthly`（偏好）與 `payment_method=monthly_billing`（實際付款）差異、以及合約/非合約限制已在 `docs/modules/users.md`、`docs/modules/payments.md`、`docs/handbook/contract-customer.md` 說明。

@@ -25,6 +25,28 @@
 
 Stage 是「顧客顯示用的大階段」：用於 UI 呈現與篩選；來源仍以 `package_events` 為準，`packages.status` 僅是快取（由事件推導/同步）。
 
+### Stage ↔ Event 推導（摘要）
+
+目的：讓 `packages.status`（快取）在查詢/列表可用，但追蹤仍以 `package_events`（事實來源）為準。
+
+- 推導概念：從「最新一筆有效事件」推導 stage。
+- `exception` 事件會讓 stage 進入 `exception`（封鎖 normal flow）。
+- `exception_resolved` 本身不推進路徑進度；它代表客服決策，stage 需依當下留置位置回推（常見回到 `warehouse_in` 或 `in_transit`）。
+
+| Stage（`packages.status`） | 主要來源事件（常見） | 備註 |
+|---|---|---|
+| `created` | `created` | 託運單建立 |
+| `picked_up` | `picked_up` | 司機取件上車 |
+| `in_transit` | `in_transit` | 在途（含前往取件/前往下一節點） |
+| `warehouse_in` | `warehouse_in` / `warehouse_received` | 到站/點收 |
+| `sorting` | `sorting` / `route_decided` | 站內分揀/決策下一跳 |
+| `warehouse_out` | `warehouse_out` | 出庫/離站交接給司機 |
+| `out_for_delivery` | `out_for_delivery` / `enroute_delivery` / `arrived_delivery` | 末端配送 |
+| `delivered` | `delivered` | 已投遞/簽收完成 |
+| `exception` | `exception` | 異常成立（中止 normal flow） |
+
+> 完整的事件列表（含可選通知事件與映射）請以 `docs/reference/api/03-packages.md` 的 Event 表為準。
+
 ### Stage 狀態機（摘要）
 
 ```
@@ -57,3 +79,6 @@ exception --(客服處理 action=cancel)-->（取消委託；不再派發任務�
 ## Links
 
 - API（追蹤查詢/事件）：`docs/reference/api/03-packages.md`（原 3.5、3.6 等段落）
+- 功能文檔：`docs/features/customer-track-package.md`
+- 客戶手冊：`docs/handbook/non-contract-customer.md`、`docs/handbook/contract-customer.md`
+- 異常與 location 規則：`docs/modules/exceptions.md`

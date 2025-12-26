@@ -87,8 +87,54 @@
 - 異常成立後，必須取消該包裹所有 active `delivery_tasks`，讓任務從清單消失。
 - 異常未結案時，應阻擋其他會前進流程的事件寫入（回 409）。
 
-## Sources（既有文件）
+## Exception Gate Summary（異常封鎖/恢復總結）
+
+本節是審核用的「總結入口」：異常成立後會封鎖哪些動作？客服結案（resume/cancel）會造成哪些資料變化？
+
+### 1) 異常成立（`delivery_status='exception'`）
+
+效果（必須同時發生）：
+
+- 建立異常池：新增 `package_exceptions`（`handled=0`）
+- 寫入事件：新增 `package_events.exception`
+- 中止 normal flow：取消所有 active `delivery_tasks`（避免司機/倉儲繼續推進）
+
+封鎖範圍（典型）：
+
+- 司機任務操作（pickup/dropoff/enroute/arrive/complete）若涉及該包裹，應回 `409`（或更具體的錯誤訊息，例如 `Package has active exception`）
+- 倉儲站內操作（點收、派發下一段）對該包裹也應被封鎖，避免寫入站內事件造成狀態分裂
+
+### 2) 客服結案：resume（恢復配送）
+
+資料變化：
+
+- 更新異常池：`package_exceptions.handled=1`，寫入 `handled_by` / `handled_at` / `handling_report` 等
+- 寫入事件：新增 `package_events.exception_resolved`
+- 恢復流轉：
+  - 依結案策略（resume_mode）決定是否沿用段落、指定 next hop、或改目的地
+  - 必要時建立新的 `delivery_tasks` 讓司機/倉儲有「下一步可做」
+
+追蹤顯示提醒：
+
+- `exception_resolved` 本身視為客服決策事件，不應推進路徑進度時間軸；顧客端 stage 需依留置位置回推（常見回到 `warehouse_in` 或 `in_transit`）。
+
+### 3) 客服結案：cancel（取消委託 / 終止）
+
+資料變化：
+
+- 更新異常池：`package_exceptions.handled=1`，`action='cancel'`
+- 取消所有 active `delivery_tasks`
+- 寫入 terminal 事件：新增 `package_events.delivery_failed`（包裹進入 terminal）
+
+封鎖範圍（典型）：
+
+- terminal 後不再允許任何推進流程的操作（任務/事件/付款更新等），應回 `409`。
+
+## Links
 
 - `docs/legacy/exception-handling.md`（舊規範/非權威；舊入口：`docs/exception-handling.md`）
 - `docs/reference/api/07-exceptions.md`（API 章節，或從 `docs/reference/api-contract.md` 索引進入）
 - `docs/handbook/customer-service.md`（客服流程）
+- `docs/features/exception-report-and-handle.md`（異常回報/處理：端到端流程）
+- `docs/features/cs-exception-pool-and-handle.md`（客服 exception pool 與處理流程）
+- `docs/modules/operations.md`（寫入點與任務封鎖規則：exception 對 tasks 的影響）

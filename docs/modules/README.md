@@ -2,6 +2,14 @@
 
 `docs/modules/` 放的是「規則層」文件：描述系統在各模組下的核心理念、資料落點與一致性規則；API 細節請搭配 `docs/reference/api/README.md`（或從 `docs/reference/api-contract.md` 索引進入）；端到端用例請看 `docs/features/README.md`。
 
+## 索引入口
+
+- 總索引：`docs/README.md`
+- 功能（features）：`docs/features/README.md`
+- 角色手冊（handbook）：`docs/handbook/README.md`
+- API 參考（reference）：`docs/reference/api/README.md`
+- API 契約索引：`docs/reference/api-contract.md`
+
 ## 模組列表
 
 - 使用者與權限：`docs/modules/users.md`
