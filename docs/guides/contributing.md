@@ -263,4 +263,4 @@ git push origin main
 - [開發環境設定](getting-started.md)（舊入口：`docs/getting-started.md`）
 - [測試指南](testing-guide.md)（舊入口：`docs/testing-guide.md`）
 - [Docs 維護規範](docs-maintenance.md)
-- [專案 README](../readme.md)
+- [專案 README](../README.md)

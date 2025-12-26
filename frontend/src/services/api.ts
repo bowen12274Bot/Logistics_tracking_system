@@ -129,6 +129,56 @@ export type BillingPaymentResponse = {
   message: string;
 };
 
+export type BillingPaymentRecord = {
+  bill_id: string;
+  period: string;
+  amount: number;
+  paid_at: string;
+  payment_method: "credit_card" | "bank_transfer" | null;
+};
+
+export type BillingPaymentListResponse = {
+  success: boolean;
+  payments: BillingPaymentRecord[];
+};
+
+export type PackageChargeItem = PackageRecord & {
+  payment_method?: string | null;
+};
+
+export type PackagePayableItem = {
+  package: PackageChargeItem;
+  amount: number;
+  paid_at: string | null;
+  payer_user_id: string | null;
+  payable_now: boolean;
+  reason: string | null;
+};
+
+export type PackagePayablesResponse = {
+  success: boolean;
+  items: PackagePayableItem[];
+};
+
+export type PackagePayPayload = {
+  payment_method: "cash" | "credit_card" | "bank_transfer" | "third_party_payment" | "monthly_billing";
+};
+
+export type PackagePayResponse = {
+  success: boolean;
+  paid_at: string;
+};
+
+export type PackagePaymentMethodPayload = {
+  payment_method: "cash" | "credit_card" | "bank_transfer" | "third_party_payment" | "monthly_billing";
+};
+
+export type PackagePaymentMethodResponse = {
+  success: boolean;
+  payment_method: string;
+  updated_at: string;
+};
+
 export type CreatePackagePayload = {
   customer_id?: string;
   sender?: string;
@@ -141,6 +191,9 @@ export type CreatePackagePayload = {
   receiver_address?: string;
   weight: number;
   size: string;
+  length?: number;
+  width?: number;
+  height?: number;
   delivery_time: string;
   payment_type: string;
   payment_method?: string;
@@ -180,6 +233,7 @@ export type PackageRecord = {
   fragile_items?: boolean | null;
   international_shipments?: boolean | null;
   final_billing_date?: string | null;
+  special_handling?: string | null;
   route_path?: string | null;
   pickup_date?: string | null;
   pickup_time_window?: string | null;
@@ -682,6 +736,31 @@ export const api = {
     request<BillingBillDetailResponse>(`/api/billing/bills/${encodeURIComponent(billId)}`, { method: "GET" }),
   payBillingBill: (payload: BillingPaymentPayload) =>
     request<BillingPaymentResponse>("/api/billing/payments", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  getBillingPayments: (query: { bill_id?: string; date_from?: string; date_to?: string } = {}) => {
+    const qs = new URLSearchParams();
+    if (query.bill_id) qs.set("bill_id", query.bill_id);
+    if (query.date_from) qs.set("date_from", query.date_from);
+    if (query.date_to) qs.set("date_to", query.date_to);
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return request<BillingPaymentListResponse>(`/api/billing/payments${suffix}`, { method: "GET" });
+  },
+  getPackagePayables: (query: { include_paid?: boolean; limit?: number } = {}) => {
+    const qs = new URLSearchParams();
+    if (query.include_paid !== undefined) qs.set("include_paid", String(Boolean(query.include_paid)));
+    if (query.limit !== undefined) qs.set("limit", String(query.limit));
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return request<PackagePayablesResponse>(`/api/payments/packages${suffix}`, { method: "GET" });
+  },
+  payPackage: (packageId: string, payload: PackagePayPayload) =>
+    request<PackagePayResponse>(`/api/payments/packages/${encodeURIComponent(packageId)}`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  setPackagePaymentMethod: (packageId: string, payload: PackagePaymentMethodPayload) =>
+    request<PackagePaymentMethodResponse>(`/api/payments/packages/${encodeURIComponent(packageId)}/method`, {
       method: "POST",
       body: JSON.stringify(payload),
     }),

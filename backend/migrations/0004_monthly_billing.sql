@@ -8,5 +8,6 @@
   total_amount INTEGER DEFAULT 0,
   due_date TEXT,
   paid_at TEXT,
+  paid_method TEXT,
   created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );

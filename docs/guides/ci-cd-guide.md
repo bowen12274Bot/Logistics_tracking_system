@@ -336,5 +336,5 @@ git push origin main
 - [GitHub Actions 官方文件](https://docs.github.com/en/actions)
 - [Cloudflare Workers 部署](https://developers.cloudflare.com/workers/wrangler/ci-cd/)
 - [Cloudflare Pages 部署](https://developers.cloudflare.com/pages/how-to/use-direct-upload-with-continuous-integration/)
-- [專案 README](../readme.md)
+- [專案 README](../README.md)
 - [貢獻指南](contributing.md)（舊入口：`docs/contributing.md`）

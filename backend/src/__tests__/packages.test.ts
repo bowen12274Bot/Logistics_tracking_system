@@ -184,7 +184,7 @@ describe("包裹管理 (Package)", () => {
 
       expect(status).toBe(200);
       expect(data.success).toBe(true);
-      expect(data.package.payment_method).toBe("online_bank");
+      expect(data.package.payment_method).toBe("bank_transfer");
     });
     
     it("PKG-CREATE-021: 支援 length/width/height 參數並影響計價", async () => {
@@ -222,6 +222,57 @@ describe("包裹管理 (Package)", () => {
        // In our Create logic, we didn't explicitly set package.size from dimensions if size was missing.
        // We should perhaps fix that or just verify the create succeeded.
        // For now, verify success is enough to prove the API accepts the params and calculateInitialPayment didn't throw.
+    });
+
+    it("PKG-CREATE-022: estimate.total_cost should match initial payment.total_amount", async () => {
+      const fromNodeId = "END_HOME_1";
+      const toNodeId = "END_HOME_2";
+
+      const estimate = await apiRequest<any>("/api/packages/estimate", {
+        method: "POST",
+        body: JSON.stringify({
+          fromNodeId,
+          toNodeId,
+          weightKg: 5,
+          dimensionsCm: { length: 40, width: 30, height: 20 },
+          deliveryType: "standard",
+          specialMarks: [],
+        }),
+      });
+      expect(estimate.status).toBe(200);
+      expect(estimate.data.success).toBe(true);
+      const estimatedCost = estimate.data.estimate.total_cost as number;
+      expect(typeof estimatedCost).toBe("number");
+      expect(estimatedCost).toBeGreaterThan(0);
+
+      const created = await authenticatedRequest<any>("/api/packages", customerToken, {
+        method: "POST",
+        body: JSON.stringify({
+          customer_id: customerId,
+          sender_name: "Sender",
+          sender_phone: "0912345678",
+          sender_address: fromNodeId,
+          receiver_name: "Receiver",
+          receiver_phone: "0912345670",
+          receiver_address: toNodeId,
+          weight: 5,
+          length: 40,
+          width: 30,
+          height: 20,
+          delivery_time: "standard",
+          payment_type: "prepaid",
+        }),
+      });
+
+      expect(created.status).toBe(200);
+      expect(created.data.success).toBe(true);
+      const packageId = created.data.package.id as string;
+
+      const payables = await authenticatedRequest<any>("/api/payments/packages", customerToken);
+      expect(payables.status).toBe(200);
+      const payable = (payables.data.items ?? []).find((i: any) => i.package?.id === packageId);
+      expect(payable).toBeTruthy();
+      expect(payable.amount).toBe(estimatedCost);
     });
   });
 

@@ -90,5 +90,5 @@
 ## Sources（既有文件）
 
 - `docs/legacy/exception-handling.md`（舊規範/非權威；舊入口：`docs/exception-handling.md`）
-- `docs/reference/api/07-exceptions-tasks.md`（API 章節，或從 `docs/api-contract.md` 索引進入）
+- `docs/reference/api/07-exceptions.md`（API 章節，或從 `docs/reference/api-contract.md` 索引進入）
 - `docs/handbook/customer-service.md`（客服流程）

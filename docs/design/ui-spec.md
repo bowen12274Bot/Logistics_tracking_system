@@ -1,131 +1,299 @@
-# 前端介面規範 (UI Specifications)
+# 前端介面規範（UI Specifications）
 
-本文件補足 `todoList.md` 中各角色 (Driver, Warehouse, Admin, CS) 的介面需求與規範。
+本文件以「前端使用者角度」描述各角色的頁面、操作流程、狀態與錯誤處理；API 僅作為實作對照（避免打錯 endpoint）。
 
----
+參考來源：
 
-## 1. 司機端介面 (Driver UI)
-
-### 1.1 工作清單頁面 (Task List)
-- **對應 API**: `GET /api/driver/tasks`
-- **功能描述**: 顯示今日分配的任務清單。
-- **UI 元素**:
-    - **頂部資訊列**: 顯示司機姓名、車號、今日完成進度 (e.g., 5/20)。
-    - **篩選器**: 全部 / 待取件 / 待配送 / 待轉運。
-    - **任務卡片列表**:
-        - 顯示：地址 (From/To)、時效要求 (Overnight/Standard)、包裹數量。
-        - 狀態標籤：待辦 (Pending) / 進行中 (In Progress) / 完成 (Completed)。
-        - 動作按鈕：點擊卡片進入「任務詳情與導航」。
-
-### 1.2 任務詳情與導航 (Task Detail & Nav)
-- **對應 API**: `POST /api/driver/tasks/:id/status`, `GET /api/map/route`
-- **功能描述**: 執行單一任務的介面。
-- **UI 元素**:
-    - **地圖視圖**: 顯示當前位置到目標點的路徑。
-    - **資訊面板**: 詳細地址、聯絡人電話 (可點擊撥打)、備註。
-    - **主要動作按鈕**:
-        - 「開始任務」 (Accept/Start)
-        - 「抵達目標」 (Arrive) -> 觸發抵達面板。
-    - **異常回報**: 顯眼的「回報異常」按鈕。
-
-### 1.3 抵達互動面板 (Arrival Panel)
-- **對應 API**: `POST /api/driver/packages/:id/status` (含簽收/收費)
-- **功能描述**: 抵達後的作業流程。
-- **UI 元素**:
-    - **取件模式**:
-        - 核對包裹數量。
-        - 確認收費 (若為現金預付)。
-        - 「確認取件」按鈕。
-    - **配送模式**:
-        - 電子簽收板 (Canvas)。
-        - `COD` (貨到付款) 金額提示與確認輸入框。
-        - 「確認送達」按鈕。
+- 端到端功能：`docs/features/`
+- 規則權威：`docs/modules/`
+- API 參考：`docs/reference/api/`
 
 ---
 
-## 2. 倉儲端介面 (Warehouse UI)
+## 共通規範（所有角色）
 
-### 2.1 倉儲主控台 (Warehouse Dashboard)
-- **對應 API**: `GET /api/warehouse/stats` (需新增), `GET /api/warehouse/tasks`
-- **功能描述**: 倉儲人員的作業總覽。
-- **UI 元素**:
-    - **看板 (Kanban) / 區塊**:
-        - **待入庫**: 司機已抵達但尚未掃碼入庫的包裹。
-        - **待分揀/轉運**: 在站內需處理的包裹。
-        - **待出庫**: 分派給司機等待裝車的包裹。
-    - **掃描入口**: 顯眼的 Barcode/QR Code 掃描按鈕，用於快速觸發批次作業。
+### Loading / Error / Empty
 
-### 2.2 批次作業介面 (Batch Operations)
-- **對應 API**: `POST /api/warehouse/batch-operation`
-- **功能描述**: 使用條碼槍或手動輸入進行大量包裹的狀態更新。
-- **UI 元素**:
-    - **模式選擇**: 入庫 (Inbound) / 出庫 (Outbound) / 分揀 (Sorting)。
-    - **刷讀清單**: 顯示已掃描的包裹列表。
-    - **目標設定**: 
-        - 出庫時選擇「目標車輛」或「下一站」。
-    - **提交按鈕**: 「確認執行 (N 筆)」。
+- 所有列表頁必須有三態：Loading、Empty、Error（含可重試）。
+- 所有「會改變狀態」的按鈕需有 disabled 條件與避免連點（防止重複送出）。
 
-### 2.3 路徑調整介面 (Route Override)
-- **對應 API**: `PATCH /api/warehouse/packages/:id/route`
-- **功能描述**: 允許倉儲人員手動修改包裹的後續路徑。
-- **UI 元素**:
-    - **目前路徑顯示**: 顯示系統規劃的節點序列。
-    - **編輯模式**: 允許拖節點或新增/刪除中途節點。
-    - **原因輸入**: 必填修改原因 (e.g., 道路中斷、轉運站爆倉)。
+### 權限與導頁
+
+- 任何 401 → 重新登入或導回登入頁。
+- 任何 403 → 顯示「無權限」頁（並提供返回上一頁/首頁）。
+
+### API 對照（落地原則）
+
+- UI spec 只寫「用到哪些 endpoint + 觸發時機 + UI 需要哪些欄位」，request/response schema 交給 `docs/reference/api/`。
+- 若 UI spec 與實作衝突：以後端實作與 `docs/reference/api/` 為準，並回頭修正本文件。
 
 ---
 
-## 3. 客服後台介面 (Customer Service UI)
+## 1. 司機端（Driver）
 
-### 3.1 異常池管理 (Exception Pool)
-- **對應 API**: `GET /api/cs/exceptions`, `POST /api/cs/exceptions/:id/handle`
-- **功能描述**: 處理全系統的異常包裹。
-- **UI 元素**:
-    - **清單視圖**: 表格顯示，包含 `Tracking No.`、`異常原因`、`申報人`、`申報時間`、`狀態 (未處理/已處理)`。
-    - **篩選器**: 依原因分類、依時間。
-    - **處理彈窗 (Modal)**:
-        - 顯示完整異常描述與歷程。
-        - 動作選擇: `Resume` (恢復配送) / `Cancel` (取消訂單)。
-        - 報告輸入框: 填寫處理結果。
+相關功能文件：
 
-### 3.2 貨態查詢與修正 (Advanced Tracking)
-- **對應 API**: `GET /api/tracking/search`, `POST /api/packages/:id/events`
-- **功能描述**: 客服協助客戶查詢或修正狀態。
-- **UI 元素**:
-    - **多條件搜尋**: 支援 `Tracking No`、`客戶電話`、`訂單日期`。
-    - **完整歷程視圖**: 顯示比客戶端更詳細的內部 Log (含操作者 ID)。
-    - **手動新增事件**: 允許客服插入「補錄事件」(Manual Entry)，需備註原因。
+- `docs/features/driver-task-lifecycle.md`
+- `docs/features/driver-cash-collection.md`
+- `docs/features/exception-report-and-handle.md`
 
-### 3.3 合約審核介面
-- **對應 API**: `PUT /api/admin/contract-applications/:id`
-- **功能描述**: 審核企業月結申請。
-- **UI 元素**:
-    - **申請列表**: 待審核的申請案。
-    - **詳情頁**: 顯示公司資料、統編、聯絡人。
-    - **審核動作**: 核准 (設定信用額度) / 駁回 (填寫駁回原因)。
+### 1.1 任務清單頁
+
+目標：讓司機快速看到「我現在要做什麼」，以及「可交接的任務」。
+
+資訊架構（建議）：
+
+- 分頁：
+  - 我的任務（assigned）
+  - 交接任務（handoff）
+- 每張任務卡片最少顯示：
+  - `tracking_number`
+  - `task_type`（pickup/deliver）
+  - `from_location` → `to_location`
+  - `status`
+  - 金流提示：`payment_type`、`paid_at`、`payment_amount`
+
+互動：
+
+- 刷新/進入頁面：拉清單
+- 交接任務卡片提供「接手」按鈕
+- 點卡片進任務詳情頁
+
+API（對照）：
+
+- 取得清單：`GET /api/driver/tasks?scope=assigned`
+- 取得交接：`GET /api/driver/tasks?scope=handoff`
+- 接手交接：`POST /api/driver/tasks/:taskId/accept`
+
+錯誤/狀態：
+
+- `scope=handoff` 若回 `node_id=null`（車輛無節點）→ UI 提示需先完成車輛設定/指派（由 admin 操作）。
+- 接手 409：提示「不在起點 / 任務不可交接 / 包裹已結案或有異常」。
+
+### 1.2 任務詳情頁（導航 + 動作）
+
+目標：把「導航資訊」與「下一個可按的動作」放在同一個畫面。
+
+資訊顯示（建議）：
+
+- From/To 節點、任務類型、備註（`instructions` 若有）
+- 客戶資訊（若前端有）：聯絡人/電話（避免顯示不必要的敏感資料）
+- 進度提示：目前任務 status 與建議下一步
+
+主要動作（依狀態顯示）：
+
+- `在途中`：標記在途
+- `已到達`：標記到站（影響收款窗口）
+- `取件/裝載` 或 `投遞/卸貨`
+- `回報異常`
+
+API（對照）：
+
+- 導航路徑（選用）：`GET /api/map/route?from=NODE&to=NODE`
+- 標記在途：`POST /api/driver/tasks/:taskId/enroute`
+- 標記到站：`POST /api/driver/tasks/:taskId/arrive`
+- 取件：`POST /api/driver/tasks/:taskId/pickup`
+- 投遞：`POST /api/driver/tasks/:taskId/dropoff`
+
+錯誤/狀態：
+
+- 409 Not at node：提示司機需先到達正確節點（或先更新車輛位置）。
+- 409 Payment not settled：提示需先付款/收現（見 1.3）。
+- 409 Package has active exception：提示需先由客服結案。
+
+### 1.3 到站面板（收現 / 取件 / 投遞）
+
+目標：把一段任務的「到站後操作」做成可視化流程，避免司機做錯順序。
+
+UI 流程（建議）：
+
+1. 到站（按「已到達」）
+2. 若需要收現，顯示收現區塊（並提示門檻）
+3. 顯示「取件/投遞」主按鈕
+
+API（對照）：
+
+- 到站：`POST /api/driver/tasks/:taskId/arrive`
+- 收現：`POST /api/driver/packages/:packageId/collect-cash`
+- 取件：`POST /api/driver/tasks/:taskId/pickup`
+- 投遞：`POST /api/driver/tasks/:taskId/dropoff`
+
+UI 規則提示（必須呈現給司機）：
+
+- 預付現金到府取件：必須先到站（arrived_pickup）才能收現。
+- 到府代收：必須先到站（arrived_delivery）才能收現，且未收現不可完成 delivered。
+- 門市代收：司機不收現（若嘗試會 409）。
+
+### 1.4 異常回報
+
+目標：讓司機用最少輸入完成申報，並立即從任務清單移除該包裹。
+
+UI 欄位（建議）：
+
+- `reason_code`：下拉必選（依規則文件列舉）
+- `description`：必填文字
+- `location`：不建議給自由輸入（後端會限制）；可顯示只讀提示（目前節點/車號）
+
+API（對照）：
+
+- `POST /api/driver/packages/:packageId/exception`
 
 ---
 
-## 4. 管理員後台介面 (Admin UI)
+## 2. 倉儲端（Warehouse）
 
-### 4.1 系統總覽 (System Dashboard)
-- **對應 API**: `GET /api/admin/stats` (需新增)
-- **功能描述**: 高階主管/管理員查看系統運作狀況。
-- **UI 元素**:
-    - **關鍵指標 (KPI)**: 今日單量、異常率、營收總額。
-    - **圖表**: 最近 7 日單量趨勢。
-    - **即時警示**: 顯示 Critical 等級的系統錯誤。
+相關功能文件：
 
-### 4.2 使用者與權限管理
-- **對應 API**: `POST /api/admin/users`, `GET /api/admin/users`
-- **功能描述**: 管理員工帳號。
-- **UI 元素**:
-    - **員工列表**: 搜尋與列表。
-    - **新增/編輯員工**: 設定角色 (Driver/Warehouse/CS/Admin) 與工作地 (Hub/Station)。
-    - **帳號狀態**: 停用/啟用 / 重設密碼。
+- `docs/features/warehouse-receive-and-sorting.md`
+- `docs/features/warehouse-dispatch-next-task.md`
+- `docs/features/exception-report-and-handle.md`
 
-### 4.3 服務規則設定 (Service Rules)
-- **功能描述**: 設定運費與服務參數 (對應 S3/S5 需求)。
-- **UI 元素**:
-    - **表格編輯器**: 編輯各 Box Type 與 Service Level 的基礎費率與價格係數。
-    - **特定規則**: 是否啟用國際運送加價、易碎品加價設定。
+### 2.1 站內包裹清單頁
+
+目標：讓倉儲人員看到「本站有哪些包裹」與「下一步怎麼派發」。
+
+API（對照）：
+
+- `GET /api/warehouse/packages`
+
+UI 建議：
+
+- 每列顯示：tracking、目前狀態、目前所在、建議下一跳（若後端有提供）
+- 提供快捷入口：
+  - 點收（批次）
+  - 批次作業（入庫/出庫/分揀）
+  - 派發下一段（單筆）
+  - 申報異常（單筆）
+
+### 2.2 點收（批次）
+
+API（對照）：
+
+- `POST /api/warehouse/packages/receive`
+
+UI 建議：
+
+- 條碼掃描清單 → 送出 `package_ids[]`
+- 顯示冪等提示：已點收不會重複寫入
+
+### 2.3 批次作業（batch-operation）
+
+API（對照）：
+
+- `POST /api/warehouse/batch-operation`
+
+UI 規則：
+
+- 必填：`operation`、`package_ids[]`、`location_id`（以及 `note` 建議填）
+
+### 2.4 派發下一段（dispatch-next）
+
+API（對照）：
+
+- `POST /api/warehouse/packages/:packageId/dispatch-next`
+
+UI 規則：
+
+- 需提供 `toNodeId` 選擇器（只能選相鄰節點；若後端有回建議清單可用）
+
+### 2.5 倉儲異常
+
+API（對照）：
+
+- `POST /api/warehouse/packages/:packageId/exception`
+- `GET /api/warehouse/exceptions`
+
+---
+
+## 3. 客服後台（Customer Service）
+
+相關功能文件：
+
+- `docs/features/cs-exception-pool-and-handle.md`
+- `docs/features/cs-billing-support.md`
+- `docs/features/review-contract-application.md`
+
+### 3.1 異常池頁
+
+目標：客服能在列表快速判斷，並進入結案 modal。
+
+API（對照）：
+
+- `GET /api/cs/exceptions?handled=0|1`
+- `POST /api/cs/exceptions/:exceptionId/handle`
+
+UI 規則：
+
+- 結案 modal 需支援：
+  - `action=resume|cancel`
+  - `handling_report`（必填）
+  - resume 才顯示：`resume_mode` +（可能）`next_hop_override`/`destination_override`
+
+### 3.2 查帳支援頁
+
+API（對照）：
+
+- `GET /api/billing/bills?customer_id=...`
+- `GET /api/billing/bills/:billId`
+
+UI 規則：
+
+- 需要能判讀是否已出帳：`due_date == null`（未出帳）
+
+### 3.3 合約審核（CS）
+
+API（對照）：
+
+- `GET /api/cs/contract-applications`
+- `PUT /api/cs/contract-applications/:id`
+
+---
+
+## 4. 管理員後台（Admin）
+
+相關功能文件：
+
+- `docs/features/admin-user-management.md`
+- `docs/features/admin-billing-operations.md`
+- `docs/features/review-contract-application.md`
+
+### 4.1 員工/權限管理
+
+API（對照）：
+
+- `GET /api/admin/users`（列表）
+- `POST /api/admin/users`（建立）
+- `GET /api/admin/users/:id`（明細）
+- `PUT /api/admin/users/:id`（更新）
+- `POST /api/admin/users/:id/suspend|activate`
+- `POST /api/admin/users/:id/reset-password`
+- `POST /api/admin/users/:id/assign-vehicle`
+
+### 4.2 帳務作業
+
+API（對照）：
+
+- 月底結算：`POST /api/admin/billing/settle`
+- 帳單調整：`PATCH /api/admin/billing/bills/:billId`
+- 增刪項目：`POST /api/admin/billing/bills/:billId/items`、`DELETE /api/admin/billing/bills/:billId/items/:itemId`
+
+UI 規則（建議）：
+
+- 結算頁需提示：只會對 `due_date IS NULL` 的本期 pending 帳單補 due_date（不會改狀態）。
+- 手動增刪項目前需提示風險：目前後端不檢查是否跨期/重複（屬管理端責任）。
+
+### 4.3 系統錯誤列表
+
+API（對照）：
+
+- `GET /api/admin/system/errors`
+
+> `GET /api/admin/stats` 目前未實作；若需要 KPI 需另行設計。
+
+### 4.4 合約審核（Admin）
+
+API（對照）：
+
+- `GET /api/admin/contract-applications`
+- `PUT /api/admin/contract-applications/:id`
+

@@ -1,10 +1,20 @@
 ﻿
 <script setup lang="ts">
-import { computed, reactive, ref, watch, onMounted, nextTick } from 'vue'
+import { computed, ref, watch, onMounted, nextTick } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { usePackageStore, type PaymentMethod, type StoredPackage } from '../stores/packages'
 import { useAuthStore } from '../stores/auth'
-import { api, type BillingBillListItem } from '../services/api'
+import { api, type BillingBillDetailResponse, type BillingPaymentRecord, type PackagePayableItem } from '../services/api'
+import {
+  dimensionsLabel,
+  formatDateTime,
+  formatMoney,
+  receiverDisplayName,
+  resolveDeliveryLabel,
+  resolveNotes,
+  resolveSpecialMarks,
+  senderDisplayName,
+} from '../utils/packageDisplay'
 
 const packageStore = usePackageStore()
 const auth = useAuthStore()
@@ -14,33 +24,31 @@ const router = useRouter()
 const paymentLabel: Record<PaymentMethod, string> = {
   cash: '現金支付',
   credit_card: '信用卡',
-  online_bank: '網路銀行',
+  bank_transfer: '網路銀行',
   monthly_billing: '月結訂單',
-  third_party: '第三方支付',
+  third_party_payment: '第三方支付',
 }
 
 const unpaidPackages = computed<StoredPackage[]>(() => packageStore.unpaidPackages)
-const myUnpaidPackages = computed<StoredPackage[]>(() =>
-  unpaidPackages.value.filter((pkg) => !auth.user || pkg.customer_id === auth.user.id),
-)
+const myUnpaidPackages = computed<StoredPackage[]>(() => unpaidPackages.value)
 const expandedIds = ref<Set<string>>(new Set())
 const paymentChoices = ref<Record<string, PaymentMethod>>({})
 const feedbacks = ref<Record<string, string>>({})
-const recordFilters = reactive({
-  type: 'all' as 'all' | 'package' | 'monthly',
-  keyword: '',
-})
 const activeTab = ref<'list' | 'records'>('list')
 const isLoading = computed(() => packageStore.isLoading)
 const loadError = computed(() => packageStore.error)
 const hasAutoFocused = ref(false)
 const highlightedPackageId = ref('')
 const focusNotice = ref('')
-const isLoadingBills = ref(false)
-const billsError = ref('')
-const pendingBills = ref<BillingBillListItem[]>([])
-const billPaymentMethods = ref<Record<string, 'credit_card' | 'bank_transfer'>>({})
-const billFeedbacks = ref<Record<string, string>>({})
+
+const isLoadingRecords = ref(false)
+const recordsError = ref('')
+const paidPackageRecords = ref<PackagePayableItem[]>([])
+const paidBillRecords = ref<BillingPaymentRecord[]>([])
+const expandedRecordIds = ref<Set<string>>(new Set())
+const billDetails = ref<Record<string, BillingBillDetailResponse['bill'] | null>>({})
+const billDetailLoading = ref<Record<string, boolean>>({})
+const billDetailError = ref<Record<string, string>>({})
 
 const focusedPackageId = computed(() => {
   const raw = route.query.package_id
@@ -49,8 +57,41 @@ const focusedPackageId = computed(() => {
 
 onMounted(() => {
   packageStore.fetchUnpaid(auth.user?.id)
-  loadPendingBills()
 })
+
+const loadPaymentRecords = async () => {
+  recordsError.value = ''
+  paidPackageRecords.value = []
+  paidBillRecords.value = []
+  expandedRecordIds.value = new Set()
+  billDetails.value = {}
+  billDetailLoading.value = {}
+  billDetailError.value = {}
+
+  if (!auth.user?.id) return
+
+  isLoadingRecords.value = true
+  try {
+    const [pkgRes, billRes] = await Promise.all([
+      api.getPackagePayables({ include_paid: true, limit: 200 }),
+      auth.user.user_class === 'contract_customer' ? api.getBillingPayments() : Promise.resolve({ success: true, payments: [] } as any),
+    ])
+
+    paidPackageRecords.value = (pkgRes.items ?? []).filter((i) => Boolean(i.paid_at) && i.package?.payment_method !== 'monthly_billing')
+    paidBillRecords.value = billRes.payments ?? []
+  } catch (err: any) {
+    recordsError.value = err?.message || '載入付款紀錄失敗'
+  } finally {
+    isLoadingRecords.value = false
+  }
+}
+
+watch(
+  () => activeTab.value,
+  (tab) => {
+    if (tab === 'records') loadPaymentRecords()
+  },
+)
 
 const resolveMethod = (method?: string | null): PaymentMethod => {
   const candidate = (method ?? '') as PaymentMethod
@@ -127,7 +168,53 @@ const savePaymentChoice = () => {
   // kept for backward compatibility if needed
 }
 
-const savePaymentChoiceFor = (pkg: StoredPackage) => {
+const getPayableSnapshot = (pkg: StoredPackage) => packageStore.payableFor(pkg.id)
+
+const amountFor = (pkg: StoredPackage) => getPayableSnapshot(pkg)?.amount ?? 0
+
+const recordKeyForPackage = (packageId: string) => `pkg:${packageId}`
+const recordKeyForBill = (billId: string) => `bill:${billId}`
+
+const toggleRecord = async (key: string) => {
+  const next = new Set(expandedRecordIds.value)
+  if (next.has(key)) next.delete(key)
+  else next.add(key)
+  expandedRecordIds.value = next
+}
+
+const ensureBillDetail = async (billId: string) => {
+  if (!billId) return
+  if (billDetails.value[billId]) return
+  if (billDetailLoading.value[billId]) return
+
+  billDetailLoading.value = { ...billDetailLoading.value, [billId]: true }
+  billDetailError.value = { ...billDetailError.value, [billId]: '' }
+  try {
+    const res = await api.getBillingBillDetail(billId)
+    billDetails.value = { ...billDetails.value, [billId]: res.bill }
+  } catch (err: any) {
+    billDetailError.value = { ...billDetailError.value, [billId]: err?.message || '載入帳單明細失敗' }
+    billDetails.value = { ...billDetails.value, [billId]: null }
+  } finally {
+    billDetailLoading.value = { ...billDetailLoading.value, [billId]: false }
+  }
+}
+
+const toggleBillRecord = async (billId: string) => {
+  const key = recordKeyForBill(billId)
+  const willOpen = !expandedRecordIds.value.has(key)
+  await toggleRecord(key)
+  if (willOpen) await ensureBillDetail(billId)
+}
+
+const billPaymentMethodLabel = (value?: string | null) => {
+  const key = String(value ?? '').trim().toLowerCase()
+  if (key === 'credit_card') return '信用卡'
+  if (key === 'bank_transfer') return '匯款'
+  return key || '--'
+}
+
+const updatePaymentMethodFor = async (pkg: StoredPackage) => {
   const choice = paymentChoices.value[pkg.id]
   if (choice === 'monthly_billing' && auth.user?.user_class !== 'contract_customer') {
     feedbacks.value[pkg.id] = '非合約客戶不可選擇月結。'
@@ -141,11 +228,21 @@ const savePaymentChoiceFor = (pkg: StoredPackage) => {
     feedbacks.value[pkg.id] = '請選擇付款方式。'
     return
   }
+
+  const previous = resolveMethod(pkg.payment_method)
   packageStore.setPaymentMethod(pkg.id, choice)
-  feedbacks.value[pkg.id] = `已為包裹設定付款方式：${paymentLabel[choice]}。`
+  feedbacks.value[pkg.id] = `已更新付款方式：${paymentLabel[choice]}。`
+
+  try {
+    await api.setPackagePaymentMethod(pkg.id, { payment_method: choice as any })
+    await packageStore.fetchUnpaid(auth.user?.id)
+  } catch (err: any) {
+    packageStore.setPaymentMethod(pkg.id, previous)
+    feedbacks.value[pkg.id] = err?.message || '更新付款方式失敗'
+  }
 }
 
-const methodOptions: PaymentMethod[] = ['cash', 'credit_card', 'online_bank', 'monthly_billing', 'third_party']
+const methodOptions: PaymentMethod[] = ['cash', 'credit_card', 'bank_transfer', 'monthly_billing', 'third_party_payment']
 
 const formatCreatedAt = (value?: string | number | Date) => {
   if (!value) return '剛建立'
@@ -194,47 +291,29 @@ const decodeTrackingTimestamp = (tracking?: string) => {
   }
 }
 
-const confirmPay = (pkg: StoredPackage) => {
-  feedbacks.value[pkg.id] = '已按下確認付款（功能尚待串接）。'
-}
+const confirmPay = async (pkg: StoredPackage) => {
+  feedbacks.value[pkg.id] = ''
+  const choice = paymentChoices.value[pkg.id] ?? resolveMethod(pkg.payment_method)
 
-const loadPendingBills = async () => {
-  billsError.value = ''
-  pendingBills.value = []
-  billFeedbacks.value = {}
-
-  if (auth.user?.user_class !== 'contract_customer') return
-
-  isLoadingBills.value = true
-  try {
-    const res = await api.getBillingBills({ status: 'pending' })
-    const ready = (res.bills ?? []).filter((b) => Boolean(b.due_date))
-    pendingBills.value = ready
-    for (const bill of ready) {
-      if (!billPaymentMethods.value[bill.id]) {
-        billPaymentMethods.value[bill.id] = 'credit_card'
-      }
-    }
-  } catch (err: any) {
-    billsError.value = err?.message || '載入待付款帳單失敗'
-  } finally {
-    isLoadingBills.value = false
+  if (choice === 'monthly_billing' && auth.user?.user_class !== 'contract_customer') {
+    feedbacks.value[pkg.id] = '非合約客戶不可選擇月結。'
+    return
   }
-}
-
-const confirmPayBill = async (bill: BillingBillListItem) => {
-  billFeedbacks.value[bill.id] = ''
-  const method = billPaymentMethods.value[bill.id] ?? 'credit_card'
+  if (isSystemMonthlyInvoice(pkg) && choice === 'monthly_billing') {
+    feedbacks.value[pkg.id] = '帳期費用不可再次選擇月結，請改用其他付款方式。'
+    return
+  }
+  if (!canPayNow(pkg)) {
+    feedbacks.value[pkg.id] = payableReasonFor(pkg) ?? '尚未達付款條件。'
+    return
+  }
   try {
-    const res = await api.payBillingBill({
-      bill_id: bill.id,
-      payment_method: method,
-      amount: bill.total_amount,
-    })
-    billFeedbacks.value[bill.id] = res.message || '付款成功'
-    await loadPendingBills()
+    await api.payPackage(pkg.id, { payment_method: choice as any })
+    feedbacks.value[pkg.id] =
+      choice === 'monthly_billing' ? '已確認月結支付（加入本期未出帳區，視為已付款）。' : choice === 'cash' ? '付款成功（現金）。' : '付款成功。'
+    await packageStore.fetchUnpaid(auth.user?.id)
   } catch (err: any) {
-    billFeedbacks.value[bill.id] = err?.message || '付款失敗'
+    feedbacks.value[pkg.id] = err?.message || '付款失敗'
   }
 }
 
@@ -257,6 +336,14 @@ const allowedMethodsFor = (pkg: StoredPackage) =>
     }
     return true
   })
+
+const canPayNow = (pkg: StoredPackage) => {
+  return getPayableSnapshot(pkg)?.payable_now ?? true
+}
+
+const payableReasonFor = (pkg: StoredPackage) => {
+  return getPayableSnapshot(pkg)?.reason ?? null
+}
 </script>
 
 <template>
@@ -292,44 +379,6 @@ const allowedMethodsFor = (pkg: StoredPackage) =>
         <p class="hint">列出需要你付款的貨件，顯示編號與建立時間；點擊後選擇付款方式。</p>
       </div>
 
-      <div v-if="auth.user?.user_class === 'contract_customer'" class="bill-block">
-        <div class="legend" style="margin-bottom: 6px">
-          <p class="eyebrow">待付款帳單</p>
-          <p class="hint">月底結算後，月結帳單會出現在此清單。</p>
-        </div>
-
-        <div v-if="isLoadingBills" class="empty-state">
-          <p>讀取帳單中，請稍候...</p>
-        </div>
-        <div v-else-if="billsError" class="empty-state">
-          <p>{{ billsError }}</p>
-          <button class="ghost-btn" type="button" @click="loadPendingBills">重新載入</button>
-        </div>
-        <div v-else-if="!pendingBills.length" class="empty-state">
-          <p>目前沒有待付款帳單。</p>
-        </div>
-        <ul v-else class="bill-list">
-          <li v-for="bill in pendingBills" :key="bill.id" class="bill-row">
-            <div class="bill-row-main">
-              <strong>帳單 | {{ bill.period }}</strong>
-              <span class="pill">金額：{{ bill.total_amount }} 元</span>
-            </div>
-            <p class="meta">繳費期限：{{ bill.due_date || '--' }} · 包裹數：{{ bill.package_count ?? 0 }}</p>
-            <div class="actions">
-              <label class="form-field" style="margin: 0; min-width: 220px">
-                <span>付款方式</span>
-                <select v-model="billPaymentMethods[bill.id]" name="billPaymentMethod">
-                  <option value="credit_card">信用卡</option>
-                  <option value="bank_transfer">匯款</option>
-                </select>
-              </label>
-              <button class="primary-btn" type="button" @click="confirmPayBill(bill)">繳費</button>
-            </div>
-            <p v-if="billFeedbacks[bill.id]" class="hint">{{ billFeedbacks[bill.id] }}</p>
-          </li>
-        </ul>
-      </div>
-
       <p v-if="focusNotice" class="hint" style="margin-bottom: 10px">{{ focusNotice }}</p>
 
       <div v-if="isLoading" class="empty-state">
@@ -354,25 +403,48 @@ const allowedMethodsFor = (pkg: StoredPackage) =>
           <button type="button" class="row-btn" @click="togglePackage(pkg)">
             <span class="tracking">{{ billTypeLabel(pkg) }} | {{ pkg.tracking_number || pkg.id }}</span>
             <span class="pill">{{ paymentLabel[resolveMethod(pkg.payment_method)] }}</span>
+            <span class="pill">應付：{{ formatMoney(amountFor(pkg)) }} 元</span>
+            <span v-if="!canPayNow(pkg)" class="pill danger">未達付款條件</span>
             <span class="meta">建立：{{ formatCreatedAt(resolveCreatedAt(pkg)) }}</span>
           </button>
           <div v-if="expandedIds.has(pkg.id)" class="package-detail">
-            <p class="meta">
-              寄件者：{{ pkg.sender || '未填寫' }} · 收件者：{{ pkg.receiver || '未填寫' }} · 重量 {{ pkg.weight ?? '--' }} kg ·
-              配送 {{ pkg.delivery_time || '未選擇' }}
-            </p>
-            <p class="meta">目前付款方式：{{ paymentLabel[resolveMethod(pkg.payment_method)] }}</p>
-            <label class="form-field">
-              <span>付款方式</span>
-                <select v-model="paymentChoices[pkg.id]" name="paymentChoice">
+            <div class="detail-grid">
+              <p class="meta">
+                寄件者：{{ senderDisplayName(pkg, auth.user?.user_name) }}
+                <span v-if="pkg.sender_phone">（{{ pkg.sender_phone }}）</span>
+              </p>
+              <p class="meta">
+                收件者：{{ receiverDisplayName(pkg, auth.user?.user_name) }}
+                <span v-if="pkg.receiver_phone">（{{ pkg.receiver_phone }}）</span>
+              </p>
+              <p class="meta">寄件地址：{{ pkg.sender_address || '--' }}</p>
+              <p class="meta">收件地址：{{ pkg.receiver_address || '--' }}</p>
+              <p class="meta">
+                尺寸：{{ dimensionsLabel(pkg) }}
+                · 重量：{{ pkg.weight ?? '--' }} kg
+              </p>
+              <p class="meta">配送時效：{{ resolveDeliveryLabel(pkg.delivery_time) }}</p>
+              <p class="meta">應付金額：{{ formatMoney(amountFor(pkg)) }} 元</p>
+              <p class="meta">目前付款方式：{{ paymentLabel[resolveMethod(pkg.payment_method)] }}</p>
+              <p v-if="resolveSpecialMarks(pkg).length" class="meta">特殊標記：{{ resolveSpecialMarks(pkg).join('、') }}</p>
+              <p v-if="resolveNotes(pkg)" class="meta">備註：{{ resolveNotes(pkg) }}</p>
+            </div>
+            <p v-if="!canPayNow(pkg) && payableReasonFor(pkg)" class="chip danger">{{ payableReasonFor(pkg) }}</p>
+            <div class="actions">
+              <div class="method-picker">
+                <span class="meta">付款方式</span>
+                <select
+                  v-model="paymentChoices[pkg.id]"
+                  class="method-select"
+                  name="paymentChoice"
+                  @change="updatePaymentMethodFor(pkg)"
+                >
                   <option v-for="method in allowedMethodsFor(pkg)" :key="method" :value="method">
                     {{ paymentLabel[method] }}
                   </option>
                 </select>
-            </label>
-            <div class="actions">
-              <button class="primary-btn" type="button" @click="savePaymentChoiceFor(pkg)">更新付款方式</button>
-              <button class="ghost-btn" type="button" @click="confirmPay(pkg)">確認付款</button>
+              </div>
+              <button class="ghost-btn" type="button" :disabled="!canPayNow(pkg)" @click="confirmPay(pkg)">確認付款</button>
             </div>
             <p v-if="feedbacks[pkg.id]" class="hint">{{ feedbacks[pkg.id] }}</p>
           </div>
@@ -383,24 +455,108 @@ const allowedMethodsFor = (pkg: StoredPackage) =>
     <div v-else class="card records-card">
       <div class="legend">
         <p class="eyebrow">付款紀錄</p>
-        <p class="hint">查看已付款或月結紀錄，支援篩選（目前為占位）。</p>
+        <p class="hint">現金/信用卡/網銀/第三方的付款會出現在這裡；月結包裹不列入付款紀錄。</p>
       </div>
-      <div class="filters">
-        <label class="form-field">
-          <span>類型</span>
-          <select v-model="recordFilters.type">
-            <option value="all">全部</option>
-            <option value="package">貨物</option>
-            <option value="monthly">月結</option>
-          </select>
-        </label>
-        <label class="form-field">
-          <span>搜尋關鍵字</span>
-          <input v-model="recordFilters.keyword" type="text" placeholder="輸入編號或收件人..." />
-        </label>
+
+      <div v-if="isLoadingRecords" class="empty-state">
+        <p>讀取中...</p>
       </div>
-      <div class="empty-state">
+      <div v-else-if="recordsError" class="empty-state">
+        <p>{{ recordsError }}</p>
+        <button class="ghost-btn" type="button" @click="loadPaymentRecords">重新載入</button>
+      </div>
+      <div v-else-if="!paidPackageRecords.length && !paidBillRecords.length" class="empty-state">
         <p>目前沒有付款紀錄。</p>
+      </div>
+      <div v-else>
+        <div v-if="paidPackageRecords.length" class="bill-block">
+          <p class="eyebrow">包裹付款</p>
+          <ul class="package-list">
+            <li
+              v-for="item in paidPackageRecords"
+              :key="item.package.id"
+              class="package-row"
+              :class="{ active: expandedRecordIds.has(recordKeyForPackage(item.package.id)) }"
+            >
+              <button type="button" class="row-btn" @click="toggleRecord(recordKeyForPackage(item.package.id))">
+                <span class="tracking">貨物 | {{ item.package.tracking_number || item.package.id }}</span>
+                <span class="meta">{{ item.paid_at ? formatCreatedAt(item.paid_at) : '--' }}</span>
+              </button>
+
+              <div v-if="expandedRecordIds.has(recordKeyForPackage(item.package.id))" class="package-detail">
+                <div class="detail-grid">
+                  <p class="meta">
+                    寄件者：{{ senderDisplayName(item.package as any, auth.user?.user_name) }}
+                    <span v-if="item.package.sender_phone">（{{ item.package.sender_phone }}）</span>
+                  </p>
+                  <p class="meta">
+                    收件者：{{ receiverDisplayName(item.package as any, auth.user?.user_name) }}
+                    <span v-if="item.package.receiver_phone">（{{ item.package.receiver_phone }}）</span>
+                  </p>
+                  <p class="meta">寄件地址：{{ item.package.sender_address || '--' }}</p>
+                  <p class="meta">收件地址：{{ item.package.receiver_address || '--' }}</p>
+                  <p class="meta">尺寸：{{ dimensionsLabel(item.package as any) }} · 重量：{{ item.package.weight ?? '--' }} kg</p>
+                  <p class="meta">配送時效：{{ resolveDeliveryLabel(item.package.delivery_time) }}</p>
+                  <p v-if="resolveSpecialMarks(item.package as any).length" class="meta">
+                    特殊標記：{{ resolveSpecialMarks(item.package as any).join('、') }}
+                  </p>
+                  <p v-if="resolveNotes(item.package as any)" class="meta">備註：{{ resolveNotes(item.package as any) }}</p>
+                  <p class="meta">付款方式：{{ paymentLabel[resolveMethod(item.package.payment_method)] }}</p>
+                  <p class="meta">付款金額：{{ formatMoney(item.amount) }} 元</p>
+                  <p class="meta">付款時間：{{ item.paid_at ? formatCreatedAt(item.paid_at) : '--' }}</p>
+                </div>
+              </div>
+            </li>
+          </ul>
+        </div>
+
+        <div v-if="paidBillRecords.length" class="bill-block">
+          <p class="eyebrow">月結帳單付款</p>
+          <ul class="package-list">
+            <li
+              v-for="item in paidBillRecords"
+              :key="item.bill_id"
+              class="package-row"
+              :class="{ active: expandedRecordIds.has(recordKeyForBill(item.bill_id)) }"
+            >
+              <button type="button" class="row-btn" @click="toggleBillRecord(item.bill_id)">
+                <span class="tracking">月結 | {{ item.period }}</span>
+                <span class="pill">{{ billPaymentMethodLabel(item.payment_method) }}</span>
+                <span class="pill">金額：{{ formatMoney(item.amount) }} 元</span>
+                <span class="meta">付款：{{ item.paid_at ? formatCreatedAt(item.paid_at) : '--' }}</span>
+              </button>
+
+              <div v-if="expandedRecordIds.has(recordKeyForBill(item.bill_id))" class="package-detail">
+                <div class="detail-grid">
+                  <p class="meta">帳單期間：{{ item.period }}</p>
+                  <p class="meta">付款方式：{{ billPaymentMethodLabel(item.payment_method) }}</p>
+                  <p class="meta">付款金額：{{ formatMoney(item.amount) }} 元</p>
+                  <p class="meta">付款時間：{{ item.paid_at ? formatCreatedAt(item.paid_at) : '--' }}</p>
+                </div>
+
+                <div v-if="billDetailLoading[item.bill_id]" class="empty-state">
+                  <p>載入帳單明細中...</p>
+                </div>
+                <div v-else-if="billDetailError[item.bill_id]" class="empty-state">
+                  <p>{{ billDetailError[item.bill_id] }}</p>
+                  <button class="ghost-btn" type="button" @click="ensureBillDetail(item.bill_id)">重新載入</button>
+                </div>
+                <div v-else-if="billDetails[item.bill_id] && billDetails[item.bill_id]!.items?.length" class="detail-grid">
+                  <p class="meta">包裹明細（{{ billDetails[item.bill_id]!.items.length }} 筆）</p>
+                  <ul class="bill-list" style="gap: 6px">
+                    <li v-for="b in billDetails[item.bill_id]!.items" :key="b.package_id" class="bill-row" style="padding: 10px">
+                      <p class="tracking">月結 | {{ b.tracking_number || b.package_id }}</p>
+                      <p class="meta">費用：{{ formatMoney(b.cost) }} 元 · 寄出：{{ b.shipped_at || '--' }}</p>
+                    </li>
+                  </ul>
+                </div>
+                <div v-else class="empty-state">
+                  <p>沒有帳單明細或本期無包裹。</p>
+                </div>
+              </div>
+            </li>
+          </ul>
+        </div>
       </div>
     </div>
   </section>
@@ -496,6 +652,28 @@ const allowedMethodsFor = (pkg: StoredPackage) =>
   border-color: var(--accent);
 }
 
+.detail-grid {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.method-picker {
+  display: inline-flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.method-select {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--surface-stroke);
+  background: rgba(255, 255, 255, 0.86);
+  color: var(--text-main);
+  min-width: 220px;
+}
+
 .package-row.highlight {
   border-color: var(--accent);
   box-shadow: 0 0 0 2px rgba(165, 122, 99, 0.25);
@@ -523,6 +701,11 @@ const allowedMethodsFor = (pkg: StoredPackage) =>
   border-radius: 999px;
   background: rgba(0, 0, 0, 0.05);
   font-size: 13px;
+}
+
+.pill.danger {
+  background: rgba(161, 60, 60, 0.1);
+  color: #7a2e2e;
 }
 
 .package-detail {
@@ -572,5 +755,10 @@ const allowedMethodsFor = (pkg: StoredPackage) =>
   border: 1px solid currentColor;
   padding: 8px 12px;
   border-radius: 10px;
+}
+
+.ghost-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 </style>

@@ -1,7 +1,7 @@
 # 後端 API 接口契約文件
 
 > Legacy：此文件為歷史單檔版本快照（內容不再更新，且不作為規格權威來源；若內容與現行實作衝突，請以後端實作與 `docs/modules/` 為準）。
-> - 新的 API 契約入口：`docs/api-contract.md`
+> - 新的 API 契約入口：`docs/reference/api-contract.md`（舊入口：`docs/api-contract.md`）
 > - 介面參考（拆分後）：`docs/reference/api/README.md`
 > - 規則/流程（權威來源）：`docs/modules/README.md`
 > - 顧客追蹤與 Stage（權威來源）：`docs/modules/tracking.md`
@@ -490,7 +490,8 @@ Authorization: Bearer <token>
   "content_description": "書籍",
   "service_level": "overnight | two_day | standard | economy",
   "special_handling": ["fragile", "dangerous", "international"],
-  "payment_type": "cash | credit_card | bank_transfer | monthly_billing | third_party_payment"
+  "payment_type": "prepaid | cod",
+  "payment_method": "cash | credit_card | bank_transfer | monthly_billing | third_party_payment"
 }
 ```
 
@@ -506,7 +507,8 @@ Authorization: Bearer <token>
 | `content_description` | string | ✅ | 內容物描述（依郵政法規必填） |
 | `service_level` | string | ✅ | 配送時效：`overnight`(隔夜)、`two_day`(兩日)、`standard`(標準)、`economy`(經濟) |
 | `special_handling` | array | ❌ | 特殊處理標記：`fragile`(易碎)、`dangerous`(危險品)、`international`(國際) |
-| `payment_type` | string | ✅ | 付款方式：`cash`(現金支付)、`credit_card`(信用卡)、`bank_transfer`(網路銀行)、`monthly`(月結帳單) 僅限合約客戶、`third_party_payment`(第三方支付) |
+| `payment_type` | string | ✅ | 付款責任：`prepaid`(寄件者付)、`cod`(收件者付；收件者需為系統內客戶) |
+| `payment_method` | string | ✅ | 付款方式：`cash`(現金)、`credit_card`(信用卡)、`bank_transfer`(網銀)、`third_party_payment`(第三方)、`monthly_billing`(月結；僅合約客戶) |
 
 #### 輸出格式 (Success Response - 201)
 
@@ -533,7 +535,7 @@ Authorization: Bearer <token>
 |--------|------|
 | 400 | 必填欄位缺失、無效的 package_type/service_level |
 | 401 | 未認證 |
-| 403 | 非合約客戶嘗試使用 `payment_type = monthly`、或非 customer 角色 |
+| 403 | 非合約客戶嘗試使用 `payment_method = monthly_billing`、或非 customer 角色 |
 
 ---
 
@@ -1620,7 +1622,7 @@ exception --(客服處理 action=cancel)-->（取消委託；不再派發任務�
 以下 API 尚未在上述章節詳細定義，需後續補齊：
 
 ### 8.1 管理員後台 (Admin KPI & Dashboard)
-- `GET /api/admin/stats`: 取得系統關鍵指標 (KPI)，如今日包裹數、異常數。
+- `GET /api/admin/stats`：（未實作）此 endpoint 目前不存在；如需 KPI 請另行設計/實作統計端點（目前可用 `GET /api/admin/system/errors` 查看系統錯誤）。
 
 ### 8.2 使用者管理 (User Mgmt)
 - `POST /api/admin/users/:id/suspend`: 停用帳號

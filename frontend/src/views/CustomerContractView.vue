@@ -3,10 +3,22 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import {
   api,
   type BillingBillDetailResponse,
+  type BillingBillListItem,
   type BillingBillStatus,
   type ContractApplicationPayload,
+  type PackageRecord,
 } from '../services/api'
 import { useAuthStore } from '../stores/auth'
+import {
+  dimensionsLabel,
+  formatDateTime,
+  formatMoney,
+  receiverDisplayName,
+  resolveDeliveryLabel,
+  resolveNotes,
+  resolveSpecialMarks,
+  senderDisplayName,
+} from '../utils/packageDisplay'
 
 const auth = useAuthStore()
 
@@ -30,6 +42,11 @@ const isLoadingStatus = ref(false)
 const isLoadingBill = ref(false)
 const billErrorMessage = ref('')
 const currentBill = ref<BillingBillDetailResponse['bill'] | null>(null)
+const currentBillMeta = ref<BillingBillListItem | null>(null)
+const expandedItemIds = ref<Set<string>>(new Set())
+const packageDetails = ref<Record<string, PackageRecord | null>>({})
+const packageDetailLoading = ref<Record<string, boolean>>({})
+const packageDetailError = ref<Record<string, string>>({})
 
 const statusLabel = computed(() => {
   switch (applicationStatus.value) {
@@ -102,29 +119,61 @@ const loadCurrentBill = async () => {
   isLoadingBill.value = true
   billErrorMessage.value = ''
   currentBill.value = null
+  currentBillMeta.value = null
+  expandedItemIds.value = new Set()
+  packageDetails.value = {}
+  packageDetailLoading.value = {}
+  packageDetailError.value = {}
 
   try {
     const { start, end } = getCurrentCycleUtcRange()
     const billsRes = await api.getBillingBills({ period_from: start, period_to: end })
-    const first = billsRes.bills?.[0]
-    if (!first?.id) {
+    const bills = billsRes.bills ?? []
+    const selected = bills.find((b) => !b.due_date) ?? bills[0]
+    if (!selected?.id) {
       currentBill.value = null
+      currentBillMeta.value = null
       return
     }
 
-    const detail = await api.getBillingBillDetail(first.id)
+    currentBillMeta.value = selected
+    const detail = await api.getBillingBillDetail(selected.id)
     currentBill.value = detail.bill
   } catch (err: any) {
     billErrorMessage.value = err?.message || '載入本期帳單失敗'
     currentBill.value = null
+    currentBillMeta.value = null
   } finally {
     isLoadingBill.value = false
   }
 }
 
-const formatMoney = (value?: number | null) => {
-  const amount = Number(value ?? 0)
-  return new Intl.NumberFormat('zh-TW').format(Number.isFinite(amount) ? amount : 0)
+const ensurePackageDetail = async (packageId: string) => {
+  if (!packageId) return
+  if (packageDetails.value[packageId]) return
+  if (packageDetailLoading.value[packageId]) return
+
+  packageDetailLoading.value = { ...packageDetailLoading.value, [packageId]: true }
+  packageDetailError.value = { ...packageDetailError.value, [packageId]: '' }
+
+  try {
+    const res = await api.getPackageStatus(packageId)
+    packageDetails.value = { ...packageDetails.value, [packageId]: res.package }
+  } catch (err: any) {
+    packageDetailError.value = { ...packageDetailError.value, [packageId]: err?.message || '載入包裹資訊失敗' }
+    packageDetails.value = { ...packageDetails.value, [packageId]: null }
+  } finally {
+    packageDetailLoading.value = { ...packageDetailLoading.value, [packageId]: false }
+  }
+}
+
+const toggleItem = async (packageId: string) => {
+  const next = new Set(expandedItemIds.value)
+  const willOpen = !next.has(packageId)
+  if (!willOpen) next.delete(packageId)
+  else next.add(packageId)
+  expandedItemIds.value = next
+  if (willOpen) await ensurePackageDetail(packageId)
 }
 
 const billStatusLabel = (status?: BillingBillStatus | null) => {
@@ -278,6 +327,10 @@ onMounted(() => {
               <span class="value">{{ currentBill.period }}</span>
             </div>
             <div class="summary-item">
+              <span class="label">出帳狀態</span>
+              <span class="value">{{ currentBillMeta?.due_date ? '已出帳' : '未出帳' }}</span>
+            </div>
+            <div class="summary-item">
               <span class="label">帳單狀態</span>
               <span class="value">{{ billStatusLabel(currentBill.status) }}</span>
             </div>
@@ -295,18 +348,62 @@ onMounted(() => {
             </div>
           </div>
 
-          <h3 class="section-subtitle">本期包裹明細</h3>
+          <h3 class="section-subtitle">{{ currentBillMeta?.due_date ? '本期帳單包裹' : '本期未出帳包裹' }}</h3>
           <div class="billing-items-placeholder" style="border-style: solid">
-            <p v-if="!currentBill.items?.length" class="muted">本期帳單目前沒有包裹。</p>
-            <ul v-else class="bill-items">
-              <li v-for="item in currentBill.items" :key="item.package_id" class="bill-item">
-                <div class="bill-item-main">
-                  <strong class="bill-item-id">{{ item.tracking_number || item.package_id }}</strong>
-                  <span class="muted">{{ item.service_level || 'standard' }}</span>
-                </div>
-                <div class="bill-item-meta">
-                  <span class="muted">寄件時間：{{ item.shipped_at || '--' }}</span>
-                  <span class="muted">費用：{{ formatMoney(item.cost) }} 元</span>
+            <p v-if="!currentBill.items?.length" class="muted">目前沒有包裹明細。</p>
+            <ul v-else class="package-list">
+              <li
+                v-for="item in currentBill.items"
+                :key="item.package_id"
+                class="package-row"
+                :class="{ active: expandedItemIds.has(item.package_id) }"
+              >
+                <button type="button" class="row-btn" @click="toggleItem(item.package_id)">
+                  <span class="tracking">月結 | {{ item.tracking_number || item.package_id }}</span>
+                  <span class="meta">{{ item.shipped_at ? formatDateTime(item.shipped_at) : '--' }}</span>
+                </button>
+
+                <div v-if="expandedItemIds.has(item.package_id)" class="package-detail">
+                  <div v-if="packageDetailLoading[item.package_id]" class="empty-state">
+                    <p>載入包裹資訊中...</p>
+                  </div>
+                  <div v-else-if="packageDetailError[item.package_id]" class="empty-state">
+                    <p>{{ packageDetailError[item.package_id] }}</p>
+                    <button class="secondary-btn" type="button" @click="ensurePackageDetail(item.package_id)">重新載入</button>
+                  </div>
+                  <template v-else>
+                    <div class="detail-grid">
+                      <template v-if="packageDetails[item.package_id]">
+                        <p class="meta">
+                          寄件者：{{ senderDisplayName(packageDetails[item.package_id]!, auth.user?.user_name) }}
+                          <span v-if="packageDetails[item.package_id]!.sender_phone"
+                            >（{{ packageDetails[item.package_id]!.sender_phone }}）</span
+                          >
+                        </p>
+                        <p class="meta">
+                          收件者：{{ receiverDisplayName(packageDetails[item.package_id]!, auth.user?.user_name) }}
+                          <span v-if="packageDetails[item.package_id]!.receiver_phone"
+                            >（{{ packageDetails[item.package_id]!.receiver_phone }}）</span
+                          >
+                        </p>
+                        <p class="meta">寄件地址：{{ packageDetails[item.package_id]!.sender_address || '--' }}</p>
+                        <p class="meta">收件地址：{{ packageDetails[item.package_id]!.receiver_address || '--' }}</p>
+                        <p class="meta">
+                          尺寸：{{ dimensionsLabel(packageDetails[item.package_id]!) }}
+                          · 重量：{{ packageDetails[item.package_id]!.weight ?? '--' }} kg
+                        </p>
+                        <p class="meta">配送時效：{{ resolveDeliveryLabel(packageDetails[item.package_id]!.delivery_time) }}</p>
+                        <p v-if="resolveSpecialMarks(packageDetails[item.package_id]!).length" class="meta">
+                          特殊標記：{{ resolveSpecialMarks(packageDetails[item.package_id]!).join('、') }}
+                        </p>
+                        <p v-if="resolveNotes(packageDetails[item.package_id]!)" class="meta">
+                          備註：{{ resolveNotes(packageDetails[item.package_id]!) }}
+                        </p>
+                          <p class="meta">費用：{{ formatMoney(item.cost) }} 元</p>
+                        <p class="meta">寄出時間：{{ item.shipped_at ? formatDateTime(item.shipped_at) : '--' }}</p>
+                      </template>
+                    </div>
+                  </template>
                 </div>
               </li>
             </ul>
@@ -412,34 +509,75 @@ onMounted(() => {
   padding: 0.75rem;
   background: #fdfdfc;
 }
-.bill-items {
+.package-list {
   list-style: none;
   padding: 0;
   margin: 0;
   display: grid;
   gap: 10px;
 }
-.bill-item {
+
+.package-row {
   border: 1px solid #eee;
   border-radius: 10px;
-  padding: 10px;
+  overflow: hidden;
   background: #fff;
 }
-.bill-item-main {
-  display: flex;
-  gap: 10px;
-  align-items: baseline;
-  justify-content: space-between;
-  margin-bottom: 4px;
+
+.package-row.active {
+  border-color: var(--accent);
 }
-.bill-item-id {
+
+.row-btn {
+  width: 100%;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: space-between;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+}
+
+.tracking {
   font-weight: 700;
 }
-.bill-item-meta {
-  display: flex;
+
+.pill {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.05);
+  font-size: 13px;
+}
+
+.meta {
+  font-size: 14px;
+  color: #4a4a4a;
+}
+
+.package-detail {
+  padding: 12px;
+  border-top: 1px dashed #e5e7eb;
+  display: grid;
   gap: 10px;
+}
+
+.detail-grid {
+  display: grid;
+  gap: 6px;
+}
+
+.empty-state {
+  border: 1px dashed #e5e7eb;
+  border-radius: 10px;
+  padding: 12px;
+  display: flex;
+  align-items: center;
   justify-content: space-between;
-  flex-wrap: wrap;
+  gap: 10px;
+  background: rgba(255, 255, 255, 0.7);
 }
 @media (max-width: 640px) {
   .status-banner,
@@ -451,7 +589,7 @@ onMounted(() => {
     flex-direction: column;
     align-items: flex-start;
   }
-  .bill-item-main {
+  .row-btn {
     flex-direction: column;
     align-items: flex-start;
   }

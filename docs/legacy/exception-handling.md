@@ -227,7 +227,7 @@ location 目的是讓顧客地圖能區分「路上（線段）」與「在節�
 
 ## 8. API 契約與一致性規則
 
-候選端點（以 `docs/reference/api/README.md` 與 `docs/api-contract.md` 索引為準，後續在此章節落地完整 request/response）：
+候選端點（以 `docs/reference/api/README.md` 與 `docs/reference/api-contract.md` 索引為準，後續在此章節落地完整 request/response；舊入口：`docs/api-contract.md`）：
 - `POST /api/driver/packages/:packageId/exception`
 - `POST /api/warehouse/packages/:packageId/exception`
 - `GET /api/cs/exceptions`

@@ -43,7 +43,17 @@ async function computeInitialPaymentAmount(
       height: Number(payload.height)
     };
   } else if (payload.size) {
-    dimensions = guessDimensionsFromBoxType(payload.size);
+    const raw = String(payload.size).trim();
+    const match = raw.match(/(\d+(?:\.\d+)?)\s*[xX*×]\s*(\d+(?:\.\d+)?)\s*[xX*×]\s*(\d+(?:\.\d+)?)/);
+    if (match) {
+      dimensions = {
+        length: Number(match[1]),
+        width: Number(match[2]),
+        height: Number(match[3]),
+      };
+    } else {
+      dimensions = guessDimensionsFromBoxType(raw);
+    }
   }
 
   const weightKg = Number(payload.weight ?? 0);
@@ -99,6 +109,7 @@ export class PackageCreate extends OpenAPIRoute {
 							receiver_name: Str({ required: false, description: "Receiver name" }),
 							receiver_phone: Str({ required: false, description: "Receiver phone" }),
 							receiver_address: Str({ required: false, description: "Receiver address" }),
+							receiver_user_id: Str({ required: false, description: "Receiver user id (COD payer binding)" }),
 
 							weight: z.coerce.number().int().optional(),
 							size: Str({ required: false, description: "Package size (legacy)" }),
@@ -181,6 +192,8 @@ export class PackageCreate extends OpenAPIRoute {
 
 		const pickupType = (body.metadata as any)?.pickup_type;
 		const destinationType = (body.metadata as any)?.destination_type;
+		let resolvedCodReceiverCustomerId: string | null = null;
+		let codUnavailableReason: string | null = null;
 
 		try {
 			if (pickupType === "home") await validateEndpointAddress(normalizedSenderAddress, "home");
@@ -195,35 +208,33 @@ export class PackageCreate extends OpenAPIRoute {
 		}
 
 		if (body.payment_type === "cod") {
-			const receiverPhone = (body.receiver_phone ?? "").trim();
-			const receiverName = (resolvedReceiverName ?? "").trim();
+			if (body.receiver_user_id) {
+				const receiverCustomer = await c.env.DB.prepare(
+					"SELECT id FROM users WHERE id = ? AND user_type = 'customer' LIMIT 1",
+				)
+					.bind(String(body.receiver_user_id).trim())
+					.first<{ id: string }>();
 
-			if (!receiverPhone && !receiverName) {
-				return c.json(
-					{ success: false, error: "COD requires receiver_phone or receiver_name" },
-					400,
-				);
-			}
-
-			let sql = "SELECT id FROM users WHERE user_type = 'customer'";
-			const params: any[] = [];
-			if (receiverPhone && receiverName) {
-				sql += " AND (phone_number = ? OR user_name = ?)";
-				params.push(receiverPhone, receiverName);
-			} else if (receiverPhone) {
-				sql += " AND phone_number = ?";
-				params.push(receiverPhone);
+				if (!receiverCustomer) codUnavailableReason = "Receiver must be a registered customer to use COD";
+				else resolvedCodReceiverCustomerId = receiverCustomer.id;
 			} else {
-				sql += " AND user_name = ?";
-				params.push(receiverName);
-			}
+				const receiverPhone = (body.receiver_phone ?? "").trim();
+				const receiverName = (resolvedReceiverName ?? "").trim();
 
-			const receiverCustomer = await c.env.DB.prepare(sql).bind(...params).first<{ id: string }>();
-			if (!receiverCustomer) {
-				return c.json(
-					{ success: false, error: "Receiver must be a registered customer to use COD" },
-					400,
-				);
+				// To avoid ambiguous matches, COD payer resolution requires BOTH phone + name to match a registered customer.
+				if (!receiverPhone || !receiverName) {
+					codUnavailableReason = "COD requires receiver_name and receiver_phone to match a registered customer";
+				} else {
+					const hits = await c.env.DB.prepare(
+						"SELECT id FROM users WHERE user_type = 'customer' AND phone_number = ? AND user_name = ? LIMIT 2",
+					)
+						.bind(receiverPhone, receiverName)
+						.all<{ id: string }>();
+					const rows = hits.results ?? [];
+					if (rows.length === 1) resolvedCodReceiverCustomerId = rows[0].id;
+					else if (rows.length > 1) codUnavailableReason = "COD receiver match is ambiguous (multiple customers share name+phone)";
+					else codUnavailableReason = "Receiver not found; COD is only available for registered customers with matching name+phone";
+				}
 			}
 		}
 
@@ -262,11 +273,11 @@ export class PackageCreate extends OpenAPIRoute {
 				case "credit_card":
 					return "credit_card";
 				case "bank_transfer":
-					return "online_bank";
+					return "bank_transfer";
 				case "monthly":
 					return "monthly_billing";
 				case "third_party_payment":
-					return "third_party";
+					return "third_party_payment";
 				default:
 					return "cash";
 			}
@@ -276,7 +287,18 @@ export class PackageCreate extends OpenAPIRoute {
 		const customerPreference = await c.env.DB.prepare("SELECT billing_preference FROM users WHERE id = ?")
 			.bind(resolvedCustomerId)
 			.first<{ billing_preference: string | null }>();
-		const effectivePaymentMethod = body.payment_method ?? mapBillingPreferenceToPaymentMethod(customerPreference?.billing_preference);
+		const normalizePaymentMethod = (method: string | null | undefined) => {
+			const raw = String(method ?? "").trim();
+			if (raw === "cash" || raw === "credit_card" || raw === "bank_transfer" || raw === "third_party_payment" || raw === "monthly_billing") return raw;
+			if (raw === "online_bank") return "bank_transfer";
+			if (raw === "third_party") return "third_party_payment";
+			return null;
+		};
+		const effectivePaymentMethod = normalizePaymentMethod(body.payment_method) ?? mapBillingPreferenceToPaymentMethod(customerPreference?.billing_preference);
+
+		// If COD payer cannot be resolved, allow creation but downgrade to prepaid (sender pays).
+		const effectivePaymentType =
+			body.payment_type === "cod" && !resolvedCodReceiverCustomerId ? "prepaid" : (body.payment_type ?? null);
 
 		const packageId = crypto.randomUUID();
 		const trackingNumber = `TRK-${Date.now().toString(36)}-${packageId.slice(0, 8)}`;
@@ -310,7 +332,7 @@ export class PackageCreate extends OpenAPIRoute {
 			receiver_address: normalizedReceiverAddress || null,
 			payment_method: effectivePaymentMethod ?? null,
 			delivery_time: body.delivery_time ?? null,
-			payment_type: body.payment_type ?? null,
+			payment_type: effectivePaymentType ?? null,
 			declared_value: body.declared_value ?? null,
 			special_handling: {
 				dangerous_materials: body.dangerous_materials,
@@ -321,7 +343,12 @@ export class PackageCreate extends OpenAPIRoute {
 			pickup_time_window: body.pickup_time_window ?? null,
 			pickup_notes: body.pickup_notes ?? null,
 			route_path: body.route_path ?? null,
-			metadata: body.metadata ?? {},
+			metadata: {
+				...(body.metadata ?? {}),
+				...(body.payment_type === "cod" && !resolvedCodReceiverCustomerId
+					? { cod_requested: true, cod_unavailable_reason: codUnavailableReason ?? "COD payer cannot be resolved" }
+					: {}),
+			},
 		};
 
 		const specialHandlingList = [
@@ -354,7 +381,7 @@ export class PackageCreate extends OpenAPIRoute {
 					body.weight ?? null,
 					body.size ?? null,
 					body.delivery_time ?? null,
-					body.payment_type ?? null,
+					effectivePaymentType ?? null,
 					body.declared_value ?? null,
 					createdAt,
 					JSON.stringify(specialHandlingList),
@@ -368,7 +395,7 @@ export class PackageCreate extends OpenAPIRoute {
 			)
 				.run();
 
-			// Pre-create a payment record using the pricing formula so driver端可顯示應收款
+			// Pre-create a payment record using the pricing formula so driver can display fees to collect.
 			const pricing = await computeInitialPaymentAmount(c.env.DB, normalizedSenderAddress, normalizedReceiverAddress, {
 				weight: body.weight ?? null,
 				size: body.size ?? null,
@@ -381,14 +408,23 @@ export class PackageCreate extends OpenAPIRoute {
 				international_shipments: body.international_shipments,
 			});
 			const paymentId = crypto.randomUUID();
+			const payerUserId =
+				effectivePaymentType === "cod"
+					? resolvedCodReceiverCustomerId
+					: resolvedCustomerId;
+			if (!payerUserId) {
+				return c.json({ success: false, error: "Payment payer cannot be resolved" }, 400);
+			}
 			await c.env.DB.prepare(
 				`INSERT INTO payments (
-					id, total_amount, service_fee, distance_fee, weight_volume_fee, special_fee,
+					id, payer_user_id, payment_method, total_amount, service_fee, distance_fee, weight_volume_fee, special_fee,
 					calculated_at, paid_at, collected_by, package_id
-				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			)
 				.bind(
 					paymentId,
+					payerUserId,
+					effectivePaymentMethod ?? null,
 					pricing.totalCost,
 					null,
 					null,

@@ -1,6 +1,6 @@
 # Map & Routing（地圖與路線）
 
-本文件整理虛擬地圖、路線查詢與 route_path 的規則層；API 介面請見 `docs/reference/api/04-map-routing.md`（或從 `docs/api-contract.md` 索引進入）。
+本文件整理虛擬地圖、路線查詢與 route_path 的規則層；API 介面請見 `docs/reference/api/04-map-routing.md`（或從 `docs/reference/api-contract.md` 索引進入）。
 
 ## Intent（理念）
 

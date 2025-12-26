@@ -1,6 +1,6 @@
 # Shipping / Packages（出貨單與包裹）
 
-本文件描述出貨單建立與包裹主檔的規則層（含初始任務建立）；API 介面請見 `docs/reference/api/03-packages.md`（或從 `docs/api-contract.md` 索引進入）。
+本文件描述出貨單建立與包裹主檔的規則層（含初始任務建立）；API 介面請見 `docs/reference/api/03-packages.md`（或從 `docs/reference/api-contract.md` 索引進入）。
 
 ## Intent（理念）
 

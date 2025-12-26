@@ -90,8 +90,8 @@ export class BillingPaymentCreate extends OpenAPIRoute {
 
     // 更新帳單狀態
     await c.env.DB.prepare(
-      "UPDATE monthly_billing SET status = 'paid', paid_at = ? WHERE id = ?"
-    ).bind(now, body.bill_id).run();
+      "UPDATE monthly_billing SET status = 'paid', paid_at = ?, paid_method = ? WHERE id = ?"
+    ).bind(now, body.payment_method, body.bill_id).run();
 
     return c.json({
       success: true,
@@ -134,7 +134,7 @@ export class BillingPaymentList extends OpenAPIRoute {
 
     // 查詢已付款的帳單
     let sql = `
-      SELECT mb.id, mb.cycle_start, mb.cycle_end, mb.total_amount, mb.paid_at
+      SELECT mb.id, mb.cycle_start, mb.cycle_end, mb.total_amount, mb.paid_at, mb.paid_method
       FROM monthly_billing mb
       WHERE mb.customer_id = ? AND mb.status = 'paid'
     `;
@@ -166,6 +166,7 @@ export class BillingPaymentList extends OpenAPIRoute {
         period: `${bill.cycle_start} - ${bill.cycle_end}`,
         amount: bill.total_amount,
         paid_at: bill.paid_at,
+        payment_method: bill.paid_method ?? null,
       })),
     });
   }
