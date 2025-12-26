@@ -44,6 +44,7 @@
 - 核心名詞表：`docs/architecture/glossary.md`
 - 系統組件：`docs/architecture/components.md`
 - 事件模型與資料流：`docs/architecture/event-model-and-flows.md`
+- 品質屬性與非功能需求：`docs/architecture/quality-attributes.md`
 - 既有詳細表結構（資料字典）：`docs/reference/database-schema.md`（舊入口：`docs/database-schema.md`）
 - 運費/計價規格（routeCost 計價）：`docs/modules/pricing.md`
 

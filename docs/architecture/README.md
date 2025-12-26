@@ -9,7 +9,7 @@
 1. 系統概觀（不變量/邊界）：`docs/architecture/overview.md`
 2. 系統組件（Frontend/Backend/D1）：`docs/architecture/components.md`
 3. 事件模型與資料流（貨態事件流程）：`docs/architecture/event-model-and-flows.md`
-4. 資料模型（表責任摘要）：`docs/architecture/data-model.md`（DDL 以 `backend/migrations/` 為準）
-5. 名詞表（避免用詞漂移）：`docs/architecture/glossary.md`
-6. Repo 結構（檔案放置規則）：`docs/architecture/repository-structure.md`
-
+4. 品質屬性與非功能需求（需求 2.1～2.5）：`docs/architecture/quality-attributes.md`
+5. 資料模型（表責任摘要）：`docs/architecture/data-model.md`（DDL 以 `backend/migrations/` 為準）
+6. 名詞表（避免用詞漂移）：`docs/architecture/glossary.md`
+7. Repo 結構（檔案放置規則）：`docs/architecture/repository-structure.md`
