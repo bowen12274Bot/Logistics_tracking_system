@@ -1,6 +1,6 @@
 ﻿# User Module
 
-> 來源：`docs/reference/api-contract.legacy.md`（由 legacy 拆分）
+> 來源：`docs/legacy/api-contract.legacy.md`（由 legacy 拆分）
 >
 > - 本頁定位：接口參考（endpoint / request/response schema / error codes）
 > - 規則/流程：`docs/modules/users.md`、`docs/modules/contracts.md`
@@ -36,7 +36,7 @@
 | `email` | string | ✅ | Email（唯一，用於登入） |
 | `password` | string | ✅ | 密碼 |
 | `phone_number` | string | ✅ | 電話號碼（可用於登入） |
-| `address` | string | ✅ | 地址（作為預設寄/收件地址），輸入地圖座標上的絕對位置(x,y) |
+| `address` | string | ✅ | 預設地址（地圖節點 ID，例如 `END_HOME_0` / `END_STORE_0`） |
 
 > ⚠️ **安全限制**：後端強制 `user_type = customer`、`user_class = non_contract_customer`。即使請求中包含這些欄位也會被忽略。
 
@@ -219,7 +219,7 @@
 | `tax_id` | string | ✅ | 統一編號 |
 | `contact_person` | string | ✅ | 聯絡人姓名 |
 | `contact_phone` | string | ✅ | 聯絡電話 |
-| `billing_address` | string | ✅ | 地址，輸入地圖座標上的絕對位置(x,y) |
+| `billing_address` | string | ✅ | 發票/帳單地址（地圖節點 ID，例如 `END_HOME_0` / `END_STORE_0`） |
 | `notes` | string | ❌ | 備註，如合作內容、特殊需求等 |
 
 #### 輸出格式 (Success Response - 200)
@@ -242,12 +242,39 @@
 
 ---
 
-### 1.6 駕駛員 - 取得今日工作清單 `[已實作]`
+### 1.5.1 查詢合約申請狀態 `[已實作]`
+
+| 項目 | 說明 |
+|------|------|
+| **位置** | `GET /api/customers/contract-application/status` |
+| **功能** | 查詢指定客戶是否已有合約申請，以及最新申請的狀態（前端用於判斷是否顯示申請表單） |
+| **認證** | （依現行實作）不需要；客戶端通常仍會帶 Token |
+
+#### 輸入格式 (Query Parameters)
+
+| 參數 | 類型 | 必填 | 說明 |
+|------|------|------|------|
+| `customer_id` | string | ✅ | 客戶 ID |
+
+#### 輸出格式 (Success Response - 200)
+
+```json
+{
+  "success": true,
+  "has_application": true,
+  "application_id": "uuid",
+  "status": "pending | approved | rejected"
+}
+```
+
+---
+
+### 1.6 駕駛員 - 取得任務清單（V2）`[已實作]`
 
 | 項目 | 說明 |
 |------|------|
 | **位置** | `GET /api/driver/tasks` |
-| **功能** | 取得駕駛員今日需取件/配送的包裹清單 |
+| **功能** | 取得司機「已指派任務」或「所在節點可交接任務」清單（以 `delivery_tasks` 為主） |
 | **認證** | ✅ 需要 Token |
 | **權限** | `driver` |
 
@@ -255,24 +282,132 @@
 
 | 參數 | 類型 | 必填 | 說明 |
 |------|------|------|------|
-| `date` | string | ❌ | 日期（預設今天） |
-| `type` | string | ❌ | `pickup`(取件)、`delivery`(配送)、`all` |
+| `scope` | string | ❌ | `assigned`（預設）：只看指派給我的任務；`handoff`：看所在 `HUB_* / REG_*` 節點可交接任務 |
+| `status` | string | ❌ | `pending | accepted | in_progress | completed | canceled` |
+| `limit` | number | ❌ | 1–200（預設 50） |
 
-#### 錯誤回應
+#### 輸出格式 (Success Response - 200)
 
-| 狀態碼 | 說明 |
-|--------|------|
-| 401 | 未認證 |
-| 403 | 非 driver 角色 |
+```json
+{
+  "success": true,
+  "scope": "assigned",
+  "tasks": [
+    {
+      "id": "uuid",
+      "package_id": "uuid",
+      "task_type": "pickup | deliver",
+      "from_location": "REG_1",
+      "to_location": "HUB_0",
+      "status": "pending",
+      "segment_index": 0,
+      "tracking_number": "TRK-xxxx-xxxxxxxx",
+      "sender_address": "END_HOME_0",
+      "receiver_address": "END_STORE_3",
+      "payment_type": "prepaid | cod",
+      "payment_amount": 120,
+      "paid_at": null,
+      "estimated_delivery": "2025-12-13T00:00:00Z"
+    }
+  ]
+}
+```
+
+> 當 `scope=handoff` 時，回應會額外包含 `node_id`（司機車輛目前所在節點）。
 
 ---
 
-### 1.7 駕駛員 - 更新配送狀態 `[已實作]`
+### 1.6.1 駕駛員 - 接手交接任務（handoff）`[已實作]`
+
+| 項目 | 說明 |
+|------|------|
+| **位置** | `POST /api/driver/tasks/:taskId/accept` |
+| **功能** | 在 `HUB_* / REG_*` 節點接手一筆可交接任務（更新 `delivery_tasks.assigned_driver_id`） |
+| **認證** | ✅ 需要 Token |
+| **權限** | `driver` |
+
+> 後端會強制檢查：司機車輛 `current_node_id` 必須等於任務 `from_location`，且包裹不可為 terminal / active exception。
+
+---
+
+### 1.6.2 駕駛員 - 標記在途中（in_transit）`[已實作]`
+
+| 項目 | 說明 |
+|------|------|
+| **位置** | `POST /api/driver/tasks/:taskId/enroute` |
+| **功能** | 插入 `package_events.in_transit`（`location` 會寫入車輛代碼 `vehicle_code`） |
+| **認證** | ✅ 需要 Token |
+| **權限** | `driver` |
+
+---
+
+### 1.6.3 駕駛員 - 標記到達節點（arrived_*）`[已實作]`
+
+| 項目 | 說明 |
+|------|------|
+| **位置** | `POST /api/driver/tasks/:taskId/arrive` |
+| **功能** | 依任務類型插入 `arrived_pickup` 或 `arrived_delivery`（若同節點已存在則冪等） |
+| **認證** | ✅ 需要 Token |
+| **權限** | `driver` |
+
+---
+
+### 1.6.4 駕駛員 - 取件/裝載（pickup）`[已實作]`
+
+| 項目 | 說明 |
+|------|------|
+| **位置** | `POST /api/driver/tasks/:taskId/pickup` |
+| **功能** | 裝載貨物到車上（建立 `vehicle_cargo`），插入 `package_events.picked_up`，並將任務段設為 `in_progress` |
+| **認證** | ✅ 需要 Token |
+| **權限** | `driver` |
+
+> 預付（`payment_type=prepaid`）必須已結清（`paid_at` 有值）才允許取件；若是預付現金流程需先走 `collect-cash`。
+
+---
+
+### 1.6.5 駕駛員 - 投遞/卸貨（dropoff）`[已實作]`
+
+| 項目 | 說明 |
+|------|------|
+| **位置** | `POST /api/driver/tasks/:taskId/dropoff` |
+| **功能** | 卸貨（更新 `vehicle_cargo.unloaded_at`），並依目的地插入 `warehouse_in` 或 `delivered`，完成任務段 |
+| **認證** | ✅ 需要 Token |
+| **權限** | `driver` |
+
+> 到府代收（COD at home）會要求先完成收款（`paid_at` 有值）才允許 `delivered`。
+
+---
+
+### 1.6.6 駕駛員 - 完成任務段（complete）`[已實作]`
+
+| 項目 | 說明 |
+|------|------|
+| **位置** | `POST /api/driver/tasks/:taskId/complete` |
+| **功能** | 將該 `delivery_tasks` 標記為 `completed` |
+| **認證** | ✅ 需要 Token |
+| **權限** | `driver` |
+
+---
+
+### 1.6.7 駕駛員 - 現金收款（collect cash）`[已實作]`
+
+| 項目 | 說明 |
+|------|------|
+| **位置** | `POST /api/driver/packages/:packageId/collect-cash` |
+| **功能** | 司機在現場收現，更新 `payments.paid_at` 並插入 `payment_collected_*` 事件 |
+| **認證** | ✅ 需要 Token |
+| **權限** | `driver` |
+
+> 收款窗口與限制請見：`docs/features/driver-cash-collection.md`（到府預付需 `arrived_pickup`；到府代收需 `arrived_delivery`；門市代收不可由司機收現）。
+
+---
+
+### 1.7 駕駛員 - 寫入包裹事件（Legacy）`[已實作]`
 
 | 項目 | 說明 |
 |------|------|
 | **位置** | `POST /api/driver/packages/:packageId/status` |
-| **功能** | 駕駛員更新包裹狀態 |
+| **功能** | 直接插入一筆 `package_events`（不管理 `delivery_tasks` / `vehicle_cargo`） |
 | **認證** | ✅ 需要 Token |
 | **權限** | `driver` |
 
@@ -280,10 +415,9 @@
 
 ```json
 {
-  "status": "picked_up | out_for_delivery | delivered",
-  "signature": "base64_image",
-  "notes": "string",
-  "cod_amount": 500
+  "status": "picked_up | in_transit | out_for_delivery | delivered",
+  "note": "string",
+  "location": "TRUCK_001 | REG_3 | END_HOME_0"
 }
 ```
 
@@ -291,10 +425,11 @@
 
 | 狀態碼 | 說明 |
 |--------|------|
-| 400 | 不支援 exception，請改用異常申報 API |
+| 400 | 不支援 `status=exception`，請改用異常申報 API |
 | 401 | 未認證 |
 | 403 | 非 driver 角色 |
 | 404 | 包裹不存在 |
+| 409 | 包裹已是 terminal 或有 active exception |
 
 ---
 
@@ -313,8 +448,8 @@
 {
   "operation": "warehouse_in | warehouse_out | sorting",
   "package_ids": ["uuid1", "uuid2", "uuid3"],
-  "destination": "TRUCK_001",
-  "notes": "string"
+  "location_id": "REG_3 | HUB_1 | TRUCK_001",
+  "note": "string"
 }
 ```
 
@@ -359,5 +494,29 @@
 
 - 每個包裹依序寫入 `warehouse_received` + `sorting` 兩筆事件。
 - 已點收的包裹會冪等處理（不重複寫入）。
+
+---
+
+### 1.11 倉儲人員 - 派發下一段任務 `[已實作]`
+
+| 項目 | 說明 |
+|------|------|
+| **位置** | `POST /api/warehouse/packages/:packageId/dispatch-next` |
+| **功能** | 在本站點收後，派發包裹的下一段任務（必須是相鄰節點的一段） |
+| **認證** | ✅ 需要 Token |
+| **權限** | `warehouse_staff` |
+
+#### 輸入格式 (Request Body)
+
+```json
+{ "toNodeId": "HUB_1 | REG_2 | REG_4" }
+```
+
+#### 行為摘要（重點）
+
+- 起點 `fromNodeId` 由後端強制使用 `users.address`（本站）
+- 包裹必須在本站且已點收（最新事件為本站 `warehouse_received` 或 `sorting`）
+- `toNodeId` 必須與本站相鄰（`edges` 存在）
+- 成功後會建立一筆新的 `delivery_tasks`（`status='pending'`），並寫入 `route_decided` 事件
 
 

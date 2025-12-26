@@ -319,5 +319,5 @@ describe('模組名稱 API', () => {
 ## 📚 相關文件 (Related Documentation)
 
 - [測試計畫](vitest-plan.md) - 完整測試案例規劃
-- [API 契約文件](../api-contract.md) - API 規格參考
+- [API 契約文件](../reference/api-contract.md) - API 規格參考
 - [開發環境設定](getting-started.md) - 環境設定指南

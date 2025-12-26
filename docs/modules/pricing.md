@@ -1,17 +1,30 @@
-# 包裹運費規範（以地圖 routeCost 計價）
+# Pricing（運費與計價 / routeCost 計價）
 
-> 本文件以地圖路線的 `routeCost`（edges `cost` 加總）作為運費的主要變數，不再使用 Zone / distanceKm 分級。
+本文件整理運費試算/計價的規則層（權威）：定義輸入、計價演算法與防呆邊界。API 介面請見 `docs/reference/api/03-packages.md`（`POST /api/packages/estimate`）與 `docs/reference/api/04-map-routing.md`（`GET /api/map/route`）。
 
-> **[狀態說明]**: 本文件為 **規劃與演算法規範**。目前後端尚未完整實作此動態計價邏輯 (對應 Task S3, S4)。現行 `POST /api/packages` 僅支援基礎的寫入，運費計算仍為前端或簡易版邏輯。
+> 若與現行後端實作衝突，請以後端實作為準，並回頭修正本文件（避免文件與實作不一致）。
 
-## 【0】規則重點（必須符合）
+## Intent（理念）
+
+- 運費以地圖路線成本 `routeCost`（最短路徑 edges `cost` 加總）作為主要變數，不使用 Zone / distanceKm 分級。
+- 計價必須可解釋且可防呆：定義 BoxType、時效 multiplier、特殊標記與 floor/cap。
+
+## Data（資料落點）
+
+- 路線成本：由 `GET /api/map/route` 回傳 `route.total_cost`（即 `routeCost`），以及 `route.path`（除錯/展示用）。
+- 試算輸入/輸出：由 `POST /api/packages/estimate` 接受尺寸/重量/時效/標記，回傳 `box_type`、`route_cost`、`total_cost` 等（欄位以 API 文件為準）。
+- 包裹建立：建立包裹時會保存與計價相關的欄位（尺寸/重量/時效/路徑/費用等；以後端欄位為準）。
+
+## Core Rules（核心規則）
+
+### 1) 規則重點（必須符合）
 
 1. 運費使用地圖路線 `routeCost` 計價（由 edges `cost` 加總而來）。
 2. `specialMarks` 可疊加（同時有多個標記就累加/加乘相對應的規則）。
 3. BoxType 判定需同時考慮「尺寸」與「計費重量（實重/材積重取大）」。
 4. 防呆：設定最低運費（price floor）與最高運費上限（price cap）。
 
-## 【1】客戶輸入資料（運費試算）
+### 2) 輸入資料（運費試算）
 
 客戶提供（必要）：
 
@@ -27,9 +40,9 @@
 - `routeCost`：呼叫 `/api/map/route` 取得 `route.total_cost`
 - `routePath`：同上 API 的 `route.path`（可用於展示/除錯，不影響計價）
 
-## 【2】routeCost：定義、合理範圍、Normalization
+### 3) `routeCost`（定義、合理範圍、Normalization）
 
-### 【2.1】routeCost 代表什麼
+#### 3.1 `routeCost` 代表什麼
 
 `routeCost` 是「路線綜合成本」：將路徑上每一條 edge 的 `cost` 加總（Dijkstra 最短路徑的 `total_cost`）。
 
@@ -39,7 +52,7 @@
 - 路況/繞路造成的時間或成本（road_multiple）的替代指標
 - 兩者的綜合權重（不是純距離、也不是純時間）
 
-### 【2.2】常見區間（P50 / P90）
+#### 3.2 常見區間（P50 / P90）
 
 以下數值以「實際配送場景」統計：`fromNodeId = HUB_*` → `toNodeId = END_*` 的最短路徑 `route.total_cost` 分佈（也就是最短路徑上多條 edges `cost` 的加總，不是單一 edge 的 cost）。
 
@@ -51,7 +64,7 @@
 
 > 若地圖資料更新（新增節點/調整道路倍率），需重新計算分佈並更新下方 normalization 常數 `K`、以及 floor/cap。
 
-### 【2.3】Normalization（routeCost / K）
+#### 3.3 Normalization（`routeCost / K`）
 
 因為 `routeCost` 原始尺度較大，計價時先正規化：
 
@@ -59,7 +72,7 @@
 - `routeCostNorm = routeCost / K`
 - 防呆：`routeCostNorm = clamp(routeCostNorm, 0.30, 1.60)`（避免極端值影響過大）
 
-## 【3】配送型態（四種）與 multiplier（校準版）
+### 4) 配送型態（四種）與 multiplier（校準版）
 
 配送型態用「價格係數」表示（越快越貴），用於 `shipping = ceil(base * serviceMultiplier)`：
 
@@ -75,15 +88,15 @@
 - 係數差距必須明顯：`overnight > two_day > standard > economy`
 - 但不極端：避免 overnight 造成價格翻倍以上且超出 cap 的機率過高
 
-## 【4】BoxType：尺寸 + 計費重量 + 同箱型重量連續加價
+### 5) BoxType：尺寸 + 計費重量 + 同箱型重量連續加價
 
-### 【4.1】材積重（Volumetric Weight）
+#### 5.1 材積重（Volumetric Weight）
 
 - 材積（cm³）= `lengthCm * widthCm * heightCm`
 - 材積重（kg）= `材積 / 6000`
 - 計費重量（billableWeightKg）= `max(weightKg, volumetricWeightKg)`
 
-### 【4.2】箱型規格（判定門檻）
+#### 5.2 箱型規格（判定門檻）
 
 | BoxType | 尺寸上限（cm） | 計費重量上限 |
 | --- | --- | --- |
@@ -92,7 +105,7 @@
 | 中型箱 M | 60 × 40 × 40 | ≤ 20 kg |
 | 大型箱 L | 90 × 60 × 60 | ≤ 50 kg |
 
-### 【4.3】BoxType 判定方式（同時看尺寸與重量）
+#### 5.3 BoxType 判定方式（同時看尺寸與重量）
 
 1. 計算 `billableWeightKg`。
 2. 尺寸正規化：把三邊排序成 `d1 >= d2 >= d3`。
@@ -104,7 +117,7 @@
    - L：`d1<=90` 且 `d2<=60` 且 `d3<=60` 且 `billableWeightKg<=50`
 5. 若都不符合 → 服務不適用。
 
-### 【4.4】重量連續加價（同一 BoxType 內）
+#### 5.4 重量連續加價（同一 BoxType 內）
 
 在同一箱型內，若 `billableWeightKg` 超過「基準重量」，每超過 1 kg 加價 `+X`（向上取整 kg）：
 
@@ -117,16 +130,16 @@
 | M | 10 | 15 |
 | L | 25 | 12 |
 
-## 【5】特殊標記（可疊加；國際件改 multiplier）
+### 6) 特殊標記（可疊加；國際件改 multiplier）
 
-### 【5.1】dangerous / fragile（加法疊加）
+#### 6.1 `dangerous` / `fragile`（加法疊加）
 
 | Mark | 說明 | 加價 |
 | --- | --- | ---: |
 | `dangerous` | 危險品 | +120 |
 | `fragile` | 易碎品 | +60 |
 
-### 【5.2】international（改 multiplier）
+#### 6.2 `international`（改 multiplier）
 
 `international` 不再使用固定加價，改為乘數：
 
@@ -135,9 +148,9 @@
 
 > `international` 代表跨境流程/風險與成本比例性上升，因此用 multiplier 讓長路線也會更貴，短路線也不會被固定加價過度放大。
 
-## 【6】以 routeCost 重新訂價（含 floor / cap）
+### 7) 訂價（含 floor / cap）
 
-### 【6.1】基礎運費（BoxType × routeCostNorm）
+#### 7.1 基礎運費（BoxType × routeCostNorm）
 
 先算基礎成本（未含時效、重量連續加價、特殊標記）：
 
@@ -150,7 +163,7 @@
 | M | 110 | 260 |
 | L | 160 | 380 |
 
-### 【6.2】最低運費（price floor）
+#### 7.2 最低運費（price floor）
 
 避免 `routeCost` 太小導致運費過低或 0 元：
 
@@ -165,7 +178,7 @@
 | M | 200 | 260 | 340 | 450 |
 | L | 320 | 420 | 550 | 750 |
 
-### 【6.3】最高運費上限（price cap）
+#### 7.3 最高運費上限（price cap）
 
 避免地圖異常或極端路徑導致價格爆炸：
 
@@ -180,7 +193,7 @@
 | M | 1400 | 1850 | 2350 | 2900 |
 | L | 2200 | 2900 | 3700 | 4600 |
 
-### 【6.4】完整計算流程（建議實作順序）
+#### 7.4 完整計算流程（建議實作順序）
 
 1. 用 `fromNodeId` / `toNodeId` 呼叫 `/api/map/route`，取得 `routeCost`
 2. `routeCostNormRaw = routeCost / K`
@@ -199,9 +212,9 @@
 
 > 取整規則：`ceil()` 向上取整到整數。
 
-## 【7】範例（以 seed 地圖的典型 routeCost）
+### 8) 範例（以 seed 地圖的典型 routeCost）
 
-### 範例 1：P50 路線 + 重量加價 + 國際件 multiplier
+#### 範例 1：P50 路線 + 重量加價 + 國際件 multiplier
 
 - `routeCost = 5147`（約 P50）
 - `K = 5200` → `routeCostNormRaw ≈ 0.99` → `routeCostNorm ≈ 0.99`
@@ -219,6 +232,9 @@
 - `calculatedPrice = 942`
 - `finalPrice = min(max(942, minPrice[M][standard]=260), maxPrice[M][standard]=1850) = 942`
 
-## 【8】相關 API
+## Links
 
-- 路線成本（Dijkstra）：`/api/map/route?from=<nodeId>&to=<nodeId>`
+- API：`docs/reference/api/03-packages.md`（`POST /api/packages/estimate`）
+- Map Routing API：`docs/reference/api/04-map-routing.md`（`GET /api/map/route`）
+- Shipping（包裹建立）：`docs/modules/shipping.md`
+- Map Routing（規則層摘要）：`docs/modules/map-routing.md`

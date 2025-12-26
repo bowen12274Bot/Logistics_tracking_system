@@ -43,6 +43,20 @@
 
 ### 2.1 `users` - 使用者
 
+用途：
+
+- 系統內所有登入主體（客戶/員工）的主檔；角色與權限以 `user_type`/`user_class` 為核心。
+
+關聯（常用 join key）：
+
+- `packages.customer_id` → `users.id`
+- `payments.payer_user_id` / `delivery_tasks.assigned_driver_id` / `vehicles.driver_user_id` → `users.id`
+- `contract_applications.customer_id` / `monthly_billing.customer_id` → `users.id`
+
+注意事項：
+
+- `address`：客戶端是預設地址；員工端是工作地（地圖節點 ID），會影響倉儲權限與車輛初始位置。
+
 ```sql
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
@@ -69,6 +83,19 @@ CREATE TABLE IF NOT EXISTS users (
 - `address`：客戶端是預設地址；員工端是工作地（地圖節點 ID，例如 `HUB_0`、`REG_3`）
 
 ### 2.2 `packages` - 包裹主檔
+
+用途：
+
+- 包裹/寄件單主檔；顧客可見的大階段 `packages.status` 是快取（事實來源以 `package_events` 為準）。
+
+關聯（常用 join key）：
+
+- `package_events.package_id` / `payments.package_id` / `delivery_tasks.package_id` / `package_exceptions.package_id` → `packages.id`
+- `packages.customer_id` → `users.id`
+
+注意事項：
+
+- `route_path` 是字串欄位（常見為 JSON array），用於追蹤圖/除錯；路由計算以地圖 `nodes/edges` 與 `/api/map/route` 為準。
 
 ```sql
 CREATE TABLE IF NOT EXISTS packages (
@@ -101,6 +128,19 @@ CREATE INDEX IF NOT EXISTS idx_packages_status ON packages(status);
 
 ### 2.3 `package_events` - 包裹事件
 
+用途：
+
+- 包裹貨態/站內/在途/異常等事件（append-only）；追蹤顯示與部分流程推導以事件為準。
+
+關聯（常用 join key）：
+
+- `package_events.package_id` → `packages.id`
+
+注意事項：
+
+- 事件時間軸以 `events_at` 排序；`location` 可為節點 ID（`END_*`/`REG_*`/`HUB_*`）或在途標記（`TRUCK_*`）。
+- 事件流程/狀態機請見 `docs/architecture/event-model-and-flows.md`；追蹤渲染規則請見 `docs/modules/tracking.md`。
+
 ```sql
 CREATE TABLE IF NOT EXISTS package_events (
   id TEXT PRIMARY KEY,
@@ -116,6 +156,19 @@ CREATE INDEX IF NOT EXISTS idx_package_events_location ON package_events(locatio
 ```
 
 ### 2.4 `payments` - 付款/計費結果
+
+用途：
+
+- 單件包裹的計費結果與付款狀態；`paid_at` 是否存在通常代表「已付款/已確認付款」。
+
+關聯（常用 join key）：
+
+- `payments.package_id` → `packages.id`
+- `payments.payer_user_id` → `users.id`
+
+注意事項：
+
+- `collected_by` 用於記錄收款角色/來源（例如司機現金收款）；規則層請見 `docs/modules/payments.md`。
 
 ```sql
 CREATE TABLE IF NOT EXISTS payments (
@@ -138,6 +191,19 @@ CREATE INDEX IF NOT EXISTS idx_payments_package_id ON payments(package_id);
 
 ### 2.5 `monthly_billing` - 月結帳單主檔
 
+用途：
+
+- 合約客戶的月結帳單主檔；會有「未出帳」與「已出帳/可繳費」的區分（規則層以 `docs/modules/payments.md` 為準）。
+
+關聯（常用 join key）：
+
+- `monthly_billing.customer_id` → `users.id`
+- `monthly_billing_items.monthly_billing_id` → `monthly_billing.id`
+
+注意事項：
+
+- 帳單包含哪些包裹由 `monthly_billing_items` 決定；帳單付款方式與可付款時機請看規則層。
+
 ```sql
 CREATE TABLE IF NOT EXISTS monthly_billing (
   id TEXT PRIMARY KEY,
@@ -159,6 +225,15 @@ CREATE INDEX IF NOT EXISTS idx_monthly_billing_status ON monthly_billing(status)
 
 ### 2.6 `monthly_billing_items` - 月結帳單明細
 
+用途：
+
+- 月結帳單的明細表：描述「某張帳單包含哪些包裹」。
+
+關聯（常用 join key）：
+
+- `monthly_billing_items.monthly_billing_id` → `monthly_billing.id`
+- `monthly_billing_items.package_id` → `packages.id`
+
 ```sql
 CREATE TABLE IF NOT EXISTS monthly_billing_items (
   id TEXT PRIMARY KEY,
@@ -170,6 +245,19 @@ CREATE INDEX IF NOT EXISTS idx_monthly_billing_items_billing_id ON monthly_billi
 ```
 
 ### 2.7 `nodes` / `edges` - 地圖
+
+用途：
+
+- 虛擬地圖節點與道路邊，用於路由（最短路徑）與相鄰性限制（例如車輛移動/任務段派發）。
+
+關聯（常用 join key）：
+
+- `edges.source` / `edges.target` → `nodes.id`
+- `vehicles.home_node_id` / `vehicles.current_node_id` → `nodes.id`
+
+注意事項：
+
+- 路由與相鄰性規則：`docs/modules/map-routing.md`；接口參考：`docs/reference/api/04-map-routing.md`。
 
 > `0006_virtual_map_schema.sql` 建表；`0007_virtual_map_seed.sql` 會 `DROP TABLE` 後重建並寫入 seed。
 
@@ -199,6 +287,18 @@ CREATE INDEX IF NOT EXISTS idx_edges_source ON edges(source);
 
 ### 2.8 `contract_applications` - 合約申請
 
+用途：
+
+- 合約申請/審核流程的資料來源；核准/拒絕的規則與 side effects 以模組層為準。
+
+關聯（常用 join key）：
+
+- `contract_applications.customer_id` → `users.id`
+
+注意事項：
+
+- 合約流程規則：`docs/modules/contracts.md`；審核接口：`docs/reference/api/02-review.md`。
+
 ```sql
 CREATE TABLE IF NOT EXISTS contract_applications (
   id TEXT PRIMARY KEY,
@@ -223,6 +323,14 @@ CREATE INDEX IF NOT EXISTS idx_contract_applications_status ON contract_applicat
 
 ### 2.9 `tokens` - Token
 
+用途：
+
+- 登入 token（認證/授權用）；用於把 request 綁定到 `users.id` 與其角色。
+
+關聯（常用 join key）：
+
+- `tokens.user_id` → `users.id`
+
 ```sql
 CREATE TABLE IF NOT EXISTS tokens (
   id TEXT PRIMARY KEY,
@@ -235,6 +343,14 @@ CREATE INDEX IF NOT EXISTS idx_tokens_user_id ON tokens(user_id);
 ```
 
 ### 2.10 `system_errors` - 系統錯誤
+
+用途：
+
+- 系統錯誤/例外記錄（debug/查核用），用於追蹤問題與營運異常的技術側紀錄。
+
+注意事項：
+
+- 這是技術監控/紀錄表，不直接等同於物流領域的「包裹異常」（後者請看 `package_exceptions`）。
 
 ```sql
 CREATE TABLE IF NOT EXISTS system_errors (
@@ -254,6 +370,20 @@ CREATE INDEX IF NOT EXISTS idx_system_errors_resolved ON system_errors(resolved)
 ```
 
 ### 2.11 `package_exceptions` - 包裹異常
+
+用途：
+
+- 異常池（客服處理）：異常成立後會中止 normal flow，直到客服結案（resume/cancel）。
+
+關聯（常用 join key）：
+
+- `package_exceptions.package_id` → `packages.id`
+- `package_exceptions.reported_by_user_id` / `package_exceptions.handled_by_user_id` → `users.id`
+
+注意事項：
+
+- 事件層會寫入 `package_events.delivery_status='exception'` / `exception_resolved'`（以及取消時的 terminal 事件）。
+- 規則權威：`docs/modules/exceptions.md`；接口參考：`docs/reference/api/07-exceptions.md`。
 
 ```sql
 CREATE TABLE IF NOT EXISTS package_exceptions (
@@ -277,6 +407,20 @@ CREATE INDEX IF NOT EXISTS idx_package_exceptions_handled_reported_at ON package
 
 ### 2.12 `delivery_tasks` - 運送任務
 
+用途：
+
+- 任務段（segment）：司機/倉儲的可執行工作單位（例如取件/交接/派發下一段）。
+
+關聯（常用 join key）：
+
+- `delivery_tasks.package_id` → `packages.id`
+- `delivery_tasks.assigned_driver_id` → `users.id`
+- `delivery_tasks.from_location` / `delivery_tasks.to_location`（節點 ID）→ `nodes.id`
+
+注意事項：
+
+- 任務分段、相鄰性、倉儲派發 next hop 的規則以 `docs/modules/operations.md` 為準。
+
 ```sql
 CREATE TABLE IF NOT EXISTS delivery_tasks (
   id TEXT PRIMARY KEY,
@@ -298,6 +442,15 @@ CREATE INDEX IF NOT EXISTS idx_delivery_tasks_package_segment ON delivery_tasks(
 
 ### 2.13 `vehicles` - 車輛/位置
 
+用途：
+
+- 司機車輛狀態與位置；每位司機通常對應一台車（依 `driver_user_id` 唯一索引）。
+
+關聯（常用 join key）：
+
+- `vehicles.driver_user_id` → `users.id`
+- `vehicles.home_node_id` / `vehicles.current_node_id` → `nodes.id`
+
 ```sql
 CREATE TABLE IF NOT EXISTS vehicles (
   id TEXT PRIMARY KEY,
@@ -312,6 +465,15 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_vehicles_driver_user_id ON vehicles(driver
 ```
 
 ### 2.14 `vehicle_cargo` - 車上貨物
+
+用途：
+
+- 車上載貨關聯：記錄「包裹何時上車/何時卸貨」，並允許同一包裹的載運歷史被保留。
+
+關聯（常用 join key）：
+
+- `vehicle_cargo.vehicle_id` → `vehicles.id`
+- `vehicle_cargo.package_id` → `packages.id`
 
 ```sql
 CREATE TABLE IF NOT EXISTS vehicle_cargo (

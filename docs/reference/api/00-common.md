@@ -1,6 +1,6 @@
 # Common（認證/錯誤/角色）
 
-> 來源：`docs/reference/api-contract.legacy.md`（由 legacy 拆分）
+> 來源：`docs/legacy/api-contract.legacy.md`（由 legacy 拆分）
 >
 > - 本頁定位：接口參考（endpoint / request/response schema / error codes）
 > - 規則/流程：`docs/modules/users.md`

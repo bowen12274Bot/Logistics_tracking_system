@@ -1,6 +1,6 @@
 ﻿# Package Module
 
-> 來源：`docs/reference/api-contract.legacy.md`（由 legacy 拆分）
+> 來源：`docs/legacy/api-contract.legacy.md`（由 legacy 拆分）
 >
 > - 本頁定位：接口參考（endpoint / request/response schema / error codes）
 > - 規則/流程：`docs/modules/shipping.md`、`docs/modules/tracking.md`、`docs/modules/operations.md`、`docs/modules/exceptions.md`
@@ -19,30 +19,34 @@
 
 #### 輸入格式 (Request Body)
 
+> 本端點目前同時支援 legacy 與新結構欄位；客戶端 UI 使用「扁平欄位 + 地圖節點 ID」為主。
+
 ```json
 {
-  "sender": {
-    "name": "string",
-    "phone": "string",
-    "address": "string"
-  },
-  "receiver": {
-    "name": "string",
-    "phone": "string",
-    "address": "string"
-  },
-  "weight": 1.5,
-  "dimensions": {
-    "length": 30,
-    "width": 20,
-    "height": 10
-  },
+  "sender_name": "string",
+  "sender_phone": "string",
+  "sender_address": "END_HOME_0 | END_STORE_0",
+
+  "receiver_name": "string",
+  "receiver_phone": "string",
+  "receiver_address": "END_HOME_1 | END_STORE_1",
+
+  "weight": 1,
+  "length": 60,
+  "width": 40,
+  "height": 40,
   "declared_value": 1000,
-  "content_description": "書籍",
-  "service_level": "overnight | two_day | standard | economy",
-  "special_handling": ["fragile", "dangerous", "international"],
+  "contents_description": "書籍",
+
+  "delivery_time": "overnight | two_day | standard | economy",
   "payment_type": "prepaid | cod",
-  "payment_method": "cash | credit_card | bank_transfer | monthly_billing | third_party_payment"
+
+  "pickup_date": "YYYY-MM-DD",
+  "pickup_time_window": "09:00-12:00 | 12:00-15:00 | 15:00-18:00 | 18:00-21:00",
+  "pickup_notes": "string",
+
+  "route_path": "[\"END_HOME_0\",\"REG_0\",\"HUB_0\",\"REG_1\",\"END_STORE_2\"]",
+  "metadata": { "pickup_type": "home | store", "destination_type": "home | store" }
 }
 ```
 
@@ -50,16 +54,15 @@
 
 | 欄位 | 類型 | 必填 | 說明 |
 |------|------|------|------|
-| `sender` | object | ✅ | 寄件人資訊（姓名、電話、地址） |
-| `receiver` | object | ✅ | 收件人資訊（姓名、電話、地址） |
-| `weight` | number | ❌ | 重量（公斤），若沒填由系統產生 |
-| `dimensions` | object | ❌ | 尺寸（長/寬/高，公分），若沒填由系統產生 |
+| `sender_*` / `receiver_*` | string | ✅ | 寄/收件資訊（地址使用地圖節點 ID，例如 `END_HOME_0` / `END_STORE_0`） |
+| `weight` | number | ✅ | 重量（公斤） |
+| `length`/`width`/`height` | number | ✅ | 尺寸（公分） |
 | `declared_value` | number | ❌ | 申報價值（元），若沒填由系統產生 |
-| `content_description` | string | ✅ | 內容物描述（依郵政法規必填） |
-| `service_level` | string | ✅ | 配送時效：`overnight`(隔夜)、`two_day`(兩日)、`standard`(標準)、`economy`(經濟) |
-| `special_handling` | array | ❌ | 特殊處理標記：`fragile`(易碎)、`dangerous`(危險品)、`international`(國際) |
-| `payment_type` | string | ✅ | 付款責任：`prepaid`(寄件者付)、`cod`(收件者付；收件者需為系統內客戶) |
-| `payment_method` | string | ✅ | 付款方式：`cash`(現金)、`credit_card`(信用卡)、`bank_transfer`(網銀)、`third_party_payment`(第三方)、`monthly_billing`(月結；僅合約客戶) |
+| `contents_description` | string | ❌ | 內容物描述（客戶端 UI 會填） |
+| `delivery_time` | string | ✅ | 配送時效：`overnight`/`two_day`/`standard`/`economy` |
+| `payment_type` | string | ✅ | 付款責任：`prepaid`/`cod`（到付付款人需能被解析為系統客戶；否則會降級為 `prepaid`） |
+| `pickup_*` | string | ❌ | 到府取件欄位（只在 `pickup_type=home` 時使用） |
+| `route_path` | string | ❌ | 路徑節點陣列（JSON 字串；多用於追蹤圖/除錯） |
 
 #### 輸出格式 (Success Response - 201)
 
@@ -68,25 +71,30 @@
   "success": true,
   "package": {
     "id": "uuid",
-    "tracking_number": "TRK20251210001",
-    "package_type": "small_box",
+    "tracking_number": "TRK-xxxx-xxxxxxxx",
     "status": "created",
-    "sender": { ... },
-    "receiver": { ... },
-    "estimated_cost": 150,
-    "created_at": "2025-12-10T00:30:00Z"
+    "sender_name": "string",
+    "sender_phone": "string",
+    "sender_address": "END_HOME_0",
+    "receiver_name": "string",
+    "receiver_phone": "string",
+    "receiver_address": "END_STORE_3",
+    "payment_type": "prepaid",
+    "payment_method": "cash",
+    "created_at": "2025-12-10T00:30:00Z",
+    "estimated_delivery": "2025-12-13T00:00:00Z"
   }
 }
 ```
-`tracking_number` 和 `package_type` 在建立包裹後產生。`created_at` 是建立訂單當下時間。
+`tracking_number` 在建立包裹後產生。建立包裹後會同步建立一筆待付費用（可在 `GET /api/payments/packages` 查到）。
 
 #### 錯誤回應
 
 | 狀態碼 | 說明 |
 |--------|------|
-| 400 | 必填欄位缺失、無效的 package_type/service_level |
+| 400 | 輸入資料不完整、地址節點格式錯誤/不存在、或路徑不存在 |
 | 401 | 未認證 |
-| 403 | 非合約客戶嘗試使用 `payment_method = monthly_billing`、或非 customer 角色 |
+| 500 | 建立失敗 |
 
 ---
 
@@ -102,16 +110,16 @@
 
 ```json
 {
-  "sender_address": "string",
-  "receiver_address": "string",
-  "weight": 1.5,
-  "dimensions": {
+  "fromNodeId": "END_HOME_0 | END_STORE_0",
+  "toNodeId": "END_HOME_1 | END_STORE_1",
+  "weightKg": 1.5,
+  "dimensionsCm": {
     "length": 30,
     "width": 20,
     "height": 10
   },
-  "service_level": "overnight | two_day | standard | economy",
-  "special_handling": ["fragile"]
+  "deliveryType": "overnight | two_day | standard | economy",
+  "specialMarks": ["fragile", "dangerous", "international"]
 }
 ```
 
@@ -121,15 +129,18 @@
 {
   "success": true,
   "estimate": {
-    "base_cost": 100,
-    "distance_cost": 30,
-    "weight_surcharge": 10,
-    "special_handling_surcharge": 10,
+    "fromNodeId": "END_HOME_0",
+    "toNodeId": "END_STORE_3",
+    "route_cost": 5147,
+    "route_path": ["END_HOME_0", "REG_0", "HUB_0", "REG_1", "END_STORE_3"],
+    "box_type": "M",
     "total_cost": 150,
     "estimated_delivery_date": "2025-12-12"
   }
 }
 ```
+
+> 計價規格權威：`docs/modules/pricing.md`
 
 ---
 
@@ -140,28 +151,21 @@
 | **位置** | `GET /api/packages` |
 | **功能** | 查詢客戶自己的包裹列表 |
 | **認證** | ✅ 需要 Token |
-| **權限** | `customer` 只能查自己的包裹；員工依權限查詢 |
+| **權限** | `customer` 只能查自己的包裹；員工可用 `customer_id` 查指定客戶（暫定政策） |
 
 #### 輸入格式 (Query Parameters)
 
-| 參數 | 類型 | 必填 | 限制 | 說明 |
-|------|------|------|------|------|
-| `status` | string | ❌ | - | 依狀態篩選 |
-| `date_from` | string | ❌ | - | 運送日期範圍起始（ISO 8601） |
-| `date_to` | string | ❌ | - | 運送日期範圍結束 |
-| `tracking_number` | string | ❌ | - | 依追蹤編號搜尋 |
-| `limit` | integer | ❌ | 1-100 | 回傳筆數（預設 20，最大 100） |
-| `offset` | integer | ❌ | ≥0 | 分頁偏移量 |
+| 參數 | 類型 | 必填 | 說明 |
+|------|------|------|------|
+| `customer_id` | string | ❌ | 客戶 ID（僅員工可用；customer 會被忽略並強制改用自己） |
+| `limit` | integer | ❌ | 回傳筆數（預設 20） |
 
 #### 輸出格式 (Success Response - 200)
 
 ```json
 {
   "success": true,
-  "packages": [ ... ],
-  "total": 100,
-  "limit": 20,
-  "offset": 0
+  "packages": [ ... ]
 }
 ```
 
@@ -170,45 +174,40 @@
 | 狀態碼 | 說明 |
 |--------|------|
 | 401 | 未認證 |
-| 405 | `limit` 超過 100 或 `date_from`/`date_to` 範圍超過 365 天 |
+| 403 | 無權查詢（例如 customer 嘗試查他人） |
 
 ---
 
-### 3.4 查詢單一包裹詳情 `[已實作]`
+### 3.4 查詢包裹狀態與事件 `[已實作]`
 
 | 項目 | 說明 |
 |------|------|
-| **位置** | `GET /api/packages/:id` |
-| **功能** | 查詢單一包裹的完整資訊 |
+| **位置** | `GET /api/packages/:packageId/status` |
+| **功能** | 查詢包裹主檔 + 事件歷史（客戶只能查自己的包裹） |
 | **認證** | ✅ 需要 Token |
-| **權限** | 客戶只能查自己的包裹 |
+| **權限** | `customer` 只能查自己的；員工可查所有（暫定政策） |
 
 #### 輸入格式
 
 **Path Parameters:**
-- `id` (string): 包裹 ID 或追蹤編號
+- `packageId` (string): 包裹 ID 或追蹤碼
 
 #### 輸出格式 (Success Response - 200)
 
 ```json
 {
   "success": true,
-  "package": {
-    "id": "uuid",
-    "tracking_number": "TRK20251210001",
-    "status": "in_transit",
-    "sender": { "name": "張三", "phone": "0912345678", "address": "台北市..." },
-    "receiver": { "name": "李四", "phone": "0987654321", "address": "高雄市..." },
-    "package_type": "medium_box",
-    "weight": 2.5,
-    "content_description": "書籍",
-    "service_level": "standard",
-    "payment_type": "prepaid",
-    "payment_status": "paid",
-    "cost": 180,
-    "created_at": "2025-12-10T00:30:00Z",
-    "estimated_delivery": "2025-12-13"
-  }
+  "package": { "id": "uuid", "tracking_number": "TRK-xxxx-xxxxxxxx", "status": "in_transit" },
+  "events": [
+    {
+      "delivery_status": "created",
+      "delivery_details": "託運單已建立，等待司機取件",
+      "location": "END_HOME_0",
+      "events_at": "2025-12-10T00:30:00Z"
+    }
+  ],
+  "active_exception": null,
+  "vehicle": { "id": "uuid", "vehicle_code": "TRUCK_001" }
 }
 ```
 
@@ -233,22 +232,23 @@
 #### 輸入格式
 
 **Path Parameters:**
-- `trackingNumber` (string): 追蹤編號（如 TRK20251210001）
+- `trackingNumber` (string): 追蹤編號（如 `TRK-xxxx-xxxxxxxx`）
 
 #### 輸出格式 (Success Response - 200)
 
 ```json
 {
   "success": true,
-  "tracking_number": "TRK20251210001",
+  "tracking_number": "TRK-xxxx-xxxxxxxx",
   "current_status": "in_transit",
-  "current_location": "台中轉運中心",
-  "estimated_delivery": "2025-12-13",
+  "current_location": "REG_1",
+  "updated_at": "2025-12-10T10:30:00Z",
+  "estimated_delivery": "2025-12-13T00:00:00Z",
   "events": [
     {
       "status": "created",
-      "description": "包裹已建立",
-      "location": null,
+      "description": "託運單已建立，等待司機取件",
+      "location": "END_HOME_0",
       "timestamp": "2025-12-10T00:30:00Z"
     }
   ]
@@ -307,7 +307,7 @@
 
 **輸入資料**
 - 節點序列：`packages.route_path`（節點 ID 陣列或以逗號分隔的字串），代表「貨車出發後」的配送路徑（例如：`END_* → REG_* → ... → END_*`）。
-- 事件序列：`GET /api/packages/:id/status` 回傳的 `events[]`（依 `events_at ASC` 排序）。
+- 事件序列：`GET /api/packages/:packageId/status` 回傳的 `events[]`（依 `events_at ASC` 排序）。
 
 **點（Node）到達判定**
 - 若某筆事件的 `location` 是路徑中的節點 ID（`route_path` 內），視為「到達該節點」。

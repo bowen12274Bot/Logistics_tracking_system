@@ -1,6 +1,6 @@
 # Users & Access Control（使用者與權限）
 
-本文件定義「身分、角色、token 與 RBAC」的規則層說明；API 介面請見 `docs/reference/api/01-users.md` 與 `docs/reference/api/06-super-user.md`（或從 `docs/api-contract.md` 索引進入）。
+本文件定義「身分、角色、token 與 RBAC」的規則層說明；API 介面請見 `docs/reference/api/01-users.md` 與 `docs/reference/api/06-super-user.md`（或從 `docs/reference/api-contract.md` 索引進入）。
 
 ## Intent（理念）
 
@@ -9,7 +9,7 @@
 
 ## Roles（角色）
 
-對齊 `docs/api-contract.md`（索引入口）：
+對齊 `docs/reference/api-contract.md`（索引入口）：
 
 - customer：`non_contract_customer` / `contract_customer`
 - employee：`driver` / `warehouse_staff` / `customer_service` / `admin`

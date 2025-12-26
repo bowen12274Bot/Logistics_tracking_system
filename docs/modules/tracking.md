@@ -7,6 +7,20 @@
 - 事件（`package_events`）是事實來源；顧客端的大階段（`packages.status`）是快取。
 - `route_path` 提供「建議路徑」用於視覺化，不代表每一步都已發生。
 
+## 規格（本專案以此為準）
+
+以下規則視為「追蹤頁渲染規格」，需與前端一致：
+
+- `route_path` 若缺失：顧客端無法繪製路徑進度（只顯示列表/事件文字）。
+- `exception_resolved`：視為客服決策事件，不應推進顧客可見的路徑進度時間軸。
+- 同一節點可能重複經過：節點到達時間以該節點最早 `events_at` 為準，避免後續 pass-by 覆蓋。
+- 線段在途只以 `delivery_status = in_transit` 的事件判定，並依 `location = TRUCK_*` + `delivery_details` 解析出的「目的地節點」定位到對應線段。
+- 異常顯示：
+  - `location` 是節點 ID → 標記該節點（點）異常
+  - `location` 是 `TRUCK_*` 且可解析目的地 → 標記對應線段（線）異常
+
+> 追蹤圖更完整的「點/線判定」規則與相容狀態列表，請見 `docs/reference/api/03-packages.md` 的「客戶追蹤圖渲染規則」章節（此章節視為規格的一部分）。
+
 ## Customer Stage（顧客顯示大階段）
 
 Stage 是「顧客顯示用的大階段」：用於 UI 呈現與篩選；來源仍以 `package_events` 為準，`packages.status` 僅是快取（由事件推導/同步）。

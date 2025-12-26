@@ -1,6 +1,6 @@
 ﻿# Payment Module
 
-> 來源：`docs/reference/api-contract.legacy.md`（由 legacy 拆分）
+> 來源：`docs/legacy/api-contract.legacy.md`（由 legacy 拆分）
 >
 > - 本頁定位：接口參考（endpoint / request/response schema / error codes）
 > - 規則/流程：`docs/modules/payments.md`、`docs/modules/contracts.md`
@@ -9,6 +9,119 @@
 ## 5. 金流模組 (Payment Module)
 
 > 此模組主要服務合約客戶（月結），非合約客戶使用預付或貨到付款。
+
+### 5.0 包裹付款（單件費用） `[已實作]`
+
+> 規則/流程請以 `docs/modules/payments.md` 為準；此段僅描述 API 介面（待付清單、更新付款方式、確認付款）。
+
+#### 5.0.1 查詢待付/已付包裹清單
+
+| 項目 | 說明 |
+|------|------|
+| **位置** | `GET /api/payments/packages` |
+| **功能** | 查詢「目前登入者」需要付款的包裹費用（預付：寄件者；到付：收件者） |
+| **認證** | 需要 Token |
+| **權限** | `customer`（僅能查自己的待付/已付） |
+
+Query:
+
+| 參數 | 類型 | 必填 | 說明 |
+|------|------|------|------|
+| `include_paid` | boolean | 否 | `true` 則包含已付款項目（預設 `false` 只回待付） |
+| `limit` | number | 否 | 最大 200（預設 50） |
+
+Success (200):
+
+```json
+{
+  "success": true,
+  "items": [
+    {
+      "package": { "id": "uuid", "tracking_number": "TRK-...", "payment_type": "prepaid", "payment_method": "credit_card" },
+      "amount": 150,
+      "paid_at": null,
+      "payer_user_id": "uuid",
+      "payable_now": true,
+      "reason": null
+    }
+  ]
+}
+```
+
+Notes:
+
+- `payable_now` / `reason` 會依 `payment_type`、地點（住家/超商）與事件門檻（例如 `arrived_pickup` / `arrived_delivery` / `delivered`）計算。
+
+---
+
+#### 5.0.2 更新付款方式（意圖/選擇）
+
+| 項目 | 說明 |
+|------|------|
+| **位置** | `POST /api/payments/packages/:packageId/method` |
+| **功能** | 更新待付包裹的 `payment_method`（不會寫入 `paid_at`，不代表已付款） |
+| **認證** | 需要 Token |
+| **權限** | `customer`（僅能更新自己的待付項目） |
+
+Request body:
+
+```json
+{ "payment_method": "cash | credit_card | bank_transfer | third_party_payment | monthly_billing" }
+```
+
+Success (200):
+
+```json
+{ "success": true, "payment_method": "credit_card", "updated_at": "2025-12-10T00:30:00Z" }
+```
+
+Errors:
+
+| 狀態碼 | 說明 |
+|------|------|
+| 401 | 未認證 |
+| 403 | 非付款人（`payer_user_id` 不符）或 `monthly_billing` 但非合約客戶 |
+| 404 | 包裹不存在 |
+| 409 | 已付款不可再變更 |
+
+---
+
+#### 5.0.3 確認付款（模擬付款）
+
+> ⚠️ 注意：本段是「確認付款」端點 `POST /api/payments/packages/:packageId`（沒有 `/method`）。
+
+| 項目 | 說明 |
+|------|------|
+| **位置** | `POST /api/payments/packages/:packageId` |
+| **功能** | 確認付款（會寫入 `payments.paid_at`，並依付款方式產生相對應效果） |
+| **認證** | 需要 Token |
+| **權限** | `customer`（僅能支付自己的待付項目） |
+
+Request body:
+
+```json
+{ "payment_method": "cash | credit_card | bank_transfer | third_party_payment | monthly_billing" }
+```
+
+Success (200):
+
+```json
+{ "success": true, "paid_at": "2025-12-10T00:30:00Z" }
+```
+
+Behavior notes:
+
+- `monthly_billing`：僅限合約客戶且 `payment_type = prepaid`，確認付款後視為已付款，並加入本期「未出帳」月結帳單（`monthly_billing_items`）。
+- 其他方式：確認付款即視為付清；`cash` / `cod` 類型會受「到場/到站」事件門檻限制（不符合會回 409）。
+
+Errors:
+
+| 狀態碼 | 說明 |
+|------|------|
+| 401 | 未認證 |
+| 403 | 非付款人（`payer_user_id` 不符）或 `monthly_billing` 但非合約客戶 |
+| 404 | 包裹不存在 |
+| 409 | 尚未達付款條件（`payable_now = false`）或已付款 |
 
 ### 5.1 查詢帳單列表 `[已實作]`
 

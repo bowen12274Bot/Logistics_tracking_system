@@ -1,9 +1,12 @@
-﻿# 後端 API 接口契約文件（合併前單檔版本）
+﻿# 後端 API 接口契約文件（合併前單檔版本 / Legacy）
 
-> 此文件為合併時保留的歷史內容（非權威來源）。
-> - 新的 API 契約入口：`docs/api-contract.md`
-> - 介面參考：`docs/reference/api/README.md`
+> ⚠️ 此文件為合併前保留的歷史快照，**不再更新**，且可能與現行實作不一致（非權威來源）。
+>
+> 請改看：
+> - API 契約索引入口：`docs/reference/api-contract.md`（舊入口：`docs/api-contract.md`）
+> - 接口參考（endpoint / schema）：`docs/reference/api/README.md`
 > - 規則/流程（權威來源）：`docs/modules/README.md`
+> - 文檔衝突優先順序：`docs/README.md`
 
 ---
 
@@ -372,7 +375,7 @@ Authorization: Bearer <token>
 }
 ```
 
-> 詳細倉儲作業規範請參考 [warehouse-staff.md](file:///c:/Users/tange/OneDrive/Desktop/all%20project/py_for_SE_class/term_project/Logistics_tracking_system/docs/warehouse-staff.md)
+> 詳細倉儲作業規範請參考 [warehouse-staff.md](../warehouse-staff.md)
 
 ---
 
@@ -1464,8 +1467,8 @@ Authorization: Bearer <token>
 > 本章節為配合 `todoList.md` 新增的「異常池 / 司機任務 / 司機車輛移動 / 倉儲改路徑」需求。大部分 API 已實作完成。
 >
 > **相關詳細規範文件**：
-> - [exception-handling.md](file:///c:/Users/tange/OneDrive/Desktop/all%20project/py_for_SE_class/term_project/Logistics_tracking_system/docs/exception-handling.md)：異常申報、封鎖規則、reason_code 定義
-> - [customer-service.md](file:///c:/Users/tange/OneDrive/Desktop/all%20project/py_for_SE_class/term_project/Logistics_tracking_system/docs/customer-service.md)：客服異常處理流程、客戶端狀態顯示規範
+> - [exception-handling.md](../exception-handling.md)：異常申報、封鎖規則、reason_code 定義
+> - [customer-service.md](../customer-service.md)：客服異常處理流程、客戶端狀態顯示規範
 
 
 ### 7.1 異常池（客服） `[已實作]`

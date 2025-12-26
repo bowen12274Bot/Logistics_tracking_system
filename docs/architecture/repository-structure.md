@@ -22,8 +22,9 @@ logistics-system/
 `docs/` 採「分層文件」：
 
 - `docs/README.md`：唯一導覽入口（先找這裡）
-- `docs/architecture/`（L1 概念層）：系統概觀、資料模型、不變量
+- `docs/architecture/`（L1 概念層）：系統概觀、組件、事件模型、資料模型、不變量（入口：`docs/architecture/README.md`）
 - `docs/modules/`（L2 規則層，權威）：跨角色的一致性規則、流程約束、狀態機/例外處理
+- `docs/features/`（功能層）：以功能/用例串聯 UI→規則→API（不做規則權威）
 - `docs/reference/`（L3 參考層）：API、資料字典、可查詢的規格（不講流程，不講做法）
 - `docs/handbook/`（操作層）：依角色寫 UI 操作步驟（不做規則權威）
 - `docs/design/`：設計備忘、流程圖、UI/UX 草稿與補充
@@ -34,12 +35,21 @@ logistics-system/
 ### 新文件放哪裡？
 
 - 新增「規則/流程/一致性」：放 `docs/modules/`
+- 新增「端到端用例（功能導向）」：放 `docs/features/`
 - 新增「UI 操作手冊」：放 `docs/handbook/`
 - 新增「開發與維運指引」：放 `docs/guides/`
 - 新增「API/Schema 參考」：放 `docs/reference/`
 - 新增「概念/架構」：放 `docs/architecture/`
 
-如果是為了相容舊連結（例如別人還在引用 `docs/foo.md`），可以在 `docs/foo.md` 留一份 stub，指到新位置。
+如果是為了相容舊連結（例如別人還在引用 `docs/foo.md`），可以在 `docs/foo.md` 留一份 stub，指到新位置（stub 內容只放轉址與最少說明）。
+
+## 常用索引入口（快速）
+
+- Docs 導覽入口：`docs/README.md`
+- 概念層索引：`docs/architecture/README.md`
+- 規則層索引：`docs/modules/README.md`
+- 功能用例索引：`docs/features/README.md`
+- API 契約索引：`docs/reference/api-contract.md`（分頁索引：`docs/reference/api/README.md`）
 
 ## `backend/`（後端）
 

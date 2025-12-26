@@ -238,6 +238,6 @@ npx wrangler d1 migrations apply DB --local
 
 ## 📚 相關文件 (Related Documentation)
 
-- [專案 README](../readme.md)
+- [專案 README](../README.md)
 - [測試指南](testing-guide.md)（舊入口：`docs/testing-guide.md`）
 - [貢獻指南](contributing.md)（舊入口：`docs/contributing.md`）

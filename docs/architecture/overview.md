@@ -1,6 +1,6 @@
 # Architecture Overview（系統概觀）
 
-本文件是「概念層」入口，用於描述系統的核心不變量（invariants）與資料/流程的責任邊界；具體 API 與欄位定義請見 `docs/reference/api.md` 與 `docs/api-contract.md`（索引）。
+本文件是「概念層」入口，用於描述系統的核心不變量（invariants）與資料/流程的責任邊界；具體 API 與欄位定義請見 `docs/reference/api/README.md` 與 `docs/reference/api-contract.md`（索引）。
 
 ## 核心概念（目前實作）
 
@@ -13,7 +13,11 @@
 
 - Repo 結構：`docs/architecture/repository-structure.md`
 - 資料模型：`docs/architecture/data-model.md`
+- 名詞表（避免用詞漂移）：`docs/architecture/glossary.md`
+- 系統組件：`docs/architecture/components.md`
+- 事件模型與資料流：`docs/architecture/event-model-and-flows.md`
 - 模組規格（規則權威）：
   - 異常：`docs/modules/exceptions.md`
   - 作業/任務/車輛：`docs/modules/operations.md`
   - 追蹤呈現（事件→顯示）：`docs/modules/tracking.md`
+  - 運費/計價（routeCost 計價）：`docs/modules/pricing.md`

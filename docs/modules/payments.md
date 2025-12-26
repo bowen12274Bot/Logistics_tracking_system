@@ -33,13 +33,18 @@
   - 同時會加入當期「未出帳」區（`monthly_billing_items`）等待帳期結算
   - 帳單到期後，必須以另外四種方式之一付清（不可再用 `monthly_billing` 付帳單）
 
+### 2.1 未出帳（本期累積）定義
+
+- 月結帳單 `monthly_billing.due_date = NULL` 視為「未出帳」（本期累積區）。
+- 出帳後才會填入 `due_date`（表示已結算並進入可繳費狀態）。
+
 ### 3) 司機發車取件的付款門檻（Dispatch Gate）
 
 - 寄件者建立包裹後，需要到「待付款清單」完成付款/確認付款，是否完成會影響司機是否可發車取件。
 - 門檻規則（MVP）：
   - `prepaid` + `credit_card` / `bank_transfer` / `third_party_payment`：需先付清（產生 `payments.paid_at`）才可發車取件
-  - `prepaid` + `monthly_billing`：需先完成「選擇月結」的確認，才可發車取件（入帳期，不立即付清）
-  - `prepaid` + `cash`：需先完成「選擇現金」的確認，司機到場時再收款
+  - `prepaid` + `monthly_billing`：需先完成「確認月結付款」（入帳期，會產生 `payments.paid_at` 並加入本期未出帳區）才可發車取件
+  - `prepaid` + `cash`：需先完成「確認付款（現金）」；司機到場時再收款
   - `cod`：不影響取件發車（收件者在送達端付款）
 
 #### 司機視角補充（Driver View）
@@ -58,7 +63,7 @@
   - `cash`：
     - 住家：司機到達取件點後可付（以 `arrived_pickup` 事件作為門檻）
     - 超商：建單後即可付（視為交件時付款）
-  - `monthly_billing`：建單後即可「選擇月結」（入帳期，不立即付清）
+  - `monthly_billing`：建單後即可「確認月結付款」（入帳期，視為已付款並納入本期未出帳區）
 - 到付（收件者付）：
   - 住家：司機到達送件點後可付（以 `arrived_delivery` 事件作為門檻；現金/非現金皆同）
   - 超商：司機在 `END_STORE_*` 卸貨後可付（以 `delivered` 到 `END_STORE_*` 作為門檻）

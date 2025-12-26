@@ -8,6 +8,7 @@
 
 - `docs/architecture/`：概念層（不變量、責任邊界、核心名詞）
 - `docs/modules/`：規則層（單一規則單一來源；一致性約束、資料落點、封鎖條件）
+- `docs/features/`：功能層（以用例串 UI→模組規則→API；不做權威規則來源）
 - `docs/reference/`：可查詢參考（接口參考、錯誤碼、資料字典等；不放複雜流程規則）
 - `docs/handbook/`：角色手冊（UI/操作步驟與驗收點；不承載規則權威）
 - `docs/design/`：設計備忘（UI/UX、原型、提案；不承載規則權威）
@@ -20,6 +21,8 @@
 
 - 規則/流程：只寫在 `docs/modules/`（其他文件只能引用連結，不重寫同一條規則）
 - 接口參考：只寫在 `docs/reference/api/`（必要時連回對應 `docs/modules/*` 規則）
+- API 契約索引入口：只寫在 `docs/reference/api-contract.md`（只維護連結，不貼 schema；`docs/api-contract.md` 僅作舊入口 stub）
+- 端到端用例：只寫在 `docs/features/`（描述跨角色協作與 UI→API 串接；規則與接口細節改用連結指回權威文件）
 - 角色操作：只寫在 `docs/handbook/`（只描述「怎麼做」，規則連結到 `docs/modules/*`）
 - 舊文件：放 `docs/legacy/`（可保留作歷史背景，但需標註「非權威」）
 
@@ -27,7 +30,7 @@
 
 ## 3. 檔名與路徑慣例
 
-- 子資料夾內新增文件請用 kebab-case（例：`driver-map.md`、`delivery-service-standards.md`）
+- 子資料夾內新增文件請用 kebab-case（例：`driver-map.md`、`map-routing.md`）
 - 既有舊路徑若已對外引用，搬移時保留原檔名作「舊入口 stub」即可
 
 ---
@@ -54,5 +57,5 @@
 
 - [ ] 選定層級：`architecture` / `modules` / `reference` / `handbook` / `design` / `guides`
 - [ ] 若是規則：寫在 `docs/modules/`，並在需要被查找處加上連結（例如 `docs/README.md`、相關 `docs/reference/api/*.md`）
-- [ ] 若變更/新增端點：更新 `docs/reference/api/*.md` 與 `docs/api-contract.md`（索引）
+- [ ] 若變更/新增端點：更新 `docs/reference/api/*.md`、`docs/reference/api/README.md`（分頁索引）與 `docs/reference/api-contract.md`（契約索引）
 - [ ] 若搬移文件：保留 stub + 更新引用

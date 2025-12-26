@@ -126,7 +126,7 @@ const estimatedDeliveryFallback = (pkg: any) => {
 
 const statusBadge = (status?: string | null) => {
   const s = String(status ?? "").trim().toLowerCase();
-  if (s === "delivery_failed") return "配送失敗";
+  if (s === "delivery_failed") return "失敗";
   if (s === "exception") return "異常";
   return "正常";
 };
@@ -144,7 +144,7 @@ const statusKeyForPackage = (pkg: any): "ok" | "exception" | "failed" => {
 };
 
 const statusLabel = (key: "ok" | "exception" | "failed") =>
-  key === "failed" ? "配送失敗" : key === "exception" ? "異常" : "正常";
+  key === "failed" ? "失敗" : key === "exception" ? "異常" : "正常";
 
 const reasonLabel = exceptionReasonLabel;
 
@@ -703,7 +703,7 @@ onMounted(async () => {
                   <div class="route-legend">
                     <span class="legend-pill ok">正常</span>
                     <span class="legend-pill exception">異常</span>
-                    <span class="legend-pill failed">配送失敗</span>
+                    <span class="legend-pill failed">失敗</span>
                     <span class="legend-pill pending">未發生</span>
                   </div>
                 </div>

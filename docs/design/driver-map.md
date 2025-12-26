@@ -27,7 +27,7 @@
 
 ## Vehicles API（提案，非契約權威）
 
-是否納入契約請以 `docs/api-contract.md` 與 `docs/reference/api/` 為準。
+是否納入契約請以 `docs/reference/api-contract.md` 與 `docs/reference/api/` 為準。
 
 - `GET /api/vehicles/me`：取得自己的車輛（必要時自動建立）
 - `POST /api/vehicles/me/move`：移動（需相鄰節點 + optimistic concurrency）

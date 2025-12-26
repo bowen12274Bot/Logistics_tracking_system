@@ -19,6 +19,20 @@
 - `vehicle_cargo`：車上載貨關聯（是否卸貨用 `unloaded_at` 判斷）。
 - `package_exceptions`：異常池（`handled`、`handling_report`、`reason_code`…）。
 
+## 支援性資料表（常被引用）
+
+- `nodes` / `edges`：虛擬地圖節點與路網（路由與相鄰性約束的基礎）。
+- `payments`：單件費用的計費/收款紀錄（是否已付款、由誰收款等）。
+- `monthly_billing` / `monthly_billing_items`：合約客戶月結帳單（帳單主檔 + 帳單包含哪些包裹）。
+- `contract_applications`：合約申請資料（申請/審核流程的來源）。
+- `tokens`：登入 token（驗證/授權用）。
+- `system_errors`：系統錯誤/例外記錄（debug/查核用）。
+
 ## 資料字典（詳細表結構）
 
 - `docs/reference/database-schema.md`（舊入口：`docs/database-schema.md`）
+
+## Links
+
+- 事件模型與貨態流程：`docs/architecture/event-model-and-flows.md`
+- 名詞表：`docs/architecture/glossary.md`
