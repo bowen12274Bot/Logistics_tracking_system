@@ -98,23 +98,25 @@ onMounted(() => {
         <div v-if="list.length === 0" class="hint">{{ t('driver.noTasks') }}</div>
 
         <ul v-else class="task-list">
-          <li v-for="t in list" :key="t.id" style="display: grid; gap: 6px">
+          <li v-for="task in list" :key="task.id" style="display: grid; gap: 6px">
             <div style="display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap">
-              <strong>{{ t.tracking_number ?? t.package_id }}</strong>
-              <span class="hint">{{ t.status }} · {{ t.task_type }}</span>
+              <strong>{{ task.tracking_number ?? task.package_id }}</strong>
+              <span class="hint">{{ task.status }} · {{ task.task_type }}</span>
             </div>
             <div class="hint">
-              #{{ t.segment_index ?? '-' }}
-              {{ t.from_location ?? t.sender_address ?? '-' }}
+              #{{ task.segment_index ?? '-' }}
+              {{ task.from_location ?? task.sender_address ?? '-' }}
               ->
-              {{ t.to_location ?? t.receiver_address ?? '-' }}
+              {{ task.to_location ?? task.receiver_address ?? '-' }}
             </div>
             <div class="hint">
-              {{ t.delivery_time ?? '-' }} · {{ t.payment_type ?? '-' }} · {{ t.estimated_delivery ?? '-' }}
+              {{ task.delivery_time ?? '-' }} · {{ task.payment_type ?? '-' }} · {{ task.estimated_delivery ?? '-' }}
             </div>
-            <div v-if="t.instructions" class="hint">{{ t('driver.instructions', { text: t.instructions }) }}</div>
+            <div v-if="task.instructions" class="hint">{{ t('driver.instructions', { text: task.instructions }) }}</div>
             <div v-if="tab === 'handoff'" style="display: flex; gap: 10px; flex-wrap: wrap">
-              <button class="primary-btn small-btn" type="button" @click="takeOver(t.id)">{{ t('driver.takeOver') }}</button>
+              <button class="primary-btn small-btn" type="button" @click="takeOver(task.id)">
+                {{ t('driver.takeOver') }}
+              </button>
             </div>
           </li>
         </ul>
