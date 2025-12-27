@@ -8,7 +8,7 @@ import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import HomeView from '../../views/HomeView.vue'
-import { i18n } from '@/i18n'
+import { i18n } from '../../i18n'
 
 const router = createRouter({
   history: createMemoryHistory(),

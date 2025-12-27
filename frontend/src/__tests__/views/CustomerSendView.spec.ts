@@ -8,7 +8,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import CustomerSendView from '../../views/CustomerSendView.vue'
-import { i18n } from '@/i18n'
+import { i18n } from '../../i18n'
 import { useAuthStore } from '../../stores/auth'
 import { mockCustomerUser, createMockAuthResponse } from '../helpers'
 
