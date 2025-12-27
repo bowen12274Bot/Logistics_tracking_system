@@ -34,7 +34,7 @@
   "login.loginTab": "Login",
   "login.registerTab": "Register",
   "login.identifier": "Email or account",
-  "login.identifierPlaceholder": "cust@example.com or 0912xxxxxx",
+  "login.identifierPlaceholder": "cust＠example.com or 0912xxxxxx",
   "login.password": "Password",
   "login.loggingIn": "Logging in...",
   "login.registering": "Registering...",

@@ -34,7 +34,7 @@
   "login.loginTab": "登入",
   "login.registerTab": "註冊",
   "login.identifier": "Email 或帳號",
-  "login.identifierPlaceholder": "cust@example.com 或 0912xxxxxx",
+  "login.identifierPlaceholder": "cust＠example.com 或 0912xxxxxx",
   "login.password": "密碼",
   "login.loggingIn": "登入中...",
   "login.registering": "註冊中...",
