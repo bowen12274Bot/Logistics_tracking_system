@@ -31,6 +31,10 @@ const toast = useToasts()
 const { t } = useI18n()
 const trackingLabel = (tracking?: string | null) => (tracking && tracking.trim() ? tracking.trim() : t('common.tracking.pending'))
 
+const props = defineProps<{
+  embedded?: boolean
+}>()
+
 const form = reactive<ContractApplicationPayload>({
   customer_id: auth.user?.id ?? '',
   company_name: '',
@@ -245,7 +249,12 @@ onMounted(() => {
 </script>
 
 <template>
-  <UiPageShell eyebrow="合約 / 月結" :title="headerTitle" :lede="headerLede">
+  <UiPageShell
+    :eyebrow="props.embedded ? undefined : '帳務中心'"
+    :title="props.embedded ? undefined : headerTitle"
+    :lede="props.embedded ? undefined : headerLede"
+    :class="{ 'embedded-shell': props.embedded }"
+  >
     <UiCard style="background: linear-gradient(135deg, #fff7f0, #fffdf9)">
       <div class="status-banner" :class="applicationStatus">
         <span class="status-dot" :class="applicationStatus"></span>
@@ -425,6 +434,14 @@ onMounted(() => {
 </template>
 
 <style scoped>
+.embedded-shell.page-shell {
+  padding: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  margin-bottom: 0;
+}
+
 .status-banner {
   display: flex;
   gap: 0.75rem;

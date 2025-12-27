@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { RouterLink, RouterView, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { useAuthStore } from './stores/auth'
@@ -47,6 +47,45 @@ const userRoleLabel = computed(() => {
   const key = roleLabelKey((user.value?.user_class ?? '') as Role | '')
   return key ? t(key) : ''
 })
+
+const isMenuOpen = ref(false)
+const menuRoot = ref<HTMLElement | null>(null)
+
+const isCustomerRole = computed(() => {
+  const role = (user.value?.user_class ?? '') as string
+  return role === 'contract_customer' || role === 'non_contract_customer'
+})
+
+const closeMenu = () => {
+  isMenuOpen.value = false
+}
+
+const toggleMenu = () => {
+  isMenuOpen.value = !isMenuOpen.value
+}
+
+const onDocumentPointerDown = (event: MouseEvent) => {
+  if (!isMenuOpen.value) return
+  const root = menuRoot.value
+  if (!root) return
+  if (event.target instanceof Node && root.contains(event.target)) return
+  closeMenu()
+}
+
+const onDocumentKeyDown = (event: KeyboardEvent) => {
+  if (!isMenuOpen.value) return
+  if (event.key === 'Escape') closeMenu()
+}
+
+onMounted(() => {
+  document.addEventListener('pointerdown', onDocumentPointerDown)
+  document.addEventListener('keydown', onDocumentKeyDown)
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('pointerdown', onDocumentPointerDown)
+  document.removeEventListener('keydown', onDocumentKeyDown)
+})
 </script>
 
 <template>
@@ -73,10 +112,52 @@ const userRoleLabel = computed(() => {
               </option>
             </select>
           </label>
-          <div v-if="isLoggedIn" class="user-chip">
-            <span class="user-name">{{ user?.user_name }}</span>
-            <span v-if="userRoleLabel" class="user-role">{{ userRoleLabel }}</span>
-            <button class="ghost-btn small-btn" type="button" @click="logout">{{ t('nav.logout') }}</button>
+          <div v-if="isLoggedIn" ref="menuRoot" class="user-menu">
+            <button
+              class="user-chip"
+              type="button"
+              :aria-label="t('menu.account')"
+              aria-haspopup="menu"
+              :aria-expanded="isMenuOpen"
+              @click="toggleMenu"
+            >
+              <span class="user-name">{{ user?.user_name }}</span>
+              <span v-if="userRoleLabel" class="user-role">{{ userRoleLabel }}</span>
+            </button>
+
+            <div v-if="isMenuOpen" class="menu-panel" role="menu">
+              <RouterLink v-if="isCustomerRole" to="/customer/profile" class="menu-item" role="menuitem" @click="closeMenu">
+                <span class="menu-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
+                    <path
+                      d="M12 12c2.76 0 5-2.46 5-5.5S14.76 1 12 1 7 3.46 7 6.5 9.24 12 12 12Zm0 2c-4.42 0-8 2.24-8 5v2h16v-2c0-2.76-3.58-5-8-5Z"
+                    />
+                  </svg>
+                </span>
+                {{ t('menu.personalSettings') }}
+              </RouterLink>
+              <RouterLink v-if="isCustomerRole" to="/customer/billing" class="menu-item" role="menuitem" @click="closeMenu">
+                <span class="menu-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
+                    <path
+                      d="M7 3h10a2 2 0 0 1 2 2v1h-2V5H7v14h10v-1h2v1a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"
+                    />
+                    <path d="M9 7h8v2H9V7Zm0 4h8v2H9v-2Zm0 4h6v2H9v-2Z" />
+                  </svg>
+                </span>
+                {{ t('menu.billingCenter') }}
+              </RouterLink>
+              <button class="menu-item danger" type="button" role="menuitem" @click="logout">
+                <span class="menu-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
+                    <path d="M10 17v-2h4V9h-4V7h4a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2h-4Z" />
+                    <path d="M8.59 16.59 10 18l-6-6 6-6-1.41 1.41L4.83 11H14v2H4.83l3.76 3.59Z" />
+                    <path d="M20 3h-8v2h8v14h-8v2h8a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2Z" />
+                  </svg>
+                </span>
+                {{ t('nav.logout') }}
+              </button>
+            </div>
           </div>
           <RouterLink v-else to="/login" class="primary-btn small-btn">{{ t('nav.login') }}</RouterLink>
         </div>
@@ -209,11 +290,70 @@ const userRoleLabel = computed(() => {
   border: 1px solid rgba(165, 122, 99, 0.22);
   background: rgba(255, 255, 255, 0.7);
   color: var(--text-main);
+  cursor: pointer;
 }
 
 .user-role {
   font-size: 12px;
   opacity: 0.7;
+}
+
+.user-menu {
+  position: relative;
+}
+
+.menu-panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  min-width: 180px;
+  border-radius: 14px;
+  border: 1px solid rgba(165, 122, 99, 0.22);
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 18px 40px rgba(46, 31, 26, 0.18);
+  padding: 6px;
+  display: grid;
+  gap: 4px;
+  z-index: 30;
+}
+
+.menu-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-main);
+  text-decoration: none;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.menu-icon {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.8;
+}
+
+.menu-icon svg {
+  display: block;
+}
+
+.menu-item:hover {
+  background: rgba(244, 182, 194, 0.22);
+  border-color: rgba(244, 182, 194, 0.35);
+}
+
+.menu-item.danger:hover {
+  background: rgba(161, 60, 60, 0.12);
+  border-color: rgba(161, 60, 60, 0.25);
 }
 
 .primary-btn {

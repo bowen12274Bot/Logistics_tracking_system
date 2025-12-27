@@ -33,6 +33,7 @@ const router = createRouter({
     { path: '/customer/send', name: 'customer-send', component: { template: '<div />' } },
     { path: '/customer/profile', name: 'customer-profile', component: { template: '<div />' } },
     { path: '/customer/contract', name: 'customer-contract', component: { template: '<div />' } },
+    { path: '/customer/billing', name: 'customer-billing', component: { template: '<div />' } },
     { path: '/customer/payment', name: 'customer-payment', component: { template: '<div />' } },
   ],
 })

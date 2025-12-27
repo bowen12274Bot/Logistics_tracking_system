@@ -588,46 +588,57 @@ watch(
     </div>
 
     <div class="card filters-card">
-      <div class="legend">
-        <p class="eyebrow">{{ t('track.filters.title') }}</p>
+      <div class="filters-head">
+        <div class="legend">
+          <p class="eyebrow">{{ t('track.filters.title') }}</p>
+        </div>
+        <button type="button" class="filters-toggle" @click="filtersOpen = !filtersOpen">
+          <span>{{ filtersOpen ? t('track.filters.hide') : t('track.filters.show') }}</span>
+          <span aria-hidden="true">{{ filtersOpen ? '−' : '+' }}</span>
+        </button>
       </div>
 
-      <button type="button" class="filters-toggle" @click="filtersOpen = !filtersOpen">
-        <span>{{ filtersOpen ? t('track.filters.hide') : t('track.filters.show') }}</span>
-        <span aria-hidden="true">{{ filtersOpen ? '?' : '+' }}</span>
-      </button>
+      <form class="filters-form" @submit.prevent="lookup">
+        <div class="filters-basic">
+          <label class="form-field tracking-field">
+            <span>{{ t('track.filters.tracking') }}</span>
+            <input v-model="filters.tracking_number" name="tracking_number" type="text" :placeholder="t('track.filters.trackingPh')" />
+          </label>
 
-      <form v-if="filtersOpen" class="form-grid" @submit.prevent="lookup">
-        <label class="form-field span-2">
-          <span>{{ t('track.filters.tracking') }}</span>
-          <input v-model="filters.tracking_number" name="tracking_number" type="text" :placeholder="t('track.filters.trackingPh')" />
-        </label>
+          <div class="filters-actions">
+            <button class="primary-btn" type="submit" :disabled="isLoading">
+              {{ isLoading ? t('track.filters.loading') : t('track.filters.apply') }}
+            </button>
+            <button class="ghost-btn" type="button" @click="clearFilters" :disabled="isLoading">
+              {{ t('track.filters.clear') }}
+            </button>
+          </div>
+        </div>
 
-        <label class="form-field">
-          <span>{{ t('track.filters.dateFrom') }}</span>
-          <input v-model="filters.date_from" name="date_from" type="date" />
-        </label>
+        <div v-if="filtersOpen" class="form-grid filters-advanced">
+          <label class="form-field">
+            <span>{{ t('track.filters.dateFrom') }}</span>
+            <input v-model="filters.date_from" name="date_from" type="date" />
+          </label>
 
-        <label class="form-field">
-          <span>{{ t('track.filters.dateTo') }}</span>
-          <input v-model="filters.date_to" name="date_to" type="date" />
-        </label>
+          <label class="form-field">
+            <span>{{ t('track.filters.dateTo') }}</span>
+            <input v-model="filters.date_to" name="date_to" type="date" />
+          </label>
 
-        <label class="form-field span-2">
-          <span>{{ t('track.filters.vehicle') }}</span>
-          <input v-model="filters.vehicle_id" name="vehicle_id" type="text" :placeholder="t('track.filters.vehiclePh')" />
-        </label>
+          <label class="form-field span">
+            <span>{{ t('track.filters.vehicle') }}</span>
+            <input v-model="filters.vehicle_id" name="vehicle_id" type="text" :placeholder="t('track.filters.vehiclePh')" />
+          </label>
 
-        <label class="form-field span-2">
-          <span>{{ t('track.filters.location') }}</span>
-          <select v-model="filters.location_id" name="location_id">
-            <option value="">{{ t('track.filters.any') }}</option>
-            <option v-for="node in hubAndRegionNodes" :key="node.id" :value="node.id">{{ node.name }} ({{ node.id }})</option>
-          </select>
-        </label>
-
-        <button class="primary-btn" type="submit" :disabled="isLoading">{{ isLoading ? t('track.filters.loading') : t('track.filters.apply') }}</button>
-        <button class="ghost-btn" type="button" @click="clearFilters" :disabled="isLoading">{{ t('track.filters.clear') }}</button>
+          <label class="form-field span">
+            <span>{{ t('track.filters.location') }}</span>
+            <select v-model="filters.location_id" name="location_id">
+              <option value="">{{ t('track.filters.any') }}</option>
+              <option v-for="node in hubAndRegionNodes" :key="node.id" :value="node.id">{{ node.name }} ({{ node.id }})</option>
+            </select>
+          </label>
+        </div>
       </form>
     </div>
 
@@ -774,24 +785,60 @@ watch(
 <style scoped>
 .filters-card {
   margin-top: 14px;
+  margin-bottom: 16px;
 }
 
-.filters-toggle {
-  width: 100%;
+.filters-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.filters-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 12px;
-  padding: 10px 12px;
+  padding: 8px 10px;
   background: rgba(255, 255, 255, 0.75);
   cursor: pointer;
   font-weight: 700;
-  margin: 10px 0 12px 0;
+}
+
+.filters-form {
+  display: grid;
+  gap: 12px;
+}
+
+.filters-basic {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.tracking-field {
+  flex: 1;
+  min-width: 260px;
 }
 
 .results {
   margin-top: 16px;
+}
+
+.filters-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.filters-advanced {
+  margin-top: 2px;
 }
 
 .package-list {

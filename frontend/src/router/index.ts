@@ -5,8 +5,7 @@ import CustomerDashboard from '../views/CustomerDashboard.vue'
 import CustomerProfileView from '../views/CustomerProfileView.vue'
 import CustomerSendView from '../views/CustomerSendView.vue'
 import CustomerTrackView from '../views/CustomerTrackView.vue'
-import CustomerContractView from '../views/CustomerContractView.vue'
-import CustomerPaymentView from '../views/CustomerPaymentView.vue'
+import CustomerBillingCenterView from '../views/CustomerBillingCenterView.vue'
 import PublicTrackView from '../views/PublicTrackView.vue'
 import EmployeeDriverView from '../views/EmployeeDriverView.vue'
 import EmployeeWarehouseView from '../views/EmployeeWarehouseView.vue'
@@ -75,13 +74,19 @@ const router = createRouter({
     {
       path: '/customer/contract',
       name: 'customer-contract',
-      component: CustomerContractView,
+      redirect: (to) => ({ name: 'customer-billing', query: { ...to.query, tab: 'monthly' } }),
+      meta: { roles: CUSTOMER_ROLES },
+    },
+    {
+      path: '/customer/billing',
+      name: 'customer-billing',
+      component: CustomerBillingCenterView,
       meta: { roles: CUSTOMER_ROLES },
     },
     {
       path: '/customer/payment',
       name: 'customer-payment',
-      component: CustomerPaymentView,
+      redirect: (to) => ({ name: 'customer-billing', query: { ...to.query, tab: 'unpaid' } }),
       meta: { roles: CUSTOMER_ROLES },
     },
 

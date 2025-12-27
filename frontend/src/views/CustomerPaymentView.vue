@@ -26,6 +26,11 @@ const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
 
+const props = defineProps<{
+  embedded?: boolean
+  initialTab?: 'list' | 'records'
+}>()
+
 const methodLabel = (method: PaymentMethod) => t(`payment.method.${method}`)
 const trackingLabel = (tracking?: string | null) => (tracking && tracking.trim() ? tracking.trim() : t('common.tracking.pending'))
 
@@ -34,7 +39,7 @@ const myUnpaidPackages = computed<StoredPackage[]>(() => unpaidPackages.value)
 const expandedIds = ref<Set<string>>(new Set())
 const paymentChoices = ref<Record<string, PaymentMethod>>({})
 const feedbacks = ref<Record<string, string>>({})
-const activeTab = ref<'list' | 'records'>('list')
+const activeTab = ref<'list' | 'records'>(props.initialTab ?? 'list')
 const isLoading = computed(() => packageStore.isLoading)
 const loadError = computed(() => packageStore.error)
 const hasAutoFocused = ref(false)
@@ -98,6 +103,15 @@ watch(
   (tab) => {
     if (tab === 'records') loadPaymentRecords()
   },
+)
+
+watch(
+  () => props.initialTab,
+  (tab) => {
+    if (!tab) return
+    activeTab.value = tab
+  },
+  { immediate: true },
 )
 
 const resolveMethod = (method?: string | null): PaymentMethod => {
@@ -392,8 +406,13 @@ const payableReasonFor = (pkg: StoredPackage) => {
 </script>
 
 <template>
-  <UiPageShell :eyebrow="t('payment.page.eyebrow')" :title="t('payment.page.title')" :lede="t('payment.page.lede')">
-    <div class="tab-switch">
+  <UiPageShell
+    :eyebrow="props.embedded ? undefined : t('payment.page.eyebrow')"
+    :title="props.embedded ? undefined : t('payment.page.title')"
+    :lede="props.embedded ? undefined : t('payment.page.lede')"
+    :class="{ 'embedded-shell': props.embedded }"
+  >
+    <div v-if="!props.embedded" class="tab-switch">
       <button
         class="tab-btn"
         :class="{ active: activeTab === 'list' }"
@@ -708,6 +727,14 @@ const payableReasonFor = (pkg: StoredPackage) => {
 </template>
 
 <style scoped>
+.embedded-shell.page-shell {
+  padding: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  margin-bottom: 0;
+}
+
 .legend-row {
   display: flex;
   align-items: flex-start;

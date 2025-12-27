@@ -15,6 +15,8 @@ type Link = {
   to: string
   description: string
   featured?: boolean
+  badge?: string
+  muted?: boolean
 }
 
 const { t } = useI18n()
@@ -26,16 +28,15 @@ const summaryError = ref<string | null>(null)
 const inTransitResult = ref<TrackingSearchResponse | null>(null)
 const historyResult = ref<TrackingSearchResponse | null>(null)
 
-const quickLinksBase = computed<Link[]>(() => [
+const primaryLinks = computed<Link[]>(() => [
   { title: t('customer.dashboard.links.send.title'), to: '/customer/send', description: t('customer.dashboard.links.send.desc') },
   { title: t('customer.dashboard.links.track.title'), to: '/customer/track', description: t('customer.dashboard.links.track.desc') },
-  { title: t('customer.dashboard.links.profile.title'), to: '/customer/profile', description: t('customer.dashboard.links.profile.desc') },
-  { title: t('customer.dashboard.links.contract.title'), to: '/customer/contract', description: t('customer.dashboard.links.contract.desc') },
-  { title: t('customer.dashboard.links.payment.title'), to: '/customer/payment', description: t('customer.dashboard.links.payment.desc') },
 ])
 
 const hasUnpaid = computed(() => packageStore.unpaidPackages.length > 0)
 const unpaidCount = computed(() => packageStore.unpaidPackages.length)
+const unpaidIdSet = computed(() => new Set(packageStore.unpaidPackages.map((pkg) => pkg.id)))
+const isUnpaid = (pkgId?: string | null) => (pkgId ? unpaidIdSet.value.has(pkgId) : false)
 
 const inTransitCount = computed(() => inTransitResult.value?.total ?? null)
 const historyCount = computed(() => historyResult.value?.total ?? null)
@@ -51,11 +52,28 @@ const recentInTransit = computed<PackageRecord[]>(() => {
     .slice(0, 3)
 })
 
-const quickLinks = computed<Link[]>(() =>
-  quickLinksBase.value.map((link) =>
-    link.to === '/customer/payment' ? { ...link, featured: hasUnpaid.value } : link,
-  ),
-)
+const quickLinks = computed<Link[]>(() => primaryLinks.value)
+
+const utilityLinks = computed<Link[]>(() => {
+  const paymentBadge = hasUnpaid.value ? t('customer.dashboard.utility.unpaidBadge', { count: unpaidCount.value }) : ''
+
+  const payment: Link = {
+    title: t('customer.dashboard.links.payment.title'),
+    to: '/customer/payment',
+    description: t('customer.dashboard.links.payment.desc'),
+    featured: hasUnpaid.value,
+    badge: paymentBadge,
+    muted: !hasUnpaid.value,
+  }
+
+  const billing: Link = {
+    title: t('customer.dashboard.links.contract.title'),
+    to: '/customer/billing',
+    description: t('customer.dashboard.links.contract.desc'),
+  }
+
+  return hasUnpaid.value ? [payment, billing] : [billing, payment]
+})
 
 onMounted(() => {
   packageStore.fetchUnpaid(auth.user?.id)
@@ -105,7 +123,6 @@ onMounted(() => {
     <div class="dashboard-summary">
       <div class="section-header">
         <h2>{{ t('customer.dashboard.summary.title') }}</h2>
-        <RouterLink to="/customer/track" class="hint">{{ t('customer.dashboard.summary.viewTrack') }}</RouterLink>
       </div>
 
       <div class="mini-stats" :aria-label="t('customer.dashboard.summary.title')">
@@ -134,13 +151,45 @@ onMounted(() => {
         <UiList v-else variant="plain" as="ul">
           <li v-for="pkg in recentInTransit" :key="pkg.id" class="recent-item">
             <div class="recent-main">
-              <p class="recent-tracking">{{ pkg.tracking_number || t('customer.dashboard.summary.noTracking') }}</p>
+              <p class="recent-tracking">
+                {{ pkg.tracking_number || t('customer.dashboard.summary.noTracking') }}
+                <span class="status-pill" :class="{ danger: isUnpaid(pkg.id) }">
+                  {{ isUnpaid(pkg.id) ? t('customer.dashboard.summary.unpaidPill') : t('customer.dashboard.summary.paidPill') }}
+                </span>
+              </p>
               <p class="hint" style="margin: 0">
                 {{ t('customer.dashboard.summary.createdAt') }}：{{ formatDateTime(pkg.created_at) }}
                 <span v-if="pkg.estimated_delivery"> · {{ t('customer.dashboard.summary.eta') }}：{{ formatDateTime(pkg.estimated_delivery) }}</span>
               </p>
             </div>
-            <RouterLink class="ghost-btn small-btn" to="/customer/track">{{ t('customer.dashboard.summary.viewTrack') }}</RouterLink>
+            <div class="recent-actions">
+              <RouterLink
+                v-if="isUnpaid(pkg.id)"
+                class="ghost-btn small-btn"
+                :to="{ path: '/customer/billing', query: { tab: 'unpaid', package_id: pkg.id, tracking_number: pkg.tracking_number || undefined } }"
+              >
+                {{ t('customer.dashboard.summary.goPay') }}
+              </RouterLink>
+              <RouterLink class="ghost-btn small-btn" to="/customer/track">{{ t('customer.dashboard.summary.viewTrack') }}</RouterLink>
+            </div>
+          </li>
+        </UiList>
+      </UiCard>
+
+      <UiCard class="utility-card">
+        <div class="section-header" style="margin-bottom: 8px">
+          <h3 style="margin: 0">{{ t('customer.dashboard.utility.title') }}</h3>
+        </div>
+        <UiList variant="plain" as="ul">
+          <li v-for="item in utilityLinks" :key="item.to" class="utility-item">
+            <RouterLink :to="item.to" class="utility-link" :class="{ featured: item.featured, muted: item.muted }">
+              <div class="utility-main">
+                <p class="eyebrow" style="margin: 0">{{ item.title }}</p>
+                <p class="hint" style="margin: 0">{{ item.description }}</p>
+              </div>
+              <span v-if="item.badge" class="pill">{{ item.badge }}</span>
+              <span aria-hidden="true">&rarr;</span>
+            </RouterLink>
           </li>
         </UiList>
       </UiCard>
@@ -192,6 +241,36 @@ onMounted(() => {
   margin: 0 0 2px;
   font-weight: 800;
   letter-spacing: 0.02em;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.recent-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(72, 187, 120, 0.16);
+  border: 1px solid rgba(72, 187, 120, 0.28);
+  color: rgba(28, 79, 54, 0.95);
+  font-weight: 800;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.status-pill.danger {
+  background: rgba(161, 60, 60, 0.12);
+  border-color: rgba(161, 60, 60, 0.25);
+  color: rgba(114, 34, 34, 0.95);
 }
 
 .link-card.featured {
@@ -220,6 +299,69 @@ onMounted(() => {
 
 .link-card.featured span[aria-hidden] {
   font-weight: 800;
+}
+
+.utility-card {
+  padding: 14px 16px;
+}
+
+.utility-item {
+  margin: 0;
+  padding: 0;
+}
+
+.utility-link {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  text-decoration: none;
+  color: var(--text-main);
+  border: 1px solid rgba(165, 122, 99, 0.18);
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.utility-link:hover {
+  background: rgba(255, 255, 255, 0.75);
+}
+
+.utility-link.featured {
+  border-color: rgba(244, 182, 194, 0.7);
+  box-shadow: 0 12px 28px rgba(255, 145, 160, 0.18);
+}
+
+.utility-link.muted {
+  background: rgba(255, 255, 255, 0.45);
+  border-color: rgba(165, 122, 99, 0.12);
+  opacity: 0.88;
+}
+
+.utility-link.muted:hover {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.utility-main {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(244, 182, 194, 0.35);
+  border: 1px solid rgba(244, 182, 194, 0.55);
+  color: #3f2620;
+  font-weight: 800;
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 @keyframes floatGlow {
