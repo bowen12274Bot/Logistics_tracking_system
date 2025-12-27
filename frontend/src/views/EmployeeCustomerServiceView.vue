@@ -1,41 +1,64 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import {
   api,
   type CustomerServiceContractApplication,
   type CustomerServiceExceptionRecord,
 } from "../services/api";
-import { exceptionReasonLabel } from "../lib/exceptionReasons";
+import { EXCEPTION_REASONS, exceptionReasonLabel } from "../lib/exceptionReasons";
 import UiCard from "../components/ui/UiCard.vue";
 import UiNotice from "../components/ui/UiNotice.vue";
+import UiModal from "../components/ui/UiModal.vue";
 import UiPageShell from "../components/ui/UiPageShell.vue";
 import { useToasts } from "../components/ui/toast";
 import { toastFromApiError } from "../services/errorToast";
 
-type TabKey = "current" | "history";
 type TaskKind = "exception" | "contract";
+type ViewKey = "exceptions" | "contracts" | "handled";
+type HandledTypeFilter = "all" | "exception" | "contract";
+type ExceptionReasonFilter = "" | (typeof EXCEPTION_REASONS)[number]["code"];
 
-type TaskItem = {
+type TaskBase = {
   key: string; // `${kind}:${id}`
-  kind: TaskKind;
   id: string;
   title: string;
   pill: { text: string; tone: "warning" | "done" };
   meta: string;
   createdAt: string | null;
-  raw: CustomerServiceExceptionRecord | CustomerServiceContractApplication;
 };
 
-const activeTab = ref<TabKey>("current");
-const expandedKey = ref<string | null>(null);
+type ExceptionTask = TaskBase & { kind: "exception"; raw: CustomerServiceExceptionRecord };
+type ContractTask = TaskBase & { kind: "contract"; raw: CustomerServiceContractApplication };
+type TaskItem = ExceptionTask | ContractTask;
+
+const activeView = ref<ViewKey>("exceptions");
+const selectedKey = ref<string | null>(null);
+
+const { t } = useI18n();
+
+const viewOrder: ViewKey[] = ["exceptions", "contracts", "handled"];
+const exceptionsTabRef = ref<HTMLButtonElement | null>(null);
+const contractsTabRef = ref<HTMLButtonElement | null>(null);
+const handledTabRef = ref<HTMLButtonElement | null>(null);
+
+const taskButtonRefs = new Map<string, HTMLButtonElement>();
+
+const csLayoutRef = ref<HTMLElement | null>(null);
+const isFullscreen = ref(false);
 
 const isLoading = ref(false);
 const error = ref<string | null>(null);
 const notice = ref<string | null>(null);
-const toast = useToasts();
+const lastRefreshedAt = ref<string | null>(null);
 
 const exceptions = ref<CustomerServiceExceptionRecord[]>([]);
 const contracts = ref<CustomerServiceContractApplication[]>([]);
+
+const isCancelConfirmOpen = ref(false);
+
+const exceptionReasonFilter = ref<ExceptionReasonFilter>("");
+const handledTypeFilter = ref<HandledTypeFilter>("all");
 
 const exceptionAction = ref<"resume" | "cancel">("resume");
 const exceptionResumeMode = ref<"continue_segment" | "reroute_next_hop" | "redirect_destination">("continue_segment");
@@ -53,13 +76,13 @@ const contractSubmitError = ref<string | null>(null);
 
 const normalizeKey = (kind: TaskKind, id: string) => `${kind}:${id}`;
 
-const reasonLabel = exceptionReasonLabel;
+const reasonLabel = (code?: string | null) => exceptionReasonLabel(code, t);
 
 const contractStatusLabel = (status?: string | null) => {
   const s = String(status ?? "").trim().toLowerCase();
-  if (s === "approved") return "已核准";
-  if (s === "rejected") return "已拒絕";
-  return "待審核";
+  if (s === "approved") return t("cs.contract.status.approved");
+  if (s === "rejected") return t("cs.contract.status.rejected");
+  return t("cs.contract.status.pending");
 };
 
 const formatDateTime = (value?: string | null) => {
@@ -69,98 +92,318 @@ const formatDateTime = (value?: string | null) => {
   return date.toLocaleString();
 };
 
-const currentTasks = computed<TaskItem[]>(() => {
-  const tasks: TaskItem[] = [];
+const normalizeReasonCode = (code?: string | null) => {
+  const key = String(code ?? "").trim();
+  if (!key) return "other" as const;
+  return EXCEPTION_REASONS.some((r) => r.code === key) ? (key as ExceptionReasonFilter) : ("other" as const);
+};
 
+const exceptionUnhandledTasks = computed<ExceptionTask[]>(() => {
+  const tasks: ExceptionTask[] = [];
   for (const ex of exceptions.value) {
     if (Number(ex.handled ?? 0) === 1) continue;
     const id = String(ex.id);
     tasks.push({
       key: normalizeKey("exception", id),
-      kind: "exception",
+      kind: "exception" as const,
       id,
       title: ex.tracking_number || ex.package_id,
-      pill: { text: "異常", tone: "warning" },
-      meta: `分類：${reasonLabel(ex.reason_code)} · 申報：${ex.reported_role || "-"}`,
+      pill: { text: t("cs.exception.pill.pending"), tone: "warning" },
+      meta: `${t("cs.labels.reason")}：${reasonLabel(ex.reason_code)} · ${t("cs.labels.reportedBy")}：${ex.reported_role || "-"}`,
       createdAt: ex.reported_at ?? null,
       raw: ex,
     });
   }
-
-  for (const app of contracts.value) {
-    if (String(app.status) !== "pending") continue;
-    const id = String(app.id);
-    tasks.push({
-      key: normalizeKey("contract", id),
-      kind: "contract",
-      id,
-      title: app.company_name,
-      pill: { text: "待審核", tone: "warning" },
-      meta: `客戶：${app.customer?.email || app.customer?.id} · 統編：${app.tax_id}`,
-      createdAt: app.created_at ?? null,
-      raw: app,
-    });
-  }
-
   tasks.sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
   return tasks;
 });
 
-const historyTasks = computed<TaskItem[]>(() => {
-  const tasks: TaskItem[] = [];
-
+const exceptionHandledTasks = computed<ExceptionTask[]>(() => {
+  const tasks: ExceptionTask[] = [];
   for (const ex of exceptions.value) {
     if (Number(ex.handled ?? 0) !== 1) continue;
     const id = String(ex.id);
     tasks.push({
       key: normalizeKey("exception", id),
-      kind: "exception",
+      kind: "exception" as const,
       id,
       title: ex.tracking_number || ex.package_id,
-      pill: { text: "已結案", tone: "done" },
-      meta: `分類：${reasonLabel(ex.reason_code)} · 申報：${ex.reported_role || "-"}`,
+      pill: { text: t("cs.exception.pill.done"), tone: "done" },
+      meta: `${t("cs.labels.reason")}：${reasonLabel(ex.reason_code)} · ${t("cs.labels.reportedBy")}：${ex.reported_role || "-"}`,
       createdAt: ex.handled_at ?? ex.reported_at ?? null,
       raw: ex,
     });
   }
+  tasks.sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
+  return tasks;
+});
 
+const contractPendingTasks = computed<ContractTask[]>(() => {
+  const tasks: ContractTask[] = [];
+  for (const app of contracts.value) {
+    if (String(app.status) !== "pending") continue;
+    const id = String(app.id);
+    tasks.push({
+      key: normalizeKey("contract", id),
+      kind: "contract" as const,
+      id,
+      title: app.company_name,
+      pill: { text: t("cs.contract.pill.pending"), tone: "warning" },
+      meta: `${t("cs.labels.customer")}：${app.customer?.email || app.customer?.id} · ${t("cs.labels.taxId")}：${app.tax_id}`,
+      createdAt: app.created_at ?? null,
+      raw: app,
+    });
+  }
+  tasks.sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
+  return tasks;
+});
+
+const contractHandledTasks = computed<ContractTask[]>(() => {
+  const tasks: ContractTask[] = [];
   for (const app of contracts.value) {
     if (String(app.status) === "pending") continue;
     const id = String(app.id);
     tasks.push({
       key: normalizeKey("contract", id),
-      kind: "contract",
+      kind: "contract" as const,
       id,
       title: app.company_name,
       pill: { text: contractStatusLabel(app.status), tone: "done" },
-      meta: `客戶：${app.customer?.email || app.customer?.id} · 統編：${app.tax_id}`,
+      meta: `${t("cs.labels.customer")}：${app.customer?.email || app.customer?.id} · ${t("cs.labels.taxId")}：${app.tax_id}`,
       createdAt: app.reviewed_at ?? app.created_at ?? null,
       raw: app,
     });
   }
-
   tasks.sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
   return tasks;
 });
 
-const tasksForActiveTab = computed(() =>
-  activeTab.value === "current" ? currentTasks.value : historyTasks.value,
-);
+const viewCounts = computed(() => ({
+  exceptions: exceptionUnhandledTasks.value.length,
+  contracts: contractPendingTasks.value.length,
+  handled: exceptionHandledTasks.value.length + contractHandledTasks.value.length,
+}));
 
-const expandedTask = computed<TaskItem | null>(() => {
-  if (!expandedKey.value) return null;
-  return tasksForActiveTab.value.find((t) => t.key === expandedKey.value) ?? null;
+const showHandledTypeFilter = computed(() => activeView.value === "handled");
+const showExceptionReasonFilter = computed(
+  () => activeView.value === "exceptions" || (activeView.value === "handled" && handledTypeFilter.value !== "contract"),
+);
+const shouldTypeFilterSpan = computed(() => showHandledTypeFilter.value && !showExceptionReasonFilter.value);
+const shouldReasonFilterSpan = computed(() => showExceptionReasonFilter.value && !showHandledTypeFilter.value);
+
+const visibleTasks = computed<TaskItem[]>(() => {
+  if (activeView.value === "exceptions") {
+    const reason = exceptionReasonFilter.value;
+    const base = exceptionUnhandledTasks.value;
+    if (!reason) return base;
+    return base.filter((t) => normalizeReasonCode(t.raw.reason_code) === reason);
+  }
+
+  if (activeView.value === "contracts") {
+    return contractPendingTasks.value;
+  }
+
+  const typeFilter = handledTypeFilter.value;
+  const merged: TaskItem[] = [
+    ...(typeFilter === "contract" ? [] : exceptionHandledTasks.value),
+    ...(typeFilter === "exception" ? [] : contractHandledTasks.value),
+  ];
+
+  const reason = exceptionReasonFilter.value;
+  if (!reason) return merged;
+  return merged.filter((t) => t.kind !== "exception" || normalizeReasonCode(t.raw.reason_code) === reason);
 });
 
-const toggleTask = (key: string) => {
-  expandedKey.value = expandedKey.value === key ? null : key;
+const selectedTask = computed<TaskItem | null>(() => {
+  if (!selectedKey.value) return null;
+  return visibleTasks.value.find((t) => t.key === selectedKey.value) ?? null;
+});
+
+const isReadOnlyView = computed(() => activeView.value === "handled");
+
+const detailScrollRef = ref<HTMLElement | null>(null);
+const exceptionActionSelectRef = ref<HTMLSelectElement | null>(null);
+const contractDecisionSelectRef = ref<HTMLSelectElement | null>(null);
+
+const exceptionPendingCount = computed(() => exceptionUnhandledTasks.value.length);
+const exceptionDoneCount = computed(() => exceptionHandledTasks.value.length);
+const contractPendingCount = computed(() => contractPendingTasks.value.length);
+const contractDoneCount = computed(() => contractHandledTasks.value.length);
+
+const emptyListTitle = computed(() => {
+  if (activeView.value === "exceptions") return t("cs.empty.exceptions");
+  if (activeView.value === "contracts") return t("cs.empty.contracts");
+  if (handledTypeFilter.value === "exception") return t("cs.empty.handledExceptions");
+  if (handledTypeFilter.value === "contract") return t("cs.empty.handledContracts");
+  return t("cs.empty.handledAll");
+});
+
+const emptyListHint = computed(() => t("cs.empty.hint"));
+
+const isEditableTarget = (target: EventTarget | null) => {
+  if (!(target instanceof HTMLElement)) return false;
+  if (target.isContentEditable) return true;
+  const tag = target.tagName.toLowerCase();
+  return tag === "input" || tag === "textarea" || tag === "select";
+};
+
+const focusActiveViewTab = async () => {
+  await nextTick();
+  const el =
+    activeView.value === "exceptions"
+      ? exceptionsTabRef.value
+      : activeView.value === "contracts"
+        ? contractsTabRef.value
+        : handledTabRef.value;
+  el?.focus();
+};
+
+const onViewSwitchKeydown = async (e: KeyboardEvent) => {
+  if (e.altKey || e.ctrlKey || e.metaKey) return;
+  const key = e.key;
+  if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(key)) return;
+
+  e.preventDefault();
+  e.stopPropagation();
+
+  const currentIndex = Math.max(0, viewOrder.indexOf(activeView.value));
+  const nextIndex =
+    key === "Home"
+      ? 0
+      : key === "End"
+        ? viewOrder.length - 1
+        : key === "ArrowLeft"
+          ? Math.max(0, currentIndex - 1)
+          : Math.min(viewOrder.length - 1, currentIndex + 1);
+
+  const nextView = viewOrder[nextIndex];
+  if (!nextView) return;
+  if (nextView === activeView.value) return;
+  activeView.value = nextView;
+  await focusActiveViewTab();
+};
+
+const setTaskButtonRef = (key: string, el: Element | null) => {
+  if (el instanceof HTMLButtonElement) taskButtonRefs.set(key, el);
+  else taskButtonRefs.delete(key);
+};
+
+const focusSelectedTask = async () => {
+  if (!selectedKey.value) return;
+  await nextTick();
+  taskButtonRefs.get(selectedKey.value)?.focus();
+};
+
+const focusDetailForm = async () => {
+  if (isReadOnlyView.value) return;
+  await nextTick();
+  if (selectedTask.value?.kind === "exception") exceptionActionSelectRef.value?.focus();
+  if (selectedTask.value?.kind === "contract") contractDecisionSelectRef.value?.focus();
+};
+
+const syncFullscreenState = () => {
+  const el = csLayoutRef.value;
+  isFullscreen.value = Boolean(el && document.fullscreenElement === el);
+};
+
+const requestElementFullscreen = async (el: HTMLElement) => {
+  const anyEl = el as unknown as {
+    requestFullscreen?: () => Promise<void> | void;
+    webkitRequestFullscreen?: () => Promise<void> | void;
+    msRequestFullscreen?: () => Promise<void> | void;
+  };
+
+  if (typeof anyEl.requestFullscreen === "function") return anyEl.requestFullscreen();
+  if (typeof anyEl.webkitRequestFullscreen === "function") return anyEl.webkitRequestFullscreen();
+  if (typeof anyEl.msRequestFullscreen === "function") return anyEl.msRequestFullscreen();
+};
+
+const exitFullscreen = async () => {
+  const anyDoc = document as unknown as { exitFullscreen?: () => Promise<void> | void };
+  if (typeof anyDoc.exitFullscreen === "function") return anyDoc.exitFullscreen();
+};
+
+const toggleFullscreen = async () => {
+  const el = csLayoutRef.value;
+  if (!el) return;
+  if (document.fullscreenElement === el) await exitFullscreen();
+  else await requestElementFullscreen(el);
+  syncFullscreenState();
+};
+
+const onTaskListKeydown = async (e: KeyboardEvent) => {
+  if (e.altKey || e.ctrlKey || e.metaKey) return;
+  if (isEditableTarget(e.target)) return;
+  if (visibleTasks.value.length === 0) return;
+
+  const key = e.key;
+  const moveKeys = ["ArrowDown", "ArrowUp", "Home", "End"];
+  if (moveKeys.includes(key)) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const currentIndex = visibleTasks.value.findIndex((t) => t.key === selectedKey.value);
+    const safeIndex = currentIndex >= 0 ? currentIndex : 0;
+    const nextIndex =
+      key === "Home"
+        ? 0
+        : key === "End"
+          ? visibleTasks.value.length - 1
+          : key === "ArrowUp"
+            ? Math.max(0, safeIndex - 1)
+            : Math.min(visibleTasks.value.length - 1, safeIndex + 1);
+
+    const nextKey = visibleTasks.value[nextIndex]?.key;
+    if (!nextKey) return;
+    selectTask(nextKey);
+    await focusSelectedTask();
+    return;
+  }
+
+  if (key === "Enter" || key === " ") {
+    e.preventDefault();
+    e.stopPropagation();
+    await focusDetailForm();
+  }
+};
+
+const selectTask = (key: string) => {
+  selectedKey.value = key;
+  notice.value = null;
   exceptionSubmitError.value = null;
   contractSubmitError.value = null;
-  notice.value = null;
+  resetExceptionForm();
+  resetContractForm();
+};
+
+const toggleTaskSelection = (key: string) => {
+  if (selectedKey.value === key) {
+    selectedKey.value = null;
+    notice.value = null;
+    exceptionSubmitError.value = null;
+    contractSubmitError.value = null;
+    resetExceptionForm();
+    resetContractForm();
+    return;
+  }
+  selectTask(key);
+};
+
+const resetExceptionForm = () => {
+  exceptionSubmitError.value = null;
   exceptionAction.value = "resume";
   exceptionResumeMode.value = "continue_segment";
   exceptionNextHopOverride.value = "";
   exceptionDestinationOverride.value = "";
+  exceptionHandlingReport.value = "";
+  isCancelConfirmOpen.value = false;
+};
+
+const resetContractForm = () => {
+  contractSubmitError.value = null;
+  contractDecision.value = "approved";
+  contractCreditLimit.value = "";
+  contractReviewNotes.value = "";
 };
 
 const refresh = async () => {
@@ -188,20 +431,21 @@ const refresh = async () => {
     ];
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e);
-    toastFromApiError(e, error.value ?? "載入失敗");
+    toastFromApiError(e, error.value ?? t("cs.errors.loadFailed"));
   } finally {
+    lastRefreshedAt.value = new Date().toISOString();
     isLoading.value = false;
   }
 };
 
 const submitExpandedException = async () => {
-  const task = expandedTask.value;
+  const task = selectedTask.value as ExceptionTask | null;
   if (!task || task.kind !== "exception") return;
 
   exceptionSubmitError.value = null;
   const report = exceptionHandlingReport.value.trim();
   if (!report) {
-    exceptionSubmitError.value = "handling_report 必填";
+    exceptionSubmitError.value = t("cs.errors.handlingReportRequired");
     return;
   }
 
@@ -224,24 +468,20 @@ const submitExpandedException = async () => {
                 : undefined,
           }),
     });
-    notice.value = exceptionAction.value === "cancel" ? "已取消配送（配送失敗）" : "已恢復配送";
-    exceptionHandlingReport.value = "";
-    exceptionAction.value = "resume";
-    exceptionResumeMode.value = "continue_segment";
-    exceptionNextHopOverride.value = "";
-    exceptionDestinationOverride.value = "";
-    expandedKey.value = null;
+    notice.value =
+      exceptionAction.value === "cancel" ? t("cs.notices.exceptionCanceled") : t("cs.notices.exceptionResumed");
+    resetExceptionForm();
     await refresh();
   } catch (e) {
     exceptionSubmitError.value = e instanceof Error ? e.message : String(e);
-    toastFromApiError(e, exceptionSubmitError.value ?? "操作失敗");
+    toastFromApiError(e, exceptionSubmitError.value ?? t("cs.errors.actionFailed"));
   } finally {
     exceptionSubmitting.value = false;
   }
 };
 
 const submitExpandedContract = async () => {
-  const task = expandedTask.value;
+  const task = selectedTask.value as ContractTask | null;
   if (!task || task.kind !== "contract") return;
 
   contractSubmitError.value = null;
@@ -250,7 +490,7 @@ const submitExpandedContract = async () => {
   if (rawLimit) {
     const parsed = Number(rawLimit);
     if (!Number.isFinite(parsed) || parsed < 0) {
-      contractSubmitError.value = "credit_limit 必須為非負整數";
+      contractSubmitError.value = t("cs.errors.creditLimitNonNegativeInteger");
       return;
     }
     creditLimit = Math.floor(parsed);
@@ -263,242 +503,740 @@ const submitExpandedContract = async () => {
       credit_limit: creditLimit,
       review_notes: contractReviewNotes.value.trim() || undefined,
     });
-    notice.value = contractDecision.value === "approved" ? "已核准合約申請" : "已拒絕合約申請";
-    contractCreditLimit.value = "";
-    contractReviewNotes.value = "";
-    expandedKey.value = null;
+    notice.value =
+      contractDecision.value === "approved" ? t("cs.notices.contractApproved") : t("cs.notices.contractRejected");
+    resetContractForm();
     await refresh();
   } catch (e) {
     contractSubmitError.value = e instanceof Error ? e.message : String(e);
-    toastFromApiError(e, contractSubmitError.value ?? "操作失敗");
+    toastFromApiError(e, contractSubmitError.value ?? t("cs.errors.actionFailed"));
   } finally {
     contractSubmitting.value = false;
   }
 };
 
-watch(activeTab, () => {
-  expandedKey.value = null;
+const requestSubmitExpandedException = async () => {
+  const task = selectedTask.value as ExceptionTask | null;
+  if (!task || task.kind !== "exception") return;
+
   exceptionSubmitError.value = null;
-  contractSubmitError.value = null;
-  notice.value = null;
+  const report = exceptionHandlingReport.value.trim();
+  if (!report) {
+    exceptionSubmitError.value = t("cs.errors.handlingReportRequired");
+    return;
+  }
+
+  if (exceptionAction.value === "cancel") {
+    isCancelConfirmOpen.value = true;
+    return;
+  }
+
+  await submitExpandedException();
+};
+
+const cancelConfirmSummary = computed(() => {
+  const task = selectedTask.value;
+  if (!task || task.kind !== "exception") return null;
+  const report = exceptionHandlingReport.value.trim();
+  return {
+    title: task.title,
+    meta: task.meta,
+    reportPreview: report.length > 120 ? `${report.slice(0, 120)}…` : report,
+  };
 });
+
+watch(activeView, () => {
+  notice.value = null;
+  error.value = null;
+  isCancelConfirmOpen.value = false;
+  resetExceptionForm();
+  resetContractForm();
+  selectedKey.value = null;
+  exceptionReasonFilter.value = "";
+  handledTypeFilter.value = "all";
+});
+
+watch(
+  () => visibleTasks.value.map((t) => t.key).join("|"),
+  () => {
+    if (selectedKey.value && visibleTasks.value.some((t) => t.key === selectedKey.value)) return;
+    selectedKey.value = visibleTasks.value[0]?.key ?? null;
+  },
+  { immediate: true },
+);
 
 onMounted(async () => {
   await refresh();
+  syncFullscreenState();
+  document.addEventListener("fullscreenchange", syncFullscreenState);
+});
+
+onUnmounted(() => {
+  document.removeEventListener("fullscreenchange", syncFullscreenState);
 });
 </script>
 
 <template>
-  <UiPageShell eyebrow="員工 · 客服" title="客服任務清單" lede="切換現在任務/過去紀錄，點開後再執行處理動作。">
-
-    <div class="tab-switch">
-      <button class="tab-btn" :class="{ active: activeTab === 'current' }" type="button" :disabled="isLoading" @click="activeTab = 'current'">
-        現在任務（{{ currentTasks.length }}）
-      </button>
-      <button class="tab-btn" :class="{ active: activeTab === 'history' }" type="button" :disabled="isLoading" @click="activeTab = 'history'">
-        過去紀錄（{{ historyTasks.length }}）
-      </button>
-      <button class="ghost-btn" type="button" :disabled="isLoading" @click="refresh">重新整理</button>
-    </div>
-
+  <UiPageShell :eyebrow="t('cs.page.eyebrow')" :title="t('cs.page.title')" :lede="t('cs.page.lede')">
     <UiNotice v-if="error" tone="error" role="alert" style="margin-top: 10px">{{ error }}</UiNotice>
     <UiNotice v-else-if="notice" tone="success" style="margin-top: 10px">{{ notice }}</UiNotice>
 
-    <UiCard style="margin-top: 16px">
-      <p v-if="isLoading" class="hint">載入中…</p>
-      <p v-else-if="tasksForActiveTab.length === 0" class="hint">目前沒有資料。</p>
+    <UiCard class="cs-overview-bar" style="margin-top: 16px">
+      <div class="cs-overview">
+        <div class="overview-card">
+          <p class="eyebrow">{{ t('cs.overview.pendingExceptions.label') }}</p>
+          <p class="overview-value">{{ exceptionPendingCount }}</p>
+          <p class="hint" style="margin: 6px 0 0">
+            {{ t('cs.overview.pendingExceptions.hint', { view: t('cs.views.exceptions') }) }}
+          </p>
+        </div>
+        <div class="overview-card">
+          <p class="eyebrow">{{ t('cs.overview.doneExceptions.label') }}</p>
+          <p class="overview-value">{{ exceptionDoneCount }}</p>
+          <p class="hint" style="margin: 6px 0 0">
+            {{
+              t('cs.overview.doneExceptions.hint', {
+                view: t('cs.views.handled'),
+                type: t('cs.filters.type.exception'),
+              })
+            }}
+          </p>
+        </div>
+        <div class="overview-card">
+          <p class="eyebrow">{{ t('cs.overview.pendingContracts.label') }}</p>
+          <p class="overview-value">{{ contractPendingCount }}</p>
+          <p class="hint" style="margin: 6px 0 0">
+            {{ t('cs.overview.pendingContracts.hint', { view: t('cs.views.contracts') }) }}
+          </p>
+        </div>
+        <div class="overview-card">
+          <p class="eyebrow">{{ t('cs.overview.doneContracts.label') }}</p>
+          <p class="overview-value">{{ contractDoneCount }}</p>
+          <p class="hint" style="margin: 6px 0 0">
+            {{
+              t('cs.overview.doneContracts.hint', {
+                view: t('cs.views.handled'),
+                type: t('cs.filters.type.contract'),
+              })
+            }}
+          </p>
+        </div>
+      </div>
+    </UiCard>
 
-      <ul v-else class="package-list">
-        <li v-for="t in tasksForActiveTab" :key="t.key" class="package-row" :class="{ active: expandedKey === t.key }">
-          <button type="button" class="row-btn" @click="toggleTask(t.key)">
-            <span class="tracking">{{ t.title }}</span>
-            <span class="pill" :class="t.pill.tone">{{ t.pill.text }}</span>
-            <span class="meta">{{ formatDateTime(t.createdAt) }}</span>
-          </button>
+    <div ref="csLayoutRef" class="cs-layout" :class="{ fullscreen: isFullscreen }">
+      <div class="cs-layout-header">
+        <div class="cs-layout-header-row">
+          <div class="cs-view-switch" role="tablist" :aria-label="t('cs.views.aria')" @keydown="onViewSwitchKeydown">
+            <button
+              class="cs-view-btn"
+              :class="{ active: activeView === 'exceptions' }"
+              type="button"
+              :disabled="isLoading"
+              role="tab"
+              :aria-selected="activeView === 'exceptions'"
+              :tabindex="activeView === 'exceptions' ? 0 : -1"
+              ref="exceptionsTabRef"
+              @click="activeView = 'exceptions'"
+            >
+              <span class="cs-view-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
+                  <path
+                    d="M12 2 1 21h22L12 2Zm0 6.5c.55 0 1 .45 1 1v5.5a1 1 0 1 1-2 0V9.5c0-.55.45-1 1-1Zm0 10.5a1.25 1.25 0 1 1 0 2.5 1.25 1.25 0 0 1 0-2.5Z"
+                  />
+                </svg>
+              </span>
+              <span>{{ t('cs.views.exceptions') }}</span>
+              <span class="cs-view-count">({{ viewCounts.exceptions }})</span>
+            </button>
+            <button
+              class="cs-view-btn"
+              :class="{ active: activeView === 'contracts' }"
+              type="button"
+              :disabled="isLoading"
+              role="tab"
+              :aria-selected="activeView === 'contracts'"
+              :tabindex="activeView === 'contracts' ? 0 : -1"
+              ref="contractsTabRef"
+              @click="activeView = 'contracts'"
+            >
+              <span class="cs-view-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
+                  <path d="M7 2h7l5 5v15a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Zm7 1.5V8h4.5L14 3.5Z" />
+                  <path d="M8 11h8v2H8v-2Zm0 4h8v2H8v-2Z" />
+                </svg>
+              </span>
+              <span>{{ t('cs.views.contracts') }}</span>
+              <span class="cs-view-count">({{ viewCounts.contracts }})</span>
+            </button>
+            <button
+              class="cs-view-btn"
+              :class="{ active: activeView === 'handled' }"
+              type="button"
+              :disabled="isLoading"
+              role="tab"
+              :aria-selected="activeView === 'handled'"
+              :tabindex="activeView === 'handled' ? 0 : -1"
+              ref="handledTabRef"
+              @click="activeView = 'handled'"
+            >
+              <span class="cs-view-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
+                  <path
+                    d="M12 22a10 10 0 1 1 0-20 10 10 0 0 1 0 20Zm-1.1-6.2 7.2-7.2-1.4-1.4-5.8 5.8-2.5-2.5-1.4 1.4 3.9 3.9Z"
+                  />
+                </svg>
+              </span>
+              <span>{{ t('cs.views.handled') }}</span>
+              <span class="cs-view-count">({{ viewCounts.handled }})</span>
+            </button>
+          </div>
 
-          <div v-if="expandedKey === t.key" class="package-detail">
-            <p class="hint" style="margin: 0 0 10px 0">{{ t.meta }}</p>
+          <div class="cs-header-actions">
+            <button class="ghost-btn small-btn" type="button" :disabled="isLoading" @click="refresh">
+              {{ isLoading ? t('cs.actions.refreshing') : t('cs.actions.refresh') }}
+            </button>
+            <button class="ghost-btn small-btn" type="button" @click="toggleFullscreen">
+              {{ isFullscreen ? t('cs.actions.exitFullscreen') : t('cs.actions.enterFullscreen') }}
+            </button>
+          </div>
+        </div>
+      </div>
 
-            <template v-if="t.kind === 'exception'">
-              <p class="hint" style="margin: 0 0 10px 0">
-                描述：{{ (t.raw as any).description || "-" }}
-              </p>
-              <p class="hint" style="margin: 0 0 6px 0">
-                寄件地：{{ (t.raw as any).sender_address || "-" }} · 收件地：{{ (t.raw as any).receiver_address || "-" }}
-              </p>
-              <p v-if="(t.raw as any).active_vehicle_code" class="hint" style="margin: 0 0 6px 0">
-                車上：{{ (t.raw as any).active_vehicle_code }} · 車輛位置：{{ (t.raw as any).active_vehicle_node_id || "-" }}
-              </p>
-              <p v-if="(t.raw as any).last_canceled_to_location" class="hint" style="margin: 0 0 10px 0">
-                上一次任務：{{ (t.raw as any).last_canceled_from_location || "-" }} → {{ (t.raw as any).last_canceled_to_location || "-" }}
-              </p>
+      <UiCard class="cs-list">
+        <div class="cs-list-fixed">
+          <div class="cs-filters">
+            <label v-if="showHandledTypeFilter" class="filter-field" :class="{ 'filter-span-2': shouldTypeFilterSpan }">
+              <span class="hint">{{ t('cs.filters.type.label') }}</span>
+              <select v-model="handledTypeFilter" :disabled="isLoading">
+                <option value="all">{{ t('cs.filters.type.all') }}</option>
+                <option value="exception">{{ t('cs.filters.type.exception') }}</option>
+                <option value="contract">{{ t('cs.filters.type.contract') }}</option>
+              </select>
+            </label>
 
-              <div v-if="activeTab === 'history'" class="hint">此異常已結案。</div>
-              <div v-else class="form-grid">
+            <label
+              v-if="showExceptionReasonFilter"
+              class="filter-field"
+              :class="{ 'filter-span-2': shouldReasonFilterSpan }"
+            >
+              <span class="hint">{{ t('cs.filters.reason.label') }}</span>
+              <select v-model="exceptionReasonFilter" :disabled="isLoading">
+                <option value="">{{ t('cs.filters.reason.all') }}</option>
+                <option v-for="r in EXCEPTION_REASONS" :key="r.code" :value="r.code">{{ reasonLabel(r.code) }}</option>
+              </select>
+            </label>
+          </div>
+        </div>
+
+        <div class="cs-list-scroll">
+          <p v-if="isLoading" class="hint" style="margin: 0">{{ t('common.loading') }}</p>
+          <div v-else-if="visibleTasks.length === 0" class="cs-empty">
+            <p class="cs-empty-title">{{ emptyListTitle }}</p>
+            <p class="hint" style="margin: 6px 0 0">{{ emptyListHint }}</p>
+          </div>
+          <ul v-else class="task-list" @keydown="onTaskListKeydown">
+            <li v-for="t in visibleTasks" :key="t.key" class="task-row">
+              <button
+                class="task-btn"
+                type="button"
+                :class="{ active: selectedKey === t.key }"
+                :aria-current="selectedKey === t.key ? 'true' : undefined"
+                :ref="(el) => setTaskButtonRef(t.key, el as Element | null)"
+                @click="toggleTaskSelection(t.key)"
+              >
+                <div class="task-main">
+                  <div class="task-title">{{ t.title }}</div>
+                  <div class="task-meta">{{ t.meta }}</div>
+                </div>
+                <div class="task-side">
+                  <span class="status-pill" :class="t.pill.tone">{{ t.pill.text }}</span>
+                  <span class="task-time">{{ formatDateTime(t.createdAt) }}</span>
+                </div>
+              </button>
+            </li>
+          </ul>
+        </div>
+      </UiCard>
+
+      <UiCard class="cs-detail">
+        <div class="cs-detail-fixed">
+          <template v-if="selectedTask">
+            <div class="detail-header">
+              <div>
+                <div class="detail-title">{{ selectedTask.title }}</div>
+                <div class="detail-sub">{{ selectedTask.meta }}</div>
+              </div>
+              <span class="status-pill" :class="selectedTask.pill.tone">{{ selectedTask.pill.text }}</span>
+            </div>
+          </template>
+          <template v-else>
+            <div class="detail-header">
+              <div>
+                <div class="detail-title">{{ t('cs.cheatsheet.title') }}</div>
+                <div class="detail-sub">{{ t('cs.cheatsheet.subtitle') }}</div>
+              </div>
+            </div>
+          </template>
+        </div>
+
+        <div class="cs-detail-scroll" ref="detailScrollRef">
+          <template v-if="!selectedTask">
+            <div class="detail-section">
+              <p class="hint" style="margin: 0 0 10px 0">{{ t('cs.cheatsheet.sections.flow') }}</p>
+              <ol class="cheat-list">
+                <li>{{ t('cs.cheatsheet.flow.step1') }}</li>
+                <li>{{ t('cs.cheatsheet.flow.step2') }}</li>
+                <li>{{ t('cs.cheatsheet.flow.step3') }}</li>
+              </ol>
+            </div>
+            <div class="detail-section">
+              <p class="hint" style="margin: 0 0 10px 0">{{ t('cs.cheatsheet.sections.exception') }}</p>
+              <ul class="cheat-list">
+                <li>{{ t('cs.cheatsheet.exception.item1') }}</li>
+                <li>{{ t('cs.cheatsheet.exception.item2') }}</li>
+              </ul>
+            </div>
+            <div class="detail-section">
+              <p class="hint" style="margin: 0 0 10px 0">{{ t('cs.cheatsheet.sections.contract') }}</p>
+              <ul class="cheat-list">
+                <li>{{ t('cs.cheatsheet.contract.item1') }}</li>
+                <li>{{ t('cs.cheatsheet.contract.item2') }}</li>
+                <li>{{ t('cs.cheatsheet.contract.item3') }}</li>
+              </ul>
+            </div>
+          </template>
+
+          <template v-else-if="selectedTask.kind === 'exception'">
+            <div class="detail-section">
+              <p class="hint" style="margin: 0 0 10px 0">{{ t('cs.labels.basicInfo') }}</p>
+              <div class="detail-grid">
+                <div class="detail-item span">
+                  <p class="detail-label">{{ t('cs.labels.senderAddress') }}</p>
+                  <p class="detail-value">{{ selectedTask.raw.sender_address || '-' }}</p>
+                </div>
+                <div class="detail-item span">
+                  <p class="detail-label">{{ t('cs.labels.receiverAddress') }}</p>
+                  <p class="detail-value">{{ selectedTask.raw.receiver_address || '-' }}</p>
+                </div>
+
+                <div class="detail-item">
+                  <p class="detail-label">{{ t('cs.labels.reason') }}</p>
+                  <p class="detail-value">{{ reasonLabel(selectedTask.raw.reason_code) }}</p>
+                </div>
+                <div class="detail-item">
+                  <p class="detail-label">{{ t('cs.labels.reportedBy') }}</p>
+                  <p class="detail-value">{{ selectedTask.raw.reported_role || '-' }}</p>
+                </div>
+                <div class="detail-item">
+                  <p class="detail-label">{{ t('cs.labels.onVehicle') }}</p>
+                  <p class="detail-value">{{ selectedTask.raw.active_vehicle_code || '-' }}</p>
+                </div>
+                <div class="detail-item span">
+                  <p class="detail-label">{{ t('cs.labels.vehicleLocation') }}</p>
+                  <p class="detail-value">{{ selectedTask.raw.active_vehicle_node_id || '-' }}</p>
+                </div>
+                <div class="detail-item span">
+                  <p class="detail-label">{{ t('cs.labels.lastTask') }}</p>
+                  <p class="detail-value">
+                    {{ selectedTask.raw.last_canceled_from_location || '-' }} → {{ selectedTask.raw.last_canceled_to_location || '-' }}
+                  </p>
+                </div>
+                <div class="detail-item">
+                  <p class="detail-label">{{ t('cs.labels.reportedAt') }}</p>
+                  <p class="detail-value">{{ formatDateTime(selectedTask.raw.reported_at) }}</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="detail-section">
+              <p class="hint" style="margin: 0 0 10px 0">{{ t('cs.labels.reportDescription') }}</p>
+              <div class="cs-report-description">{{ selectedTask.raw.description || '-' }}</div>
+            </div>
+
+            <div v-if="isReadOnlyView" class="hint">{{ t('cs.exception.readOnlyHint') }}</div>
+            <div v-else class="detail-section">
+              <p class="hint" style="margin: 0 0 10px 0">{{ selectedTask.title }} · {{ selectedTask.meta }}</p>
+
+              <div class="form-grid" style="margin-top: 6px">
                 <label class="form-field">
-                  <span>動作</span>
-                  <select v-model="exceptionAction" :disabled="exceptionSubmitting">
-                    <option value="resume">恢復配送（resume）</option>
-                    <option value="cancel">取消配送（cancel → 配送失敗）</option>
+                  <span>{{ t('cs.modal.exception.fields.action') }}</span>
+                  <select ref="exceptionActionSelectRef" v-model="exceptionAction" :disabled="exceptionSubmitting">
+                    <option value="resume">{{ t('cs.modal.exception.action.resume') }}</option>
+                    <option value="cancel">{{ t('cs.modal.exception.action.cancel') }}</option>
                   </select>
                 </label>
 
                 <label v-if="exceptionAction === 'resume'" class="form-field">
-                  <span>恢復模式</span>
+                  <span>{{ t('cs.modal.exception.fields.resumeMode') }}</span>
                   <select v-model="exceptionResumeMode" :disabled="exceptionSubmitting">
-                    <option value="continue_segment">原行程恢復（繼續當下那一段）</option>
-                    <option value="reroute_next_hop">改下一跳（目的地不變）</option>
-                    <option value="redirect_destination">改目的地（留空=送回原處）</option>
+                    <option value="continue_segment">{{ t('cs.modal.exception.resumeMode.continueSegment') }}</option>
+                    <option value="reroute_next_hop">{{ t('cs.modal.exception.resumeMode.rerouteNextHop') }}</option>
+                    <option value="redirect_destination">{{ t('cs.modal.exception.resumeMode.redirectDestination') }}</option>
                   </select>
                 </label>
 
-                <label v-if="exceptionAction === 'resume' && exceptionResumeMode === 'reroute_next_hop'" class="form-field span-2">
-                  <span>指定下一跳（必須相鄰節點）</span>
-                  <input v-model="exceptionNextHopOverride" type="text" :disabled="exceptionSubmitting" placeholder="例如 REG_0 / HUB_0" />
+                <label
+                  v-if="exceptionAction === 'resume' && exceptionResumeMode === 'reroute_next_hop'"
+                  class="form-field span-2"
+                >
+                  <span>{{ t('cs.modal.exception.fields.nextHop') }}</span>
+                  <input
+                    v-model="exceptionNextHopOverride"
+                    type="text"
+                    :disabled="exceptionSubmitting"
+                    :placeholder="t('cs.modal.exception.placeholders.nextHop')"
+                  />
                 </label>
 
-                <label v-if="exceptionAction === 'resume' && exceptionResumeMode === 'redirect_destination'" class="form-field span-2">
-                  <span>指定目的地（選填）</span>
+                <label
+                  v-if="exceptionAction === 'resume' && exceptionResumeMode === 'redirect_destination'"
+                  class="form-field span-2"
+                >
+                  <span>{{ t('cs.modal.exception.fields.destination') }}</span>
                   <input
                     v-model="exceptionDestinationOverride"
                     type="text"
                     :disabled="exceptionSubmitting"
-                    placeholder="留空=送回原處；或指定節點 ID（例如 END_HOME_1）"
+                    :placeholder="t('cs.modal.exception.placeholders.destination')"
                   />
                 </label>
 
                 <label v-if="exceptionAction === 'cancel'" class="form-field span">
-                  <span>取消原因</span>
-                  <input type="text" value="銷毀" disabled />
+                  <span>{{ t('cs.modal.exception.fields.cancelReason') }}</span>
+                  <input type="text" :value="t('cs.modal.exception.cancelReasonValue')" disabled />
                 </label>
 
                 <label class="form-field span-2">
-                  <span>handling_report（必填）</span>
+                  <span>{{ t('cs.modal.exception.fields.handlingReport') }}</span>
                   <textarea
                     v-model="exceptionHandlingReport"
-                    rows="3"
+                    rows="4"
                     :disabled="exceptionSubmitting"
-                    placeholder="請輸入處理摘要（導向處置可先寫在這裡）"
+                    :placeholder="t('cs.modal.exception.placeholders.handlingReport')"
                   />
                 </label>
-
               </div>
 
               <UiNotice v-if="exceptionSubmitError" tone="error" role="alert" style="margin-top: 10px">
                 {{ exceptionSubmitError }}
               </UiNotice>
-              <div v-if="activeTab === 'current'" style="display: flex; justify-content: flex-end; margin-top: 10px">
-                <button class="primary-btn" type="button" :disabled="exceptionSubmitting" @click="submitExpandedException">
-                  {{ exceptionSubmitting ? "送出中…" : "送出處理" }}
+
+              <div class="cs-inline-actions">
+                <button
+                  class="ghost-btn"
+                  type="button"
+                  :disabled="exceptionSubmitting"
+                  @click="resetExceptionForm"
+                >
+                  {{ t('common.reset') }}
+                </button>
+                <button
+                  class="ghost-btn"
+                  type="button"
+                  :disabled="exceptionSubmitting"
+                  @click="requestSubmitExpandedException"
+                >
+                  {{ exceptionSubmitting ? t('common.submitting') : t('cs.actions.submitHandling') }}
                 </button>
               </div>
-            </template>
+            </div>
+          </template>
 
-            <template v-else>
-              <div class="detail-grid">
-                <div class="detail-item">
-                  <p class="detail-label">公司名稱</p>
-                  <p class="detail-value">{{ (t.raw as any).company_name }}</p>
-                </div>
-                <div class="detail-item">
-                  <p class="detail-label">統一編號</p>
-                  <p class="detail-value">{{ (t.raw as any).tax_id }}</p>
-                </div>
-                <div class="detail-item">
-                  <p class="detail-label">聯絡人</p>
-                  <p class="detail-value">{{ (t.raw as any).contact_person }}</p>
-                </div>
-                <div class="detail-item">
-                  <p class="detail-label">聯絡電話</p>
-                  <p class="detail-value">{{ (t.raw as any).contact_phone }}</p>
-                </div>
-                <div class="detail-item span-2">
-                  <p class="detail-label">開票地址</p>
-                  <p class="detail-value">{{ (t.raw as any).billing_address }}</p>
-                </div>
+          <template v-else>
+            <div class="detail-grid">
+              <div class="detail-item">
+                <p class="detail-label">{{ t('cs.labels.companyName') }}</p>
+                <p class="detail-value">{{ selectedTask.raw.company_name }}</p>
+              </div>
+              <div class="detail-item">
+                <p class="detail-label">{{ t('cs.labels.taxId') }}</p>
+                <p class="detail-value">{{ selectedTask.raw.tax_id }}</p>
+              </div>
+              <div class="detail-item">
+                <p class="detail-label">{{ t('cs.labels.contactPerson') }}</p>
+                <p class="detail-value">{{ selectedTask.raw.contact_person }}</p>
+              </div>
+              <div class="detail-item">
+                <p class="detail-label">{{ t('cs.labels.contactPhone') }}</p>
+                <p class="detail-value">{{ selectedTask.raw.contact_phone }}</p>
+              </div>
+              <div class="detail-item span-2">
+                <p class="detail-label">{{ t('cs.labels.billingAddress') }}</p>
+                <p class="detail-value">{{ selectedTask.raw.billing_address }}</p>
+              </div>
+            </div>
+
+            <p class="hint" style="margin: 0">{{ t('cs.labels.notes') }}：{{ selectedTask.raw.notes || '-' }}</p>
+
+            <div v-if="isReadOnlyView" class="hint" style="margin-top: 10px">
+              {{ t('cs.contract.readOnlyHint', { status: contractStatusLabel(selectedTask.raw.status) }) }}
+            </div>
+            <div v-else class="detail-section" style="margin-top: 12px">
+              <p class="hint" style="margin: 0 0 10px 0">{{ selectedTask.title }} · {{ selectedTask.meta }}</p>
+
+              <div class="form-grid" style="margin-top: 6px">
+                <label class="form-field">
+                  <span>{{ t('cs.modal.contract.fields.decision') }}</span>
+                  <select ref="contractDecisionSelectRef" v-model="contractDecision" :disabled="contractSubmitting">
+                    <option value="approved">{{ t('cs.modal.contract.decision.approved') }}</option>
+                    <option value="rejected">{{ t('cs.modal.contract.decision.rejected') }}</option>
+                  </select>
+                </label>
+
+                <label class="form-field">
+                  <span>{{ t('cs.modal.contract.fields.creditLimit') }}</span>
+                  <input
+                    v-model="contractCreditLimit"
+                    type="number"
+                    min="0"
+                    step="1"
+                    :disabled="contractSubmitting"
+                    :placeholder="t('cs.modal.contract.placeholders.creditLimit')"
+                  />
+                </label>
+
+                <label class="form-field span-2">
+                  <span>{{ t('cs.modal.contract.fields.reviewNotes') }}</span>
+                  <textarea
+                    v-model="contractReviewNotes"
+                    rows="4"
+                    :disabled="contractSubmitting"
+                    :placeholder="t('cs.modal.contract.placeholders.reviewNotes')"
+                  />
+                </label>
               </div>
 
-              <p class="hint" style="margin: 0">
-                備註：{{ (t.raw as any).notes || "-" }}
-              </p>
+              <UiNotice v-if="contractSubmitError" tone="error" role="alert" style="margin-top: 10px">
+                {{ contractSubmitError }}
+              </UiNotice>
 
-              <div v-if="activeTab === 'history'" class="hint" style="margin-top: 10px">
-                此申請已審核：{{ contractStatusLabel((t.raw as any).status) }}
+              <div class="cs-inline-actions">
+                <button class="ghost-btn" type="button" :disabled="contractSubmitting" @click="resetContractForm">
+                  {{ t('common.reset') }}
+                </button>
+                <button class="ghost-btn" type="button" :disabled="contractSubmitting" @click="submitExpandedContract">
+                  {{ contractSubmitting ? t('common.submitting') : t('cs.actions.submitReview') }}
+                </button>
               </div>
-              <div v-else style="margin-top: 10px">
-                <div class="form-grid">
-                  <label class="form-field">
-                    <span>審核結果</span>
-                    <select v-model="contractDecision" :disabled="contractSubmitting">
-                      <option value="approved">核准</option>
-                      <option value="rejected">拒絕</option>
-                    </select>
-                  </label>
+            </div>
+          </template>
+        </div>
+      </UiCard>
+    </div>
 
-                  <label class="form-field">
-                    <span>credit_limit（選填）</span>
-                    <input
-                      v-model="contractCreditLimit"
-                      type="number"
-                      min="0"
-                      step="1"
-                      :disabled="contractSubmitting"
-                      placeholder="例如 100000"
-                    />
-                  </label>
+    <UiModal v-model="isCancelConfirmOpen" :title="t('cs.modal.cancelConfirm.title')" :close-text="t('common.back')">
+      <template v-if="cancelConfirmSummary">
+        <UiNotice tone="warning" :title="t('cs.modal.cancelConfirm.warningTitle')">
+          {{ t('cs.modal.cancelConfirm.warningBody') }}
+        </UiNotice>
 
-                  <label class="form-field span-2">
-                    <span>review_notes（選填）</span>
-                    <textarea
-                      v-model="contractReviewNotes"
-                      rows="3"
-                      :disabled="contractSubmitting"
-                      placeholder="審核備註（可留空）"
-                    />
-                  </label>
-                </div>
-
-                <UiNotice v-if="contractSubmitError" tone="error" role="alert" style="margin-top: 10px">
-                  {{ contractSubmitError }}
-                </UiNotice>
-                <div style="display: flex; justify-content: flex-end; margin-top: 10px">
-                  <button class="primary-btn" type="button" :disabled="contractSubmitting" @click="submitExpandedContract">
-                    {{ contractSubmitting ? "送出中…" : "送出審核" }}
-                  </button>
-                </div>
-              </div>
-            </template>
-          </div>
-        </li>
-      </ul>
-    </UiCard>
+        <div class="detail-section" style="margin-top: 12px">
+          <p class="hint" style="margin: 0 0 6px 0">
+            {{ t('cs.labels.task') }}：{{ cancelConfirmSummary.title }}
+          </p>
+          <p class="hint" style="margin: 0 0 10px 0">{{ cancelConfirmSummary.meta }}</p>
+          <p class="hint" style="margin: 0">
+            {{ t('cs.labels.handlingReport') }}：{{ cancelConfirmSummary.reportPreview || '-' }}
+          </p>
+        </div>
+      </template>
+      <template v-else>
+        <p class="hint" style="margin: 0">{{ t('cs.empty.selectExceptionFirst') }}</p>
+      </template>
+      <template #actions>
+        <button class="ghost-btn" type="button" :disabled="exceptionSubmitting" @click="isCancelConfirmOpen = false">
+          {{ t('common.back') }}
+        </button>
+        <button
+          class="primary-btn"
+          type="button"
+          :disabled="exceptionSubmitting || !cancelConfirmSummary"
+          @click="submitExpandedException"
+        >
+          {{ exceptionSubmitting ? t('common.submitting') : t('cs.actions.confirmCancel') }}
+        </button>
+      </template>
+    </UiModal>
   </UiPageShell>
 </template>
 
 <style scoped>
-.tab-switch {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  flex-wrap: wrap;
-  margin-top: 16px;
+.cs-overview-bar {
+  padding: 14px 16px;
 }
 
-.tab-btn {
+.cs-layout {
+  display: grid;
+  grid-template-columns: minmax(320px, 420px) 1fr;
+  grid-template-rows: auto 1fr;
+  gap: 14px;
+  align-items: stretch;
+  margin-top: 14px;
+  height: min(680px, calc(100vh - 260px));
+}
+
+.cs-layout.fullscreen {
+  margin-top: 0;
+  height: 100vh;
+  padding: 14px;
+  grid-template-columns: minmax(360px, 520px) 1fr;
+  background: var(--surface-card);
+}
+
+.cs-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cs-layout-header {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 6px;
+}
+
+.cs-last-refresh {
+  padding-left: 2px;
+}
+
+.cs-layout-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.cs-view-switch {
+  display: inline-flex;
+  border: 1px solid rgba(165, 122, 99, 0.18);
+  border-radius: 14px;
+  overflow: hidden;
+  background: rgba(255, 248, 241, 0.65);
+}
+
+.cs-view-btn {
   border: 0;
-  padding: 10px 12px;
-  border-radius: 12px;
-  background: rgba(0, 0, 0, 0.06);
+  background: transparent;
+  color: var(--text-main);
+  padding: 10px 14px;
+  height: 44px;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   font-weight: 800;
 }
 
-.tab-btn.active {
-  background: rgba(99, 102, 241, 0.14);
-  box-shadow: inset 0 0 0 1px rgba(99, 102, 241, 0.25);
+.cs-view-btn.active {
+  background: rgba(244, 182, 194, 0.28);
 }
 
-.package-list {
+.cs-view-btn:disabled {
+  opacity: 0.75;
+  cursor: not-allowed;
+}
+
+.cs-view-icon {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.75);
+  border: 1px solid rgba(165, 122, 99, 0.18);
+  color: rgba(91, 58, 44, 0.9);
+  flex-shrink: 0;
+}
+
+.cs-view-count {
+  opacity: 0.85;
+  font-weight: 800;
+}
+
+.cs-refresh-btn {
+  height: 44px;
+}
+
+.cs-list {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 12px;
+  min-height: 0;
+}
+
+.cs-list-fixed {
+  display: block;
+}
+
+.cs-filters {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  align-items: end;
+}
+
+.filter-field {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+  min-width: 0;
+}
+
+.filter-span-2 {
+  grid-column: 1 / -1;
+}
+
+.filter-field select {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--surface-stroke);
+  background: rgba(255, 255, 255, 0.86);
+  color: var(--text-main);
+}
+
+.overview-card {
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(165, 122, 99, 0.18);
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.overview-value {
+  margin: 2px 0 0 0;
+  font-size: 18px;
+  font-weight: 900;
+  color: #3f2620;
+}
+
+.cs-overview {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.cs-list-scroll {
+  min-height: 0;
+  overflow: auto;
+  padding-right: 6px;
+}
+
+.cs-empty {
+  padding: 14px 12px;
+  border-radius: 12px;
+  border: 1px dashed rgba(165, 122, 99, 0.28);
+  background: rgba(255, 255, 255, 0.45);
+}
+
+.cs-empty-title {
+  margin: 0;
+  font-weight: 800;
+  color: var(--text-main);
+}
+
+.task-list {
   list-style: none;
   padding: 0;
   margin: 0;
@@ -506,64 +1244,112 @@ onMounted(async () => {
   gap: 10px;
 }
 
-.package-row {
-  border: 1px solid rgba(0, 0, 0, 0.06);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.7);
-  overflow: hidden;
+.task-row {
+  margin: 0;
+  padding: 0;
 }
 
-.package-row.active {
-  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.08);
-}
-
-.row-btn {
+.task-btn {
   width: 100%;
-  text-align: left;
-  display: grid;
-  grid-template-columns: 1fr auto auto;
-  gap: 12px;
-  align-items: center;
-  border: 0;
-  background: transparent;
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: flex-start;
+  border: 1px solid rgba(165, 122, 99, 0.18);
+  background: rgba(255, 255, 255, 0.55);
+  border-radius: 12px;
   padding: 12px 14px;
   cursor: pointer;
+  transition: background 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
 }
 
-.tracking {
+.task-btn:hover {
+  background: rgba(255, 255, 255, 0.75);
+}
+
+.task-btn.active {
+  border-color: rgba(244, 182, 194, 0.7);
+  box-shadow: 0 12px 28px rgba(255, 145, 160, 0.18);
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.task-main {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.task-title {
   font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.pill {
-  font-size: 12px;
-  padding: 2px 10px;
+.task-meta {
+  font-size: 13px;
+  opacity: 0.85;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-side {
+  display: grid;
+  gap: 6px;
+  justify-items: end;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 10px;
   border-radius: 999px;
-  background: rgba(0, 0, 0, 0.06);
+  background: rgba(244, 182, 194, 0.35);
+  border: 1px solid rgba(244, 182, 194, 0.55);
+  color: #3f2620;
   font-weight: 800;
-  letter-spacing: 0.02em;
+  font-size: 12px;
+  white-space: nowrap;
 }
 
-.pill.warning {
-  background: rgba(255, 193, 7, 0.18);
-  color: rgba(140, 105, 0, 1);
-  box-shadow: inset 0 0 0 1px rgba(255, 193, 7, 0.25);
+.status-pill.done {
+  background: rgba(72, 187, 120, 0.16);
+  border-color: rgba(72, 187, 120, 0.28);
+  color: rgba(28, 79, 54, 0.95);
 }
 
-.pill.done {
-  background: rgba(34, 197, 94, 0.14);
-  color: rgba(28, 117, 48, 1);
-  box-shadow: inset 0 0 0 1px rgba(34, 197, 94, 0.18);
-}
-
-.meta {
+.task-time {
   font-size: 13px;
   opacity: 0.85;
   white-space: nowrap;
 }
 
-.package-detail {
-  border-top: 1px solid rgba(0, 0, 0, 0.06);
-  padding: 12px 14px 14px;
+.cs-detail {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  gap: 12px;
+  min-height: 0;
+}
+
+.detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.detail-title {
+  font-size: 18px;
+  font-weight: 900;
+  margin: 0;
+}
+
+.detail-sub {
+  font-size: 13px;
+  opacity: 0.8;
+  margin-top: 6px;
 }
 
 .detail-grid {
@@ -576,7 +1362,8 @@ onMounted(async () => {
 .detail-item {
   padding: 10px 12px;
   border-radius: 12px;
-  background: rgba(0, 0, 0, 0.03);
+  border: 1px solid rgba(165, 122, 99, 0.18);
+  background: rgba(255, 255, 255, 0.55);
 }
 
 .detail-item.span-2 {
@@ -595,14 +1382,68 @@ onMounted(async () => {
   font-weight: 700;
 }
 
-@media (max-width: 720px) {
-  .row-btn {
-    grid-template-columns: 1fr auto;
-    grid-template-rows: auto auto;
+.detail-section {
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(165, 122, 99, 0.18);
+  background: rgba(255, 255, 255, 0.55);
+  margin-bottom: 12px;
+}
+
+.cs-report-description {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.6;
+  color: var(--text-main);
+  font-size: 14px;
+}
+
+.cs-detail-fixed {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: rgba(255, 248, 241, 0.92);
+  border-radius: 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(165, 122, 99, 0.12);
+}
+
+.cs-detail-scroll {
+  min-height: 0;
+  overflow: auto;
+  padding-right: 6px;
+}
+
+.cs-inline-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.cheat-list {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text-main);
+}
+
+.cheat-list li {
+  margin: 6px 0;
+}
+
+@media (max-width: 980px) {
+  .cs-layout {
+    grid-template-columns: 1fr;
+    height: auto;
   }
 
-  .meta {
-    grid-column: 1 / -1;
+  .cs-layout.fullscreen {
+    height: 100vh;
+    padding: 12px;
+  }
+
+  .detail-item.span-2 {
+    grid-column: auto;
   }
 }
 </style>

@@ -96,10 +96,14 @@ describe('EmployeeCustomerServiceView', () => {
       })
 
       await flushPromises()
-      // 客服頁面有 "現在任務" 和 "過去紀錄" 標籤
+      // 客服頁面有「異常/合約」與「現在/過去」兩個維度
       const text = wrapper.text()
       expect(
-        text.includes('現在任務') || text.includes('過去紀錄') || text.includes('客服')
+        text.includes('異常') ||
+          text.includes('合約') ||
+          text.includes('待處理') ||
+          text.includes('已處理') ||
+          text.includes('客服')
       ).toBe(true)
     })
   })
