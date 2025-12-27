@@ -1,7 +1,7 @@
-
 <script setup lang="ts">
+
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { api, type MapNode, type PackageEventRecord, type TrackingSearchResponse } from '../services/api'
 import { useAuthStore } from '../stores/auth'
@@ -16,10 +16,11 @@ type Filters = {
 }
 
 const TRUCK_ORIGIN_NODE_ID = 'TRUCK_ORIGIN'
-
 const auth = useAuthStore()
+const route = useRoute()
 const router = useRouter()
 const { t, locale } = useI18n()
+const trackingLabel = (tracking?: string | null) => (tracking && tracking.trim() ? tracking.trim() : t('common.tracking.pending'))
 
 const filters = reactive<Filters>({
   tracking_number: '',
@@ -32,16 +33,12 @@ const filters = reactive<Filters>({
 const activeTab = ref<'in_transit' | 'history'>('in_transit')
 const expandedIds = ref<Set<string>>(new Set())
 const filtersOpen = ref(false)
-
 const hubAndRegionNodes = ref<MapNode[]>([])
 const nodeNameById = ref<Record<string, string>>({})
-
 const isLoading = ref(false)
 const error = ref<string | null>(null)
-
 const inTransitResult = ref<TrackingSearchResponse | null>(null)
 const historyResult = ref<TrackingSearchResponse | null>(null)
-
 const inTransitPackages = computed(() => inTransitResult.value?.packages ?? [])
 const historyPackages = computed(() => historyResult.value?.packages ?? [])
 const packagesForActiveTab = computed(() =>
@@ -545,6 +542,11 @@ const lookup = async () => {
 onMounted(async () => {
   if (!auth.isLoggedIn) return
 
+  const queryTracking = route.query.tracking_number
+  if (typeof queryTracking === 'string' && queryTracking.trim()) {
+    filters.tracking_number = queryTracking.trim()
+  }
+
   try {
     const map = await api.getMap()
     nodeNameById.value = Object.fromEntries(map.nodes.map((n) => [n.id, n.name]))
@@ -556,6 +558,17 @@ onMounted(async () => {
 
   await lookup()
 })
+
+watch(
+  () => route.query.tracking_number,
+  (value) => {
+    if (typeof value !== 'string') return
+    const next = value.trim()
+    if (!next || next === filters.tracking_number) return
+    filters.tracking_number = next
+    void lookup()
+  },
+)
 </script>
 <template>
   <section class="page-shell">
@@ -638,7 +651,7 @@ onMounted(async () => {
             {{ t('track.summary.history', { count: historyPackages.length }) }}
           </span>
           <span v-if="totalForActiveTab !== packagesForActiveTab.length">
-            ¡P {{ t('track.summary.total', { total: totalForActiveTab }) }}
+            {{ t('track.summary.total', { total: totalForActiveTab }) }}
           </span>
         </p>
 
@@ -656,7 +669,7 @@ onMounted(async () => {
             :class="{ active: expandedIds.has(pkg.id) }"
           >
             <button type="button" class="row-btn" @click="togglePackage(pkg.id)">
-              <span class="tracking">{{ t('track.trackingLabel') }} | {{ pkg.tracking_number || pkg.id }}</span>
+              <span class="tracking">{{ t('track.trackingLabel') }} | {{ trackingLabel(pkg.tracking_number) }}</span>
               <span
                 class="pill"
                 :class="{
@@ -732,13 +745,13 @@ onMounted(async () => {
                   <span class="summary-value">
                     <template v-if="detailByPackageId[pkg.id]?.vehicleCode">
                       {{ detailByPackageId[pkg.id]?.vehicleCode }}
-                    </template>
+                    </template>               
                     <template v-else-if="routeModel(pkg).displayNode">
                       {{ displayNodeText(routeModel(pkg).displayNode) }}
                     </template>
                     <template v-else>{{ pkg.current_location || '-' }}</template>
                   </span>
-                  <span class="summary-sep">¡P</span>
+                  <span class="summary-sep">P</span>
                   <span class="summary-label">{{ t('track.summary.status') }}</span>
                   <span class="summary-value">
                     <template v-if="detailByPackageId[pkg.id]?.isLoading">{{ t('track.loading') }}</template>

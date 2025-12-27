@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   api,
   type BillingBillDetailResponse,
@@ -27,6 +28,8 @@ import { toastFromApiError } from '../services/errorToast'
 
 const auth = useAuthStore()
 const toast = useToasts()
+const { t } = useI18n()
+const trackingLabel = (tracking?: string | null) => (tracking && tracking.trim() ? tracking.trim() : t('common.tracking.pending'))
 
 const form = reactive<ContractApplicationPayload>({
   customer_id: auth.user?.id ?? '',
@@ -364,7 +367,7 @@ onMounted(() => {
                 :class="{ active: expandedItemIds.has(item.package_id) }"
               >
                 <button type="button" class="row-btn" @click="toggleItem(item.package_id)">
-                  <span class="tracking">月結 | {{ item.tracking_number || item.package_id }}</span>
+                  <span class="tracking">月結 | {{ trackingLabel(item.tracking_number) }}</span>
                   <span class="meta">{{ item.shipped_at ? formatDateTime(item.shipped_at) : '--' }}</span>
                 </button>
 
