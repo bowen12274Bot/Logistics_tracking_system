@@ -6,3 +6,4 @@
 - 司機端地圖與任務單：`docs/design/driver-map.md`
 - UI 介面規範：`docs/design/ui-spec.md`（舊入口：`docs/ui-spec.md`）
 - 系統序列圖：`docs/design/sequence-diagrams.md`（舊入口：`docs/sequence-diagrams.md`）
+- 客服後台工作台（Demo）重設計：`docs/design/customer-service-console.md`
