@@ -1,7 +1,7 @@
-
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
 import { RouterLink } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { usePackageStore } from '../stores/packages'
 import { useAuthStore } from '../stores/auth'
 import UiPageShell from '../components/ui/UiPageShell.vue'
@@ -13,21 +13,22 @@ type Link = {
   featured?: boolean
 }
 
+const { t } = useI18n()
 const packageStore = usePackageStore()
 const auth = useAuthStore()
 
-const quickLinksBase: Link[] = [
-  { title: '建立寄件', to: '/customer/send', description: '設定寄件人/收件人、配送速度與付款方式。' },
-  { title: '包裹追蹤', to: '/customer/track', description: '配送中 / 配送歷史，並可用條件篩選。' },
-  { title: '個人資料', to: '/customer/profile', description: '修改姓名、電話、地址與支付偏好。' },
-  { title: '合約 / 月結', to: '/customer/contract', description: '申請成為合約客戶、查看帳期貨物。' },
-  { title: '付款', to: '/customer/payment', description: '在付款清單付款、付款紀錄查詢。' },
-]
+const quickLinksBase = computed<Link[]>(() => [
+  { title: t('customer.dashboard.links.send.title'), to: '/customer/send', description: t('customer.dashboard.links.send.desc') },
+  { title: t('customer.dashboard.links.track.title'), to: '/customer/track', description: t('customer.dashboard.links.track.desc') },
+  { title: t('customer.dashboard.links.profile.title'), to: '/customer/profile', description: t('customer.dashboard.links.profile.desc') },
+  { title: t('customer.dashboard.links.contract.title'), to: '/customer/contract', description: t('customer.dashboard.links.contract.desc') },
+  { title: t('customer.dashboard.links.payment.title'), to: '/customer/payment', description: t('customer.dashboard.links.payment.desc') },
+])
 
 const hasUnpaid = computed(() => packageStore.unpaidPackages.length > 0)
 
 const quickLinks = computed<Link[]>(() =>
-  quickLinksBase.map((link) =>
+  quickLinksBase.value.map((link) =>
     link.to === '/customer/payment' ? { ...link, featured: hasUnpaid.value } : link,
   ),
 )
@@ -38,7 +39,11 @@ onMounted(() => {
 </script>
 
 <template>
-  <UiPageShell eyebrow="客戶" title="你的包裹主控台" lede="監控每件貨態、快速寄件，並以月結讓帳務更可預期。">
+  <UiPageShell
+    :eyebrow="t('customer.dashboard.eyebrow')"
+    :title="t('customer.dashboard.title')"
+    :lede="t('customer.dashboard.lede')"
+  >
     <div class="card-grid">
       <RouterLink
         v-for="link in quickLinks"

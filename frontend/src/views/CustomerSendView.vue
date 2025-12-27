@@ -1,30 +1,28 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { api } from '../services/api'
 import { useAuthStore } from '../stores/auth'
-import UiCard from '../components/ui/UiCard.vue'
-import UiNotice from '../components/ui/UiNotice.vue'
-import UiPageShell from '../components/ui/UiPageShell.vue'
-import { useToasts } from '../components/ui/toast'
-import { toastFromApiError } from '../services/errorToast'
 
 type DeliveryTime = 'overnight' | 'two_day' | 'standard' | 'economy'
 type PaymentType = 'prepaid' | 'cod'
 type PickupType = '' | 'home' | 'store'
 type DestinationType = '' | 'home' | 'store'
 
-const deliveryLabel: Record<DeliveryTime, string> = {
-  overnight: '隔日',
-  two_day: '兩日',
-  standard: '標準',
-  economy: '經濟',
-}
+const { t, locale } = useI18n()
 
-const paymentTypeLabel: Record<PaymentType, string> = {
-  prepaid: '預付',
-  cod: '到付',
-}
+const deliveryLabel = computed<Record<DeliveryTime, string>>(() => ({
+  overnight: t('send.deliveryTime.overnight'),
+  two_day: t('send.deliveryTime.twoDay'),
+  standard: t('send.deliveryTime.standard'),
+  economy: t('send.deliveryTime.economy'),
+}))
+
+const paymentTypeLabel = computed<Record<PaymentType, string>>(() => ({
+  prepaid: t('send.payment.prepaid'),
+  cod: t('send.payment.cod'),
+}))
 
 const form = reactive({
   pickupType: 'home' as PickupType,
@@ -68,9 +66,11 @@ const receiverCustomerStatus = ref<'unknown' | 'checking' | 'exists' | 'not_exis
 const receiverCustomerCheckError = ref('')
 const isCodAllowed = computed(() => receiverCustomerStatus.value === 'exists')
 const lastCreatedPackageId = ref<string | null>(null)
-const toast = useToasts()
 
 const senderNameReadonly = computed(() => !!auth.user?.user_name)
+const numberFormatter = computed(
+  () => new Intl.NumberFormat(locale.value === 'en-US' ? 'en-US' : 'zh-TW'),
+)
 
 const requiredTrimmed = (value: string) => value.trim().length > 0
 
@@ -108,7 +108,7 @@ const requestEstimate = async () => {
     !form.width ||
     !form.height
   ) {
-    estimateError.value = '請先填入起點/目的地、重量、長寬高後再進行運費試算。'
+    estimateError.value = t('send.errors.estimateRequired')
     return
   }
 
@@ -116,19 +116,19 @@ const requestEstimate = async () => {
   const toNodeId = normalizeAddress(form.receiverAddress)
 
   if (form.pickupType === 'home' && !isEndHomeAddress(fromNodeId)) {
-    estimateError.value = '起點（寄件地址）需為 END_HOME_x 格式。'
+    estimateError.value = t('send.errors.pickupHomeFormat')
     return
   }
   if (form.pickupType === 'store' && !isEndStoreAddress(fromNodeId)) {
-    estimateError.value = '起點（寄件門市）需為 END_STORE_x 格式。'
+    estimateError.value = t('send.errors.pickupStoreFormat')
     return
   }
   if (form.destinationType === 'home' && !isEndHomeAddress(toNodeId)) {
-    estimateError.value = '目的地（收件地址）需為 END_HOME_x 格式。'
+    estimateError.value = t('send.errors.destHomeFormat')
     return
   }
   if (form.destinationType === 'store' && !isEndStoreAddress(toNodeId)) {
-    estimateError.value = '目的地（收件門市）需為 END_STORE_x 格式。'
+    estimateError.value = t('send.errors.destStoreFormat')
     return
   }
 
@@ -147,12 +147,15 @@ const requestEstimate = async () => {
       specialMarks: buildSpecialMarks(),
     })
 
-    const formatter = new Intl.NumberFormat('zh-TW')
-    estimateMessage.value = `預估運費：${formatter.format(res.estimate.total_cost)} 元（箱型 ${res.estimate.box_type}、routeCost ${formatter.format(res.estimate.route_cost)}）`
-    estimateRoutePath.value = res.estimate.route_path ?? []
+    const estimate = res.estimate
+    estimateMessage.value = t('send.estimate.success', {
+      amount: numberFormatter.value.format(estimate.total_cost),
+      box: estimate.box_type,
+      routeCost: numberFormatter.value.format(estimate.route_cost),
+    })
+    estimateRoutePath.value = estimate.route_path ?? []
   } catch (err: any) {
-    estimateError.value = err?.message || '運費試算失敗，請稍後再試。'
-    toastFromApiError(err, estimateError.value)
+    estimateError.value = err?.message || t('send.errors.estimateFailed')
   } finally {
     isEstimating.value = false
   }
@@ -229,8 +232,7 @@ async function refreshReceiverCustomerStatus() {
     }
   } catch (err: any) {
     receiverCustomerStatus.value = 'unknown'
-    receiverCustomerCheckError.value = err?.message || '無法確認收件人是否為系統客戶'
-    toastFromApiError(err, receiverCustomerCheckError.value)
+    receiverCustomerCheckError.value = err?.message || t('send.errors.receiverCheckFailed')
     if (form.paymentType === 'cod') form.paymentType = 'prepaid'
   }
 }
@@ -262,13 +264,11 @@ const submitPackage = async () => {
   lastCreatedPackageId.value = null
 
   if (!form.pickupType) {
-    errorMessage.value = '請選擇寄件方式（超商寄件 / 預約到府取件）。'
-    toast.warning(errorMessage.value)
+    errorMessage.value = t('send.errors.pickupType')
     return
   }
   if (!form.destinationType) {
-    errorMessage.value = '請選擇取件方式（超商 / 住家）。'
-    toast.warning(errorMessage.value)
+    errorMessage.value = t('send.errors.destinationType')
     return
   }
 
@@ -280,8 +280,7 @@ const submitPackage = async () => {
     !requiredTrimmed(form.receiverPhone) ||
     !requiredTrimmed(form.receiverAddress)
   ) {
-    errorMessage.value = '請完整填寫寄件/收件者的姓名、電話、地址。'
-    toast.warning(errorMessage.value)
+    errorMessage.value = t('send.errors.requiredFields')
     return
   }
 
@@ -289,43 +288,36 @@ const submitPackage = async () => {
   const normalizedReceiverAddress = normalizeAddress(form.receiverAddress)
 
   if (form.pickupType === 'home' && !isEndHomeAddress(normalizedSenderAddress)) {
-    errorMessage.value = '寄件者地址需為住家節點（例如 END_HOME_0）。'
-    toast.warning(errorMessage.value)
+    errorMessage.value = t('send.errors.pickupHomeFormat')
     return
   }
   if (form.pickupType === 'store' && !isEndStoreAddress(normalizedSenderAddress)) {
-    errorMessage.value = '寄件超商名稱需為超商節點（例如 END_STORE_0）。'
-    toast.warning(errorMessage.value)
+    errorMessage.value = t('send.errors.pickupStoreFormat')
     return
   }
   if (form.destinationType === 'home' && !isEndHomeAddress(normalizedReceiverAddress)) {
-    errorMessage.value = '收件者地址需為住家節點（例如 END_HOME_0）。'
-    toast.warning(errorMessage.value)
+    errorMessage.value = t('send.errors.destHomeFormat')
     return
   }
   if (form.destinationType === 'store' && !isEndStoreAddress(normalizedReceiverAddress)) {
-    errorMessage.value = '目的地超商名稱需為超商節點（例如 END_STORE_0）。'
-    toast.warning(errorMessage.value)
+    errorMessage.value = t('send.errors.destStoreFormat')
     return
   }
 
   if (!form.weight || !form.length || !form.width || !form.height) {
-    errorMessage.value = '請填寫重量、長寬高（需為正整數）。'
-    toast.warning(errorMessage.value)
+    errorMessage.value = t('send.errors.weightAndSize')
     return
   }
 
   if (form.pickupType === 'home' && (!form.pickupDate || !form.pickupTimeWindow)) {
-    errorMessage.value = '到府取件需填寫取件日期與時段。'
-    toast.warning(errorMessage.value)
+    errorMessage.value = t('send.errors.pickupSchedule')
     return
   }
 
   if (form.paymentType === 'cod') {
     await refreshReceiverCustomerStatus()
     if (!isCodAllowed.value) {
-      errorMessage.value = '收件人不是系統內客戶，僅能選擇預付。'
-      toast.warning(errorMessage.value)
+      errorMessage.value = t('send.errors.codNotAllowed')
       return
     }
   }
@@ -381,23 +373,38 @@ const submitPackage = async () => {
       route_path: routePathToSend.length ? JSON.stringify(routePathToSend) : undefined,
       metadata: {
         created_at: new Date().toISOString(),
-        delivery_time_label: deliveryLabel[form.deliveryTime],
+        delivery_time_label: deliveryLabel.value[form.deliveryTime],
         pickup_type: form.pickupType,
         destination_type: form.destinationType,
-        payment_type_label: paymentTypeLabel[form.paymentType],
+        payment_type_label: paymentTypeLabel.value[form.paymentType],
       },
     })
 
     const tracking = response.package.tracking_number ?? response.package.id
     lastCreatedPackageId.value = response.package.id
+    const destLabel = form.destinationType === 'store' ? t('send.destination.store') : t('send.destination.home')
     confirmation.value =
       form.pickupType === 'home'
-        ? `託運單已建立：追蹤碼 ${tracking}｜尺寸 ${form.length}x${form.width}x${form.height} cm / ${deliveryLabel[form.deliveryTime]}，重量 ${form.weight} kg｜付款：${paymentTypeLabel[form.paymentType]}｜寄件：到府取件 ${form.pickupDate} ${form.pickupTimeWindow}｜取件：${form.destinationType === 'store' ? '超商' : '府上'}。`
-        : `託運單已建立：追蹤碼 ${tracking}｜尺寸 ${form.length}x${form.width}x${form.height} cm / ${deliveryLabel[form.deliveryTime]}，重量 ${form.weight} kg｜付款：${paymentTypeLabel[form.paymentType]}｜寄件：超商寄件｜取件：${form.destinationType === 'store' ? '超商' : '住宅'}。`
-    toast.success(`託運單已建立：${tracking}`)
+        ? t('send.confirmation.home', {
+            tracking,
+            dimensions: `${form.length}x${form.width}x${form.height} cm`,
+            delivery: deliveryLabel.value[form.deliveryTime],
+            weight: form.weight,
+            payment: paymentTypeLabel.value[form.paymentType],
+            date: form.pickupDate,
+            window: form.pickupTimeWindow,
+            destination: destLabel,
+          })
+        : t('send.confirmation.store', {
+            tracking,
+            dimensions: `${form.length}x${form.width}x${form.height} cm`,
+            delivery: deliveryLabel.value[form.deliveryTime],
+            weight: form.weight,
+            payment: paymentTypeLabel.value[form.paymentType],
+            destination: destLabel,
+          })
   } catch (err: any) {
-    errorMessage.value = err?.message || '建立寄件失敗，請稍後再試。'
-    toastFromApiError(err, errorMessage.value)
+    errorMessage.value = err?.message || t('send.errors.createFailed')
   } finally {
     isSubmitting.value = false
   }
@@ -410,76 +417,86 @@ const goToPayment = async () => {
 </script>
 
 <template>
-  <UiPageShell eyebrow="寄件" title="建立託運單" lede="請填寫寄收件資訊與包裹資料">
-    <UiCard class="send-card">
+  <section class="page-shell">
+    <header class="page-header">
+      <p class="eyebrow">{{ t('send.eyebrow') }}</p>
+      <h1>{{ t('send.title') }}</h1>
+      <p class="lede">{{ t('send.lede') }}</p>
+    </header>
+
+    <div class="card send-card">
       <form class="send-form" @submit.prevent="submitPackage">
         <div class="send-top">
           <div class="send-control">
-            <div class="send-control-title">取件地點</div>
-            <div class="segmented" role="radiogroup" aria-label="pickup type">
+            <div class="send-control-title">{{ t('send.pickup.title') }}</div>
+            <div class="segmented" role="radiogroup" :aria-label="t('send.pickup.aria')">
               <label class="seg" :class="{ active: form.pickupType === 'home' }">
                 <input v-model="form.pickupType" type="radio" name="pickupType" value="home" required />
-                府上
+                {{ t('send.pickup.home') }}
               </label>
               <label class="seg" :class="{ active: form.pickupType === 'store' }">
                 <input v-model="form.pickupType" type="radio" name="pickupType" value="store" required />
-                超商
+                {{ t('send.pickup.store') }}
               </label>
             </div>
-            <p class="hint send-control-hint">到府取件需填日期與時段，超商寄件免填。</p>
+            <p class="hint send-control-hint">{{ t('send.pickup.hint') }}</p>
           </div>
 
           <div class="send-control">
-            <div class="send-control-title">配送目的地</div>
-            <div class="segmented" role="radiogroup" aria-label="destination type">
+            <div class="send-control-title">{{ t('send.destination.title') }}</div>
+            <div class="segmented" role="radiogroup" :aria-label="t('send.destination.aria')">
               <label class="seg" :class="{ active: form.destinationType === 'home' }">
                 <input v-model="form.destinationType" type="radio" name="destinationType" value="home" required />
-                住宅
+                {{ t('send.destination.home') }}
               </label>
               <label class="seg" :class="{ active: form.destinationType === 'store' }">
                 <input v-model="form.destinationType" type="radio" name="destinationType" value="store" required />
-                超商
+                {{ t('send.destination.store') }}
               </label>
             </div>
-            <p class="hint send-control-hint">地址格式：<code>END_HOME_0</code> / <code>END_STORE_0</code>。</p>
+            <p class="hint send-control-hint" v-html="t('send.destination.hint')" />
           </div>
         </div>
 
         <section class="send-section">
           <header class="send-section-header">
-            <h2 class="send-section-title">寄件人資訊</h2>
+            <h2 class="send-section-title">{{ t('send.sender.title') }}</h2>
           </header>
           <div class="form-grid">
             <label class="form-field">
-              <span>寄件者姓名</span>
+              <span>{{ t('send.sender.name') }}</span>
               <input
                 v-model="form.senderName"
                 required
                 name="senderName"
                 type="text"
-                placeholder="請輸入姓名"
+                :placeholder="t('send.sender.namePlaceholder')"
                 :readonly="senderNameReadonly"
               />
             </label>
             <label class="form-field">
-              <span>寄件者電話</span>
+              <span>{{ t('send.sender.phone') }}</span>
               <input
                 v-model="form.senderPhone"
                 required
                 name="senderPhone"
                 type="tel"
-                placeholder="請輸入電話"
+                :placeholder="t('send.sender.phonePlaceholder')"
                 @input="senderPhoneDirty = true"
               />
             </label>
             <label class="form-field span-2">
-              <span>{{ form.pickupType === 'store' ? '寄件超商名稱' : '寄件者地址' }}</span>
+              <span>{{ form.pickupType === 'store' ? t('send.sender.storeAddress') : t('send.sender.address') }}</span>
               <input
                 v-model="form.senderAddress"
                 required
                 name="senderAddress"
                 type="text"
-                :placeholder="form.pickupType === 'store' ? '請輸入超商節點（例如 END_STORE_0）' : '請輸入住家節點（例如 END_HOME_0）'"
+                :placeholder="
+                  form.pickupType === 'store'
+                    ? t('send.sender.storeAddressPlaceholder')
+                    : t('send.sender.addressPlaceholder')
+                "
                 @input="senderAddressDirty = true"
               />
             </label>
@@ -488,25 +505,41 @@ const goToPayment = async () => {
 
         <section class="send-section">
           <header class="send-section-header">
-            <h2 class="send-section-title">收件人資訊</h2>
+            <h2 class="send-section-title">{{ t('send.receiver.title') }}</h2>
           </header>
           <div class="form-grid">
             <label class="form-field">
-              <span>收件者姓名</span>
-              <input v-model="form.receiverName" required name="receiverName" type="text" placeholder="請輸入姓名" />
+              <span>{{ t('send.receiver.name') }}</span>
+              <input
+                v-model="form.receiverName"
+                required
+                name="receiverName"
+                type="text"
+                :placeholder="t('send.receiver.namePlaceholder')"
+              />
             </label>
             <label class="form-field">
-              <span>收件者電話</span>
-              <input v-model="form.receiverPhone" required name="receiverPhone" type="tel" placeholder="請輸入電話" />
+              <span>{{ t('send.receiver.phone') }}</span>
+              <input
+                v-model="form.receiverPhone"
+                required
+                name="receiverPhone"
+                type="tel"
+                :placeholder="t('send.receiver.phonePlaceholder')"
+              />
             </label>
             <label class="form-field span-2">
-              <span>{{ form.destinationType === 'store' ? '目的地超商名稱' : '收件者地址' }}</span>
+              <span>{{ form.destinationType === 'store' ? t('send.receiver.storeAddress') : t('send.receiver.address') }}</span>
               <input
                 v-model="form.receiverAddress"
                 required
                 name="receiverAddress"
                 type="text"
-                :placeholder="form.destinationType === 'store' ? '請輸入超商節點（例如 END_STORE_0）' : '請輸入住家節點（例如 END_HOME_0）'"
+                :placeholder="
+                  form.destinationType === 'store'
+                    ? t('send.receiver.storeAddressPlaceholder')
+                    : t('send.receiver.addressPlaceholder')
+                "
               />
             </label>
           </div>
@@ -514,12 +547,12 @@ const goToPayment = async () => {
 
         <section class="send-section">
           <header class="send-section-header">
-            <h2 class="send-section-title">包裹資訊</h2>
-            <p class="hint send-section-hint">重量與尺寸為必填。</p>
+            <h2 class="send-section-title">{{ t('send.package.title') }}</h2>
+            <p class="hint send-section-hint">{{ t('send.package.hint') }}</p>
           </header>
           <div class="form-grid">
             <label class="form-field">
-              <span>重量 (kg)</span>
+              <span>{{ t('send.package.weight') }}</span>
               <input
                 v-model.number="form.weight"
                 min="1"
@@ -527,62 +560,76 @@ const goToPayment = async () => {
                 name="weight"
                 type="number"
                 step="1"
-                placeholder="請輸入重量"
+                :placeholder="t('send.package.weightPlaceholder')"
               />
             </label>
 
             <div class="form-field">
-              <span>尺寸 (cm)</span>
+              <span>{{ t('send.package.dimensions') }}</span>
               <div class="dimension-grid">
-                <input v-model.number="form.length" min="1" required name="length" type="number" placeholder="長" />
-                <input v-model.number="form.width" min="1" required name="width" type="number" placeholder="寬" />
-                <input v-model.number="form.height" min="1" required name="height" type="number" placeholder="高" />
+                <input
+                  v-model.number="form.length"
+                  min="1"
+                  required
+                  name="length"
+                  type="number"
+                  :placeholder="t('send.package.length')"
+                />
+                <input
+                  v-model.number="form.width"
+                  min="1"
+                  required
+                  name="width"
+                  type="number"
+                  :placeholder="t('send.package.width')"
+                />
+                <input
+                  v-model.number="form.height"
+                  min="1"
+                  required
+                  name="height"
+                  type="number"
+                  :placeholder="t('send.package.height')"
+                />
               </div>
             </div>
 
             <label class="form-field">
-              <span>配送速度</span>
+              <span>{{ t('send.package.speed') }}</span>
               <select v-model="form.deliveryTime" name="deliveryTime">
-                <option value="overnight">隔日</option>
-                <option value="two_day">兩日</option>
-                <option value="standard">標準</option>
-                <option value="economy">經濟</option>
+                <option value="overnight">{{ deliveryLabel.overnight }}</option>
+                <option value="two_day">{{ deliveryLabel.two_day }}</option>
+                <option value="standard">{{ deliveryLabel.standard }}</option>
+                <option value="economy">{{ deliveryLabel.economy }}</option>
               </select>
             </label>
 
             <label class="form-field">
-              <span>付款方式</span>
+              <span>{{ t('send.package.payment') }}</span>
               <select v-model="form.paymentType" name="paymentType">
-                <option value="prepaid">預付（寄件者付款）</option>
-                <option value="cod" :disabled="!isCodAllowed">到付（收件者付款）</option>
+                <option value="prepaid">{{ t('send.payment.prepaidFull') }}</option>
+                <option value="cod" :disabled="!isCodAllowed">{{ t('send.payment.codFull') }}</option>
               </select>
-              <!--<small v-if="receiverCustomerCheckError" class="hint">
-                {{ receiverCustomerCheckError }}
-              </small>
-              <small v-else-if="receiverCustomerStatus === 'checking'" class="hint">正在確認收件人是否為系統客戶…</small>
-              <small v-else-if="receiverCustomerStatus === 'not_exists'" class="hint"
-                >收件人非系統客戶，僅能預付（請填寫正確收件人姓名/電話）。</small
-              >-->
             </label>
 
             <label class="form-field">
-              <span>申報價值（選填）</span>
+              <span>{{ t('send.package.declared') }}</span>
               <input
                 v-model.number="form.declaredValue"
                 name="declaredValue"
                 type="number"
                 min="0"
                 step="1"
-                placeholder="可填，可作為保價參考"
+                :placeholder="t('send.package.declaredPlaceholder')"
               />
             </label>
 
             <div class="form-field span-2">
-              <span>特殊標記</span>
+              <span>{{ t('send.package.marks') }}</span>
               <div class="check-stack hint">
-                <label><input v-model="form.dangerousMaterials" type="checkbox" /> 含危險物</label>
-                <label><input v-model="form.fragileItems" type="checkbox" /> 易碎品</label>
-                <label><input v-model="form.internationalShipments" type="checkbox" /> 國際貨件</label>
+                <label><input v-model="form.dangerousMaterials" type="checkbox" /> {{ t('send.package.dangerous') }}</label>
+                <label><input v-model="form.fragileItems" type="checkbox" /> {{ t('send.package.fragile') }}</label>
+                <label><input v-model="form.internationalShipments" type="checkbox" /> {{ t('send.package.international') }}</label>
               </div>
             </div>
           </div>
@@ -590,19 +637,19 @@ const goToPayment = async () => {
 
         <section v-if="form.pickupType === 'home'" class="send-section">
           <header class="send-section-header">
-            <h2 class="send-section-title">到府取件</h2>
-            <p class="hint send-section-hint">請選擇可聯絡的日期與時段。</p>
+            <h2 class="send-section-title">{{ t('send.pickupSchedule.title') }}</h2>
+            <p class="hint send-section-hint">{{ t('send.pickupSchedule.hint') }}</p>
           </header>
           <div class="form-grid">
             <label class="form-field">
-              <span>取件日期</span>
+              <span>{{ t('send.pickupSchedule.date') }}</span>
               <input v-model="form.pickupDate" type="date" name="pickupDate" required />
             </label>
 
             <label class="form-field">
-              <span>取件時段</span>
+              <span>{{ t('send.pickupSchedule.window') }}</span>
               <select v-model="form.pickupTimeWindow" name="pickupTimeWindow" required>
-                <option value="" disabled>請選擇</option>
+                <option value="" disabled>{{ t('send.pickupSchedule.choose') }}</option>
                 <option value="09:00-12:00">09:00 - 12:00</option>
                 <option value="12:00-15:00">12:00 - 15:00</option>
                 <option value="15:00-18:00">15:00 - 18:00</option>
@@ -611,37 +658,39 @@ const goToPayment = async () => {
             </label>
 
             <label class="form-field span-2">
-              <span>取件備註（選填）</span>
-              <textarea v-model="form.pickupNotes" rows="3" name="pickupNotes" placeholder="例如：需先聯絡、門禁、停車資訊"></textarea>
+              <span>{{ t('send.pickupSchedule.notes') }}</span>
+              <textarea
+                v-model="form.pickupNotes"
+                rows="3"
+                name="pickupNotes"
+                :placeholder="t('send.pickupSchedule.notesPlaceholder')"
+              ></textarea>
             </label>
           </div>
         </section>
 
-        <UiNotice v-if="errorMessage" tone="error" role="alert" class="send-message">{{ errorMessage }}</UiNotice>
-        <UiNotice v-if="estimateError" tone="error" role="alert" class="send-message">{{ estimateError }}</UiNotice>
-        <UiNotice v-if="estimateMessage" tone="info" class="send-message">{{ estimateMessage }}</UiNotice>
-        <UiNotice v-if="confirmation" tone="success" class="send-message">{{ confirmation }}</UiNotice>
+        <p v-if="errorMessage" class="hint send-message error">{{ errorMessage }}</p>
+        <p v-if="estimateError" class="hint send-message error">{{ estimateError }}</p>
+        <p v-if="estimateMessage" class="hint send-message success">{{ estimateMessage }}</p>
+        <p v-if="confirmation" class="hint send-message success">{{ confirmation }}</p>
 
         <div class="send-actions">
           <div v-if="lastCreatedPackageId" class="send-actions-left">
-            <button class="primary-btn" type="button" @click="goToPayment">前往付款</button>
+            <button class="primary-btn" type="button" @click="goToPayment">{{ t('send.payNow') }}</button>
           </div>
-          <UiNotice v-if="lastCreatedPackageId" tone="warning" class="send-message">
-            用戶尚未付款，請盡快前往付款。
-          </UiNotice>
+          <p v-if="lastCreatedPackageId" class="pending-pay">{{ t('send.payReminder') }}</p>
           <div class="send-actions-right">
             <button class="ghost-btn" type="button" :disabled="isEstimating" @click="requestEstimate">
-              {{ isEstimating ? '試算中…' : '運費試算' }}
+              {{ isEstimating ? t('send.estimate.loading') : t('send.estimate.cta') }}
             </button>
             <button class="primary-btn" type="submit" :disabled="isSubmitting">
-              {{ isSubmitting ? '建立中…' : '建立託運單' }}
+              {{ isSubmitting ? t('send.submit.loading') : t('send.submit.cta') }}
             </button>
           </div>
         </div>
-        
       </form>
-    </UiCard>
-  </UiPageShell>
+    </div>
+  </section>
 </template>
 
 <style scoped>
@@ -796,6 +845,13 @@ const goToPayment = async () => {
   margin-top: 12px;
 }
 
+.send-message.error {
+  color: #b00020;
+}
+
+.send-message.success {
+  color: var(--text-muted);
+}
 
 .send-card code {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
@@ -804,5 +860,15 @@ const goToPayment = async () => {
   border-radius: 8px;
   border: 1px solid rgba(165, 122, 99, 0.22);
   background: rgba(255, 255, 255, 0.65);
+}
+
+.pending-pay {
+  color: brown;
+}
+
+@media (max-width: 860px) {
+  .pending-pay {
+    flex-basis: 100%;
+  }
 }
 </style>

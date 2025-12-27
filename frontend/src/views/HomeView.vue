@@ -1,48 +1,47 @@
 ﻿
 <script setup lang="ts">
+import { computed } from 'vue'
 import { RouterLink } from 'vue-router'
 import UiCard from '../components/ui/UiCard.vue'
 import UiList from '../components/ui/UiList.vue'
 import UiPageShell from '../components/ui/UiPageShell.vue'
+import { useI18n } from 'vue-i18n'
 
-const highlights = [
-  { title: '虛擬地圖', copy: '四環：中心、轉運站、門市、住家，車隊固定區域行駛。' },
-  { title: '資料驅動計價', copy: '服務規則決定允許組合、費率與特殊處理費。' },
-  { title: '生命週期追蹤', copy: '記錄取件、上/下車、分揀、配送、異常事件。' },
-  { title: '帳務友善', copy: '支援預付、貨到付款，以及合約客戶的月結。' },
-]
+const { t } = useI18n()
 
-const roles = [
-  { title: '客戶', to: '/customer', detail: '排程寄件、追蹤、付款、合約申請。' },
-  { title: '司機', to: '/employee/driver', detail: '區內路線，紀錄事件與貨到付款。' },
-  { title: '倉儲', to: '/employee/warehouse', detail: '配送站/配送中心掃描與分揀事件。' },
-  { title: '管理員', to: '/admin', detail: '設定服務規則、價格、虛擬地圖。' },
-]
+const highlights = computed(() => [
+  { title: t('home.highlights.virtualMap.title'), copy: t('home.highlights.virtualMap.copy') },
+  { title: t('home.highlights.pricing.title'), copy: t('home.highlights.pricing.copy') },
+  { title: t('home.highlights.lifecycle.title'), copy: t('home.highlights.lifecycle.copy') },
+  { title: t('home.highlights.billing.title'), copy: t('home.highlights.billing.copy') },
+])
+
+const routes = computed(() => [
+  t('home.routes.pickup'),
+  t('home.routes.delivery'),
+  t('home.routes.events'),
+  t('home.routes.billing'),
+])
 </script>
 
 <template>
   <UiPageShell class="page-hero">
     <div class="hero-grid">
       <div class="hero-copy">
-        <p class="eyebrow">物流模擬系統</p>
-        <h1>模擬建立寄件、轉運、配送</h1>
-        <p class="lede">
-          以虛擬地圖，模擬真實世界的貨物流動。
-        </p>
+        <p class="eyebrow">{{ t('home.eyebrow') }}</p>
+        <h1>{{ t('home.title') }}</h1>
+        <p class="lede">{{ t('home.lede') }}</p>
         <div class="hero-actions">
-          <RouterLink to="/map" class="primary-btn">虛擬地圖</RouterLink>
-          <RouterLink to="/track" class="ghost-btn">追蹤包裹</RouterLink>
-          <RouterLink to="/shipping/estimate" class="ghost-btn">計算運費</RouterLink>
+          <RouterLink to="/map" class="primary-btn">{{ t('home.actions.map') }}</RouterLink>
+          <RouterLink to="/track" class="ghost-btn">{{ t('home.actions.track') }}</RouterLink>
+          <RouterLink to="/shipping/estimate" class="ghost-btn">{{ t('home.actions.estimate') }}</RouterLink>
         </div>
       </div>
 
       <UiCard class="highlight-card">
-        <p class="eyebrow">路徑</p>
+        <p class="eyebrow">{{ t('home.routes.title') }}</p>
         <UiList>
-          <li>取件：住家/門市 -> 轉運站 -> 物流中心</li>
-          <li>派送：物流中心 -> 轉運站 -> 住家/門市</li>
-          <li>事件：取件、分揀、轉運、配送、異常</li>
-          <li>帳務：抵達物流中心時更新月結週期</li>
+          <li v-for="route in routes" :key="route">{{ route }}</li>
         </UiList>
       </UiCard>
     </div>
@@ -50,23 +49,23 @@ const roles = [
 
   <UiPageShell>
     <header class="section-header">
-      <h2>運費算法</h2>
-      <p class="hint">目前先提供面板佈局，後續會接上實際計價規則與 API。</p>
+      <h2>{{ t('home.pricing.title') }}</h2>
+      <p class="hint">{{ t('home.pricing.hint') }}</p>
     </header>
 
     <UiCard>
       <div class="stack">
         <div>
-          <p class="eyebrow">輸入</p>
-          <p class="hint">尺寸（長寬高）、重量、配送時段、寄件/取件方式、付款方式。</p>
+          <p class="eyebrow">{{ t('home.pricing.input.title') }}</p>
+          <p class="hint">{{ t('home.pricing.input.copy') }}</p>
         </div>
         <div>
-          <p class="eyebrow">規則</p>
-          <p class="hint">基本費 + 距離/區域加成 + 重量/材積加成 + 時段加價 + 服務處理費。</p>
+          <p class="eyebrow">{{ t('home.pricing.rules.title') }}</p>
+          <p class="hint">{{ t('home.pricing.rules.copy') }}</p>
         </div>
         <div>
-          <p class="eyebrow">輸出</p>
-          <p class="hint">預估運費、拆解明細（各項加成）、以及不符合規則時的原因提示。</p>
+          <p class="eyebrow">{{ t('home.pricing.output.title') }}</p>
+          <p class="hint">{{ t('home.pricing.output.copy') }}</p>
         </div>
       </div>
     </UiCard>
