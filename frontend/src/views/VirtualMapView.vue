@@ -3,6 +3,9 @@ import { computed, onMounted, reactive, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { api, type MapEdge, type MapNode } from "../services/api";
 import { useFullscreen } from "../composables/useFullscreen";
+import UiCard from "../components/ui/UiCard.vue";
+import UiPageShell from "../components/ui/UiPageShell.vue";
+import { toastFromApiError } from "../services/errorToast";
 
 type ViewBox = { x: number; y: number; w: number; h: number };
 
@@ -287,6 +290,7 @@ onMounted(async () => {
     if (nodeFromQuery) focusOnNode(nodeFromQuery);
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err);
+    toastFromApiError(err, error.value ?? "載入地圖失敗");
   } finally {
     loading.value = false;
   }
@@ -304,21 +308,23 @@ watch(
 </script>
 
 <template>
-  <section class="page-shell map-page map-page--bleed">
-    <header class="section-header section-header--split">
-      <div>
-        <h2>虛擬地圖</h2>
-        <p class="hint">顯示 nodes/edges，支援縮放與平移。</p>
+  <UiPageShell class="map-page map-page--bleed">
+    <template #header>
+      <div class="section-header section-header--split">
+        <div>
+          <h2>虛擬地圖</h2>
+          <p class="hint">顯示 nodes/edges，支援縮放與平移。</p>
+        </div>
+        <div class="map-actions">
+          <button class="ghost-btn" type="button" @click="resetView">重置視角</button>
+        </div>
       </div>
-      <div class="map-actions">
-        <button class="ghost-btn" type="button" @click="resetView">重置視角</button>
-      </div>
-    </header>
+    </template>
 
-    <div v-if="error" class="card">
+    <UiCard v-if="error">
       <p class="eyebrow">載入失敗</p>
       <p class="hint">{{ error }}</p>
-    </div>
+    </UiCard>
 
     <div v-else class="map-layout">
       <div ref="stageEl" class="card map-canvas" :class="{ fullscreen: isFullscreen }">
@@ -415,7 +421,7 @@ watch(
             </g>
           </svg>
 
-          <div class="card map-overlay" role="complementary" aria-label="map panel">
+          <UiCard class="map-overlay" role="complementary" aria-label="map panel">
             <p class="eyebrow">圖例</p>
             <div class="legend">
               <div class="legend-item">
@@ -445,11 +451,11 @@ watch(
               <div><strong>座標：</strong>({{ selectedNode.x }}, {{ selectedNode.y }})</div>
             </div>
             <div v-else class="hint">點選節點查看詳細資訊。</div>
-          </div>
+          </UiCard>
         </div>
       </div>
     </div>
-  </section>
+  </UiPageShell>
 </template>
 
 <style scoped>

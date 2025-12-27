@@ -1,11 +1,15 @@
 <script setup lang="ts">
 import { reactive, ref, watchEffect } from 'vue'
-import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '../stores/auth'
 import { api, type UpdateCustomerPayload } from '../services/api'
+import UiCard from '../components/ui/UiCard.vue'
+import UiNotice from '../components/ui/UiNotice.vue'
+import UiPageShell from '../components/ui/UiPageShell.vue'
+import { useToasts } from '../components/ui/toast'
+import { toastFromApiError } from '../services/errorToast'
 
-const { t } = useI18n()
 const auth = useAuthStore()
+const toast = useToasts()
 
 const form = reactive<UpdateCustomerPayload>({
   user_id: auth.user?.id ?? '',
@@ -34,7 +38,8 @@ const submitProfile = async () => {
   successMessage.value = ''
 
   if (!auth.user) {
-    errorMessage.value = t('profile.errors.notLoggedIn')
+    errorMessage.value = '請先登入後再修改資料。'
+    toast.warning(errorMessage.value)
     return
   }
 
@@ -44,9 +49,10 @@ const submitProfile = async () => {
   try {
     const res = await api.updateCustomerMe(form)
     auth.setUser(res.user)
-    successMessage.value = t('profile.success')
+    successMessage.value = '個人資料已更新。'
   } catch (err: any) {
-    errorMessage.value = err?.message || t('profile.errors.updateFailed')
+    errorMessage.value = err?.message || '更新失敗，請稍後再試。'
+    toastFromApiError(err, errorMessage.value)
   } finally {
     isSubmitting.value = false
   }
@@ -54,49 +60,43 @@ const submitProfile = async () => {
 </script>
 
 <template>
-  <section class="page-shell">
-    <header class="page-header">
-      <p class="eyebrow">{{ t('profile.eyebrow') }}</p>
-      <h1>{{ t('profile.title') }}</h1>
-      <p class="lede">{{ t('profile.lede') }}</p>
-    </header>
-
-    <div class="card">
+  <UiPageShell eyebrow="客戶" title="更新個人資料" lede="修改你的姓名、電話、地址與支付偏好。">
+    <UiCard>
       <form class="form-grid" @submit.prevent="submitProfile">
         <label class="form-field">
-          <span>{{ t('profile.fields.name') }}</span>
+          <span>姓名</span>
           <input v-model="form.user_name" name="user_name" type="text" required />
         </label>
 
         <label class="form-field">
-          <span>{{ t('profile.fields.phone') }}</span>
+          <span>電話</span>
           <input v-model="form.phone_number" name="phone_number" type="tel" required />
         </label>
 
         <label class="form-field span-2">
-          <span>{{ t('profile.fields.address') }}</span>
+          <span>地址</span>
           <input v-model="form.address" name="address" type="text" required />
         </label>
 
         <label class="form-field">
-          <span>{{ t('profile.fields.billing') }}</span>
+          <span>支付偏好</span>
           <select v-model="form.billing_preference" name="billing_preference">
-            <option value="cash">{{ t('profile.billing.cash') }}</option>
-            <option value="credit_card">{{ t('profile.billing.credit') }}</option>
-            <option value="bank_transfer">{{ t('profile.billing.bank') }}</option>
-            <option value="monthly">{{ t('profile.billing.monthly') }}</option>
-            <option value="third_party_payment">{{ t('profile.billing.third') }}</option>
+            <option value="cash">現金支付</option>
+            <option value="credit_card">信用卡</option>
+            <option value="bank_transfer">網路銀行</option>
+            <option value="monthly">月結帳單（合約客戶）</option>
+            <option value="third_party_payment">第三方支付</option>
           </select>
         </label>
 
         <button class="primary-btn" type="submit" :disabled="isSubmitting">
-          {{ isSubmitting ? t('profile.saving') : t('profile.save') }}
+          {{ isSubmitting ? '儲存中…' : '儲存變更' }}
         </button>
       </form>
 
-      <p v-if="errorMessage" class="hint" style="color: #b00020">{{ errorMessage }}</p>
-      <p v-if="successMessage" class="hint">{{ successMessage }}</p>
-    </div>
-  </section>
+      <UiNotice v-if="errorMessage" tone="error" role="alert">{{ errorMessage }}</UiNotice>
+      <UiNotice v-if="successMessage" tone="success">{{ successMessage }}</UiNotice>
+    </UiCard>
+  </UiPageShell>
 </template>
 

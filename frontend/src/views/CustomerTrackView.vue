@@ -1,7 +1,7 @@
-
 <script setup lang="ts">
+
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { api, type MapNode, type PackageEventRecord, type TrackingSearchResponse } from '../services/api'
 import { useAuthStore } from '../stores/auth'
@@ -16,10 +16,11 @@ type Filters = {
 }
 
 const TRUCK_ORIGIN_NODE_ID = 'TRUCK_ORIGIN'
-
 const auth = useAuthStore()
+const route = useRoute()
 const router = useRouter()
 const { t, locale } = useI18n()
+const trackingLabel = (tracking?: string | null) => (tracking && tracking.trim() ? tracking.trim() : t('common.tracking.pending'))
 
 const filters = reactive<Filters>({
   tracking_number: '',
@@ -32,16 +33,12 @@ const filters = reactive<Filters>({
 const activeTab = ref<'in_transit' | 'history'>('in_transit')
 const expandedIds = ref<Set<string>>(new Set())
 const filtersOpen = ref(false)
-
 const hubAndRegionNodes = ref<MapNode[]>([])
 const nodeNameById = ref<Record<string, string>>({})
-
 const isLoading = ref(false)
 const error = ref<string | null>(null)
-
 const inTransitResult = ref<TrackingSearchResponse | null>(null)
 const historyResult = ref<TrackingSearchResponse | null>(null)
-
 const inTransitPackages = computed(() => inTransitResult.value?.packages ?? [])
 const historyPackages = computed(() => historyResult.value?.packages ?? [])
 const packagesForActiveTab = computed(() =>
@@ -545,6 +542,11 @@ const lookup = async () => {
 onMounted(async () => {
   if (!auth.isLoggedIn) return
 
+  const queryTracking = route.query.tracking_number
+  if (typeof queryTracking === 'string' && queryTracking.trim()) {
+    filters.tracking_number = queryTracking.trim()
+  }
+
   try {
     const map = await api.getMap()
     nodeNameById.value = Object.fromEntries(map.nodes.map((n) => [n.id, n.name]))
@@ -556,6 +558,17 @@ onMounted(async () => {
 
   await lookup()
 })
+
+watch(
+  () => route.query.tracking_number,
+  (value) => {
+    if (typeof value !== 'string') return
+    const next = value.trim()
+    if (!next || next === filters.tracking_number) return
+    filters.tracking_number = next
+    void lookup()
+  },
+)
 </script>
 <template>
   <section class="page-shell">
@@ -575,46 +588,57 @@ onMounted(async () => {
     </div>
 
     <div class="card filters-card">
-      <div class="legend">
-        <p class="eyebrow">{{ t('track.filters.title') }}</p>
+      <div class="filters-head">
+        <div class="legend">
+          <p class="eyebrow">{{ t('track.filters.title') }}</p>
+        </div>
+        <button type="button" class="filters-toggle" @click="filtersOpen = !filtersOpen">
+          <span>{{ filtersOpen ? t('track.filters.hide') : t('track.filters.show') }}</span>
+          <span aria-hidden="true">{{ filtersOpen ? 'âˆ’' : '+' }}</span>
+        </button>
       </div>
 
-      <button type="button" class="filters-toggle" @click="filtersOpen = !filtersOpen">
-        <span>{{ filtersOpen ? t('track.filters.hide') : t('track.filters.show') }}</span>
-        <span aria-hidden="true">{{ filtersOpen ? '?' : '+' }}</span>
-      </button>
+      <form class="filters-form" @submit.prevent="lookup">
+        <div class="filters-basic">
+          <label class="form-field tracking-field">
+            <span>{{ t('track.filters.tracking') }}</span>
+            <input v-model="filters.tracking_number" name="tracking_number" type="text" :placeholder="t('track.filters.trackingPh')" />
+          </label>
 
-      <form v-if="filtersOpen" class="form-grid" @submit.prevent="lookup">
-        <label class="form-field span-2">
-          <span>{{ t('track.filters.tracking') }}</span>
-          <input v-model="filters.tracking_number" name="tracking_number" type="text" :placeholder="t('track.filters.trackingPh')" />
-        </label>
+          <div class="filters-actions">
+            <button class="primary-btn" type="submit" :disabled="isLoading">
+              {{ isLoading ? t('track.filters.loading') : t('track.filters.apply') }}
+            </button>
+            <button class="ghost-btn" type="button" @click="clearFilters" :disabled="isLoading">
+              {{ t('track.filters.clear') }}
+            </button>
+          </div>
+        </div>
 
-        <label class="form-field">
-          <span>{{ t('track.filters.dateFrom') }}</span>
-          <input v-model="filters.date_from" name="date_from" type="date" />
-        </label>
+        <div v-if="filtersOpen" class="form-grid filters-advanced">
+          <label class="form-field">
+            <span>{{ t('track.filters.dateFrom') }}</span>
+            <input v-model="filters.date_from" name="date_from" type="date" />
+          </label>
 
-        <label class="form-field">
-          <span>{{ t('track.filters.dateTo') }}</span>
-          <input v-model="filters.date_to" name="date_to" type="date" />
-        </label>
+          <label class="form-field">
+            <span>{{ t('track.filters.dateTo') }}</span>
+            <input v-model="filters.date_to" name="date_to" type="date" />
+          </label>
 
-        <label class="form-field span-2">
-          <span>{{ t('track.filters.vehicle') }}</span>
-          <input v-model="filters.vehicle_id" name="vehicle_id" type="text" :placeholder="t('track.filters.vehiclePh')" />
-        </label>
+          <label class="form-field span">
+            <span>{{ t('track.filters.vehicle') }}</span>
+            <input v-model="filters.vehicle_id" name="vehicle_id" type="text" :placeholder="t('track.filters.vehiclePh')" />
+          </label>
 
-        <label class="form-field span-2">
-          <span>{{ t('track.filters.location') }}</span>
-          <select v-model="filters.location_id" name="location_id">
-            <option value="">{{ t('track.filters.any') }}</option>
-            <option v-for="node in hubAndRegionNodes" :key="node.id" :value="node.id">{{ node.name }} ({{ node.id }})</option>
-          </select>
-        </label>
-
-        <button class="primary-btn" type="submit" :disabled="isLoading">{{ isLoading ? t('track.filters.loading') : t('track.filters.apply') }}</button>
-        <button class="ghost-btn" type="button" @click="clearFilters" :disabled="isLoading">{{ t('track.filters.clear') }}</button>
+          <label class="form-field span">
+            <span>{{ t('track.filters.location') }}</span>
+            <select v-model="filters.location_id" name="location_id">
+              <option value="">{{ t('track.filters.any') }}</option>
+              <option v-for="node in hubAndRegionNodes" :key="node.id" :value="node.id">{{ node.name }} ({{ node.id }})</option>
+            </select>
+          </label>
+        </div>
       </form>
     </div>
 
@@ -638,7 +662,7 @@ onMounted(async () => {
             {{ t('track.summary.history', { count: historyPackages.length }) }}
           </span>
           <span v-if="totalForActiveTab !== packagesForActiveTab.length">
-            ¡P {{ t('track.summary.total', { total: totalForActiveTab }) }}
+            {{ t('track.summary.total', { total: totalForActiveTab }) }}
           </span>
         </p>
 
@@ -656,7 +680,7 @@ onMounted(async () => {
             :class="{ active: expandedIds.has(pkg.id) }"
           >
             <button type="button" class="row-btn" @click="togglePackage(pkg.id)">
-              <span class="tracking">{{ t('track.trackingLabel') }} | {{ pkg.tracking_number || pkg.id }}</span>
+              <span class="tracking">{{ t('track.trackingLabel') }} | {{ trackingLabel(pkg.tracking_number) }}</span>
               <span
                 class="pill"
                 :class="{
@@ -732,13 +756,13 @@ onMounted(async () => {
                   <span class="summary-value">
                     <template v-if="detailByPackageId[pkg.id]?.vehicleCode">
                       {{ detailByPackageId[pkg.id]?.vehicleCode }}
-                    </template>
+                    </template>               
                     <template v-else-if="routeModel(pkg).displayNode">
                       {{ displayNodeText(routeModel(pkg).displayNode) }}
                     </template>
                     <template v-else>{{ pkg.current_location || '-' }}</template>
                   </span>
-                  <span class="summary-sep">¡P</span>
+                  <span class="summary-sep">P</span>
                   <span class="summary-label">{{ t('track.summary.status') }}</span>
                   <span class="summary-value">
                     <template v-if="detailByPackageId[pkg.id]?.isLoading">{{ t('track.loading') }}</template>
@@ -761,24 +785,60 @@ onMounted(async () => {
 <style scoped>
 .filters-card {
   margin-top: 14px;
+  margin-bottom: 16px;
 }
 
-.filters-toggle {
-  width: 100%;
+.filters-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.filters-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 12px;
-  padding: 10px 12px;
+  padding: 8px 10px;
   background: rgba(255, 255, 255, 0.75);
   cursor: pointer;
   font-weight: 700;
-  margin: 10px 0 12px 0;
+}
+
+.filters-form {
+  display: grid;
+  gap: 12px;
+}
+
+.filters-basic {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.tracking-field {
+  flex: 1;
+  min-width: 260px;
 }
 
 .results {
   margin-top: 16px;
+}
+
+.filters-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.filters-advanced {
+  margin-top: 2px;
 }
 
 .package-list {

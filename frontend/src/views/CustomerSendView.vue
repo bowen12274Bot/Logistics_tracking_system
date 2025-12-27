@@ -4,6 +4,15 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { api } from '../services/api'
 import { useAuthStore } from '../stores/auth'
+import UiModal from '../components/ui/UiModal.vue'
+import { useToasts } from '../components/ui/toast'
+import {
+  addCommonRecipient,
+  loadCustomerCommonRecipients,
+  removeCommonRecipient,
+  saveCustomerCommonRecipients,
+  type CustomerCommonRecipients,
+} from '../services/customerCommonRecipients'
 
 type DeliveryTime = 'overnight' | 'two_day' | 'standard' | 'economy'
 type PaymentType = 'prepaid' | 'cod'
@@ -66,11 +75,59 @@ const receiverCustomerStatus = ref<'unknown' | 'checking' | 'exists' | 'not_exis
 const receiverCustomerCheckError = ref('')
 const isCodAllowed = computed(() => receiverCustomerStatus.value === 'exists')
 const lastCreatedPackageId = ref<string | null>(null)
+const lastCreatedTrackingNumber = ref<string | null>(null)
+const toasts = useToasts()
 
 const senderNameReadonly = computed(() => !!auth.user?.user_name)
 const numberFormatter = computed(
   () => new Intl.NumberFormat(locale.value === 'en-US' ? 'en-US' : 'zh-TW'),
 )
+
+const commonData = ref<CustomerCommonRecipients>(loadCustomerCommonRecipients(auth.user?.id))
+watch(
+  () => auth.user?.id,
+  (id) => {
+    commonData.value = loadCustomerCommonRecipients(id)
+  },
+)
+
+const commonModalOpen = ref(false)
+const openCommonRecipients = () => {
+  commonModalOpen.value = true
+}
+
+const persistCommon = () => {
+  saveCustomerCommonRecipients(auth.user?.id, commonData.value)
+}
+
+const canSaveRecipientCommon = computed(
+  () => requiredTrimmed(form.receiverName) && requiredTrimmed(form.receiverPhone) && requiredTrimmed(form.receiverAddress),
+)
+
+const applyRecipientCommon = (index: number) => {
+  const target = commonData.value.recipients[index]
+  if (!target) return
+  form.receiverName = target.name
+  form.receiverPhone = target.phone
+  form.receiverAddress = target.address
+  const addr = normalizeAddress(target.address)
+  if (addr.startsWith('END_STORE_')) form.destinationType = 'store'
+  if (addr.startsWith('END_HOME_')) form.destinationType = 'home'
+}
+
+const saveRecipientCommon = () => {
+  commonData.value = addCommonRecipient(commonData.value, {
+    name: form.receiverName,
+    phone: form.receiverPhone,
+    address: normalizeAddress(form.receiverAddress),
+  })
+  persistCommon()
+}
+
+const deleteRecipientCommon = (index: number) => {
+  commonData.value = removeCommonRecipient(commonData.value, index)
+  persistCommon()
+}
 
 const requiredTrimmed = (value: string) => value.trim().length > 0
 
@@ -94,11 +151,42 @@ function buildSpecialMarks() {
   return marks
 }
 
+const estimateFingerprint = computed(() =>
+  JSON.stringify({
+    from: normalizeAddress(form.senderAddress),
+    to: normalizeAddress(form.receiverAddress),
+    weight: form.weight,
+    length: form.length,
+    width: form.width,
+    height: form.height,
+    delivery: form.deliveryTime,
+    marks: buildSpecialMarks().slice().sort(),
+  }),
+)
+
+const lastEstimatedFingerprint = ref<string | null>(null)
+const isEstimateFresh = computed(
+  () => !!lastEstimatedFingerprint.value && lastEstimatedFingerprint.value === estimateFingerprint.value && !estimateError.value,
+)
+
+watch(
+  estimateFingerprint,
+  (next) => {
+    if (!lastEstimatedFingerprint.value) return
+    if (next === lastEstimatedFingerprint.value) return
+    lastEstimatedFingerprint.value = null
+    estimateMessage.value = ''
+    estimateRoutePath.value = []
+  },
+  { flush: 'sync' },
+)
+
 const requestEstimate = async () => {
   estimateMessage.value = ''
   estimateError.value = ''
   estimateRoutePath.value = []
   errorMessage.value = ''
+  lastEstimatedFingerprint.value = null
 
   if (
     !requiredTrimmed(form.senderAddress) ||
@@ -154,6 +242,7 @@ const requestEstimate = async () => {
       routeCost: numberFormatter.value.format(estimate.route_cost),
     })
     estimateRoutePath.value = estimate.route_path ?? []
+    lastEstimatedFingerprint.value = estimateFingerprint.value
   } catch (err: any) {
     estimateError.value = err?.message || t('send.errors.estimateFailed')
   } finally {
@@ -259,9 +348,8 @@ watch(
 const submitPackage = async () => {
   confirmation.value = ''
   errorMessage.value = ''
-  estimateMessage.value = ''
-  estimateError.value = ''
   lastCreatedPackageId.value = null
+  lastCreatedTrackingNumber.value = null
 
   if (!form.pickupType) {
     errorMessage.value = t('send.errors.pickupType')
@@ -311,6 +399,11 @@ const submitPackage = async () => {
 
   if (form.pickupType === 'home' && (!form.pickupDate || !form.pickupTimeWindow)) {
     errorMessage.value = t('send.errors.pickupSchedule')
+    return
+  }
+
+  if (!isEstimateFresh.value) {
+    errorMessage.value = t('send.errors.mustEstimate')
     return
   }
 
@@ -382,6 +475,7 @@ const submitPackage = async () => {
 
     const tracking = response.package.tracking_number ?? response.package.id
     lastCreatedPackageId.value = response.package.id
+    lastCreatedTrackingNumber.value = tracking
     const destLabel = form.destinationType === 'store' ? t('send.destination.store') : t('send.destination.home')
     confirmation.value =
       form.pickupType === 'home'
@@ -403,6 +497,18 @@ const submitPackage = async () => {
             payment: paymentTypeLabel.value[form.paymentType],
             destination: destLabel,
           })
+
+    if (form.paymentType === 'prepaid') {
+      await router.push({
+        name: 'customer-payment',
+        query: { package_id: response.package.id, tracking_number: tracking },
+      })
+    } else {
+      await router.push({
+        name: 'customer-track',
+        query: { tracking_number: tracking },
+      })
+    }
   } catch (err: any) {
     errorMessage.value = err?.message || t('send.errors.createFailed')
   } finally {
@@ -412,7 +518,45 @@ const submitPackage = async () => {
 
 const goToPayment = async () => {
   if (!lastCreatedPackageId.value) return
-  await router.push({ name: 'customer-payment', query: { package_id: lastCreatedPackageId.value } })
+  await router.push({
+    name: 'customer-payment',
+    query: { package_id: lastCreatedPackageId.value, tracking_number: lastCreatedTrackingNumber.value ?? undefined },
+  })
+}
+
+const goToTrack = async () => {
+  const tracking = lastCreatedTrackingNumber.value
+  if (!tracking) return
+  await router.push({ name: 'customer-track', query: { tracking_number: tracking } })
+}
+
+async function copyTracking() {
+  const tracking = lastCreatedTrackingNumber.value
+  if (!tracking) return
+
+  try {
+    await navigator.clipboard?.writeText?.(tracking)
+    toasts.success(t('send.success.copied'))
+    return
+  } catch {
+    // ignore and fallback
+  }
+
+  try {
+    const el = document.createElement('textarea')
+    el.value = tracking
+    el.setAttribute('readonly', '')
+    el.style.position = 'fixed'
+    el.style.left = '-9999px'
+    document.body.appendChild(el)
+    el.select()
+    const ok = document.execCommand('copy')
+    document.body.removeChild(el)
+    if (ok) toasts.success(t('send.success.copied'))
+    else toasts.warning(t('send.success.copyFailed'))
+  } catch {
+    toasts.warning(t('send.success.copyFailed'))
+  }
 }
 </script>
 
@@ -506,6 +650,26 @@ const goToPayment = async () => {
         <section class="send-section">
           <header class="send-section-header">
             <h2 class="send-section-title">{{ t('send.receiver.title') }}</h2>
+            <div class="send-section-actions">
+              <button
+                v-if="commonData.recipients.length"
+                class="ghost-btn small-btn"
+                type="button"
+                data-testid="open-common-recipient"
+                @click="openCommonRecipients"
+              >
+                {{ t('send.common.useRecipient') }}
+              </button>
+              <button
+                class="ghost-btn small-btn"
+                type="button"
+                data-testid="save-common-recipient"
+                :disabled="!canSaveRecipientCommon"
+                @click="saveRecipientCommon"
+              >
+                {{ t('send.common.saveRecipient') }}
+              </button>
+            </div>
           </header>
           <div class="form-grid">
             <label class="form-field">
@@ -537,8 +701,8 @@ const goToPayment = async () => {
                 type="text"
                 :placeholder="
                   form.destinationType === 'store'
-                    ? t('send.receiver.storeAddressPlaceholder')
-                    : t('send.receiver.addressPlaceholder')
+                  ? t('send.receiver.storeAddressPlaceholder')
+                  : t('send.receiver.addressPlaceholder')
                 "
               />
             </label>
@@ -674,22 +838,57 @@ const goToPayment = async () => {
         <p v-if="estimateMessage" class="hint send-message success">{{ estimateMessage }}</p>
         <p v-if="confirmation" class="hint send-message success">{{ confirmation }}</p>
 
-        <div class="send-actions">
-          <div v-if="lastCreatedPackageId" class="send-actions-left">
-            <button class="primary-btn" type="button" @click="goToPayment">{{ t('send.payNow') }}</button>
+        <div v-if="lastCreatedTrackingNumber" class="send-success">
+          <div class="send-success-header">
+            <p class="eyebrow">{{ t('send.success.title') }}</p>
+            <div class="send-success-actions">
+              <button class="ghost-btn small-btn" type="button" @click="copyTracking">{{ t('send.success.copy') }}</button>
+              <button class="ghost-btn small-btn" type="button" @click="goToTrack">{{ t('send.success.goTrack') }}</button>
+            </div>
           </div>
-          <p v-if="lastCreatedPackageId" class="pending-pay">{{ t('send.payReminder') }}</p>
+          <div class="send-success-code">
+            <span class="hint">{{ t('send.success.trackingLabel') }}</span>
+            <code>{{ lastCreatedTrackingNumber }}</code>
+          </div>
+          <div v-if="lastCreatedPackageId" class="send-success-footer">
+            <p class="hint" style="margin: 0">{{ t('send.payReminder') }}</p>
+            <button class="primary-btn" type="button" @click="goToPayment">{{ t('send.success.goPayment') }}</button>
+          </div>
+        </div>
+
+        <div v-if="!lastCreatedTrackingNumber" class="send-actions">
           <div class="send-actions-right">
-            <button class="ghost-btn" type="button" :disabled="isEstimating" @click="requestEstimate">
-              {{ isEstimating ? t('send.estimate.loading') : t('send.estimate.cta') }}
-            </button>
-            <button class="primary-btn" type="submit" :disabled="isSubmitting">
-              {{ isSubmitting ? t('send.submit.loading') : t('send.submit.cta') }}
+            <button
+              class="primary-btn"
+              type="button"
+              :disabled="isEstimating || isSubmitting"
+              @click="isEstimateFresh ? submitPackage() : requestEstimate()"
+            >
+              <template v-if="isEstimateFresh">
+                {{ isSubmitting ? t('send.submit.loading') : t('send.submit.cta') }}
+              </template>
+              <template v-else>
+                {{ isEstimating ? t('send.estimate.loading') : t('send.estimate.cta') }}
+              </template>
             </button>
           </div>
         </div>
       </form>
     </div>
+
+    <UiModal v-model="commonModalOpen" :title="t('send.common.modalTitle')" :close-text="t('common.close')">
+      <p class="hint" style="margin: 0 0 10px">{{ t('send.common.recipientHint') }}</p>
+      <div v-if="!commonData.recipients.length" class="hint">{{ t('send.common.recipientEmpty') }}</div>
+      <ul v-else class="common-list">
+        <li v-for="(r, idx) in commonData.recipients" :key="`${r.name}-${r.phone}-${r.address}-${r.updatedAt}`" class="common-list-item">
+          <button class="ghost-btn common-entry" type="button" :data-testid="`apply-common-recipient-${idx}`" @click="applyRecipientCommon(idx)">
+            <span class="common-entry-text">{{ r.name }} / {{ r.phone }} /</span>
+            <code class="common-entry-code">{{ r.address }}</code>
+          </button>
+          <button class="ghost-btn small-btn" type="button" @click="deleteRecipientCommon(idx)">{{ t('common.delete') }}</button>
+        </li>
+      </ul>
+    </UiModal>
   </section>
 </template>
 
@@ -792,6 +991,98 @@ const goToPayment = async () => {
   margin: 0;
 }
 
+.send-section-actions {
+  display: inline-flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.send-success {
+  border-radius: 14px;
+  border: 1px solid rgba(165, 122, 99, 0.22);
+  background: rgba(255, 255, 255, 0.6);
+  padding: 12px;
+}
+
+.send-success-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.send-success-actions {
+  display: inline-flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.send-success-code {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.send-success-code code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  font-weight: 800;
+  padding: 4px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(165, 122, 99, 0.22);
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.send-success-footer {
+  margin-top: 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.common-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.common-list-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.common-entry {
+  text-align: left;
+  justify-content: flex-start;
+  padding: 10px 12px;
+  border-radius: 12px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.common-entry-text {
+  font-weight: 800;
+}
+
+.common-entry-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  font-size: 0.95em;
+  padding: 2px 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(165, 122, 99, 0.22);
+  background: rgba(255, 255, 255, 0.65);
+}
+
 .dimension-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -862,13 +1153,4 @@ const goToPayment = async () => {
   background: rgba(255, 255, 255, 0.65);
 }
 
-.pending-pay {
-  color: brown;
-}
-
-@media (max-width: 860px) {
-  .pending-pay {
-    flex-basis: 100%;
-  }
-}
 </style>

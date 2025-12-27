@@ -6,6 +6,11 @@ import {
   type CustomerServiceExceptionRecord,
 } from "../services/api";
 import { exceptionReasonLabel } from "../lib/exceptionReasons";
+import UiCard from "../components/ui/UiCard.vue";
+import UiNotice from "../components/ui/UiNotice.vue";
+import UiPageShell from "../components/ui/UiPageShell.vue";
+import { useToasts } from "../components/ui/toast";
+import { toastFromApiError } from "../services/errorToast";
 
 type TabKey = "current" | "history";
 type TaskKind = "exception" | "contract";
@@ -27,6 +32,7 @@ const expandedKey = ref<string | null>(null);
 const isLoading = ref(false);
 const error = ref<string | null>(null);
 const notice = ref<string | null>(null);
+const toast = useToasts();
 
 const exceptions = ref<CustomerServiceExceptionRecord[]>([]);
 const contracts = ref<CustomerServiceContractApplication[]>([]);
@@ -182,6 +188,7 @@ const refresh = async () => {
     ];
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e);
+    toastFromApiError(e, error.value ?? "載入失敗");
   } finally {
     isLoading.value = false;
   }
@@ -227,6 +234,7 @@ const submitExpandedException = async () => {
     await refresh();
   } catch (e) {
     exceptionSubmitError.value = e instanceof Error ? e.message : String(e);
+    toastFromApiError(e, exceptionSubmitError.value ?? "操作失敗");
   } finally {
     exceptionSubmitting.value = false;
   }
@@ -262,6 +270,7 @@ const submitExpandedContract = async () => {
     await refresh();
   } catch (e) {
     contractSubmitError.value = e instanceof Error ? e.message : String(e);
+    toastFromApiError(e, contractSubmitError.value ?? "操作失敗");
   } finally {
     contractSubmitting.value = false;
   }
@@ -280,12 +289,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <section class="page-shell">
-    <header class="page-header">
-      <p class="eyebrow">員工 · 客服</p>
-      <h1>客服任務清單</h1>
-      <p class="lede">切換現在任務/過去紀錄，點開後再執行處理動作。</p>
-    </header>
+  <UiPageShell eyebrow="員工 · 客服" title="客服任務清單" lede="切換現在任務/過去紀錄，點開後再執行處理動作。">
 
     <div class="tab-switch">
       <button class="tab-btn" :class="{ active: activeTab === 'current' }" type="button" :disabled="isLoading" @click="activeTab = 'current'">
@@ -297,10 +301,10 @@ onMounted(async () => {
       <button class="ghost-btn" type="button" :disabled="isLoading" @click="refresh">重新整理</button>
     </div>
 
-    <p v-if="error" class="hint" style="margin-top: 10px; color: #b91c1c">{{ error }}</p>
-    <p v-else-if="notice" class="hint" style="margin-top: 10px; color: #166534">{{ notice }}</p>
+    <UiNotice v-if="error" tone="error" role="alert" style="margin-top: 10px">{{ error }}</UiNotice>
+    <UiNotice v-else-if="notice" tone="success" style="margin-top: 10px">{{ notice }}</UiNotice>
 
-    <div class="card" style="margin-top: 16px">
+    <UiCard style="margin-top: 16px">
       <p v-if="isLoading" class="hint">載入中…</p>
       <p v-else-if="tasksForActiveTab.length === 0" class="hint">目前沒有資料。</p>
 
@@ -380,9 +384,9 @@ onMounted(async () => {
 
               </div>
 
-              <p v-if="exceptionSubmitError" class="hint" style="margin-top: 10px; color: #b91c1c">
+              <UiNotice v-if="exceptionSubmitError" tone="error" role="alert" style="margin-top: 10px">
                 {{ exceptionSubmitError }}
-              </p>
+              </UiNotice>
               <div v-if="activeTab === 'current'" style="display: flex; justify-content: flex-end; margin-top: 10px">
                 <button class="primary-btn" type="button" :disabled="exceptionSubmitting" @click="submitExpandedException">
                   {{ exceptionSubmitting ? "送出中…" : "送出處理" }}
@@ -454,9 +458,9 @@ onMounted(async () => {
                   </label>
                 </div>
 
-                <p v-if="contractSubmitError" class="hint" style="margin-top: 10px; color: #b91c1c">
+                <UiNotice v-if="contractSubmitError" tone="error" role="alert" style="margin-top: 10px">
                   {{ contractSubmitError }}
-                </p>
+                </UiNotice>
                 <div style="display: flex; justify-content: flex-end; margin-top: 10px">
                   <button class="primary-btn" type="button" :disabled="contractSubmitting" @click="submitExpandedContract">
                     {{ contractSubmitting ? "送出中…" : "送出審核" }}
@@ -467,8 +471,8 @@ onMounted(async () => {
           </div>
         </li>
       </ul>
-    </div>
-  </section>
+    </UiCard>
+  </UiPageShell>
 </template>
 
 <style scoped>

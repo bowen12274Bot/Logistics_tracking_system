@@ -29,6 +29,7 @@ const router = createRouter({
   history: createMemoryHistory(),
   routes: [
     { path: '/employee/warehouse', name: 'employee-warehouse', component: EmployeeWarehouseView },
+    { path: '/map', name: 'virtual-map', component: { template: '<div />' } },
   ],
 })
 

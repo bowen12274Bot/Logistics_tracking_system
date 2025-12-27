@@ -2,6 +2,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { RouterLink } from 'vue-router'
+import UiCard from '../components/ui/UiCard.vue'
+import UiList from '../components/ui/UiList.vue'
+import UiPageShell from '../components/ui/UiPageShell.vue'
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
@@ -22,7 +25,7 @@ const routes = computed(() => [
 </script>
 
 <template>
-  <section class="page-shell page-hero">
+  <UiPageShell class="page-hero">
     <div class="hero-grid">
       <div class="hero-copy">
         <p class="eyebrow">{{ t('home.eyebrow') }}</p>
@@ -35,22 +38,22 @@ const routes = computed(() => [
         </div>
       </div>
 
-      <div class="card highlight-card">
+      <UiCard class="highlight-card">
         <p class="eyebrow">{{ t('home.routes.title') }}</p>
-        <ul class="task-list">
+        <UiList>
           <li v-for="route in routes" :key="route">{{ route }}</li>
-        </ul>
-      </div>
+        </UiList>
+      </UiCard>
     </div>
-  </section>
+  </UiPageShell>
 
-  <section class="page-shell">
+  <UiPageShell>
     <header class="section-header">
       <h2>{{ t('home.pricing.title') }}</h2>
       <p class="hint">{{ t('home.pricing.hint') }}</p>
     </header>
 
-    <div class="card">
+    <UiCard>
       <div class="stack">
         <div>
           <p class="eyebrow">{{ t('home.pricing.input.title') }}</p>
@@ -65,6 +68,6 @@ const routes = computed(() => [
           <p class="hint">{{ t('home.pricing.output.copy') }}</p>
         </div>
       </div>
-    </div>
-  </section>
+    </UiCard>
+  </UiPageShell>
 </template>
