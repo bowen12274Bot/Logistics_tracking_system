@@ -8,6 +8,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import CustomerTrackView from '../../views/CustomerTrackView.vue'
+import { i18n } from '@/i18n'
 import { useAuthStore } from '../../stores/auth'
 import { mockCustomerUser, createMockAuthResponse } from '../helpers'
 
@@ -43,7 +44,7 @@ describe('CustomerTrackView', () => {
     it('應該渲染追蹤頁面', async () => {
       const wrapper = mount(CustomerTrackView, {
         global: {
-          plugins: [router, createPinia()],
+          plugins: [router, createPinia(), i18n],
         },
       })
 
@@ -54,7 +55,7 @@ describe('CustomerTrackView', () => {
     it('應該顯示包裹相關標題', async () => {
       const wrapper = mount(CustomerTrackView, {
         global: {
-          plugins: [router, createPinia()],
+          plugins: [router, createPinia(), i18n],
         },
       })
 
@@ -70,7 +71,7 @@ describe('CustomerTrackView', () => {
       // 實際的 API 呼叫測試需要更複雜的設置
       const wrapper = mount(CustomerTrackView, {
         global: {
-          plugins: [router, createPinia()],
+          plugins: [router, createPinia(), i18n],
         },
       })
 
@@ -83,7 +84,7 @@ describe('CustomerTrackView', () => {
     it('沒有包裹時應該顯示相應訊息或空列表', async () => {
       const wrapper = mount(CustomerTrackView, {
         global: {
-          plugins: [router, createPinia()],
+          plugins: [router, createPinia(), i18n],
         },
       })
 

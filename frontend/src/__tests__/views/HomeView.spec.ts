@@ -8,6 +8,7 @@ import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import HomeView from '../../views/HomeView.vue'
+import { i18n } from '@/i18n'
 
 const router = createRouter({
   history: createMemoryHistory(),
@@ -31,7 +32,7 @@ describe('HomeView', () => {
     it('應該渲染首頁內容', () => {
       const wrapper = mount(HomeView, {
         global: {
-          plugins: [router, createPinia()],
+          plugins: [router, createPinia(), i18n],
         },
       })
 
@@ -41,7 +42,7 @@ describe('HomeView', () => {
     it('應該包含物流追蹤系統相關文字', () => {
       const wrapper = mount(HomeView, {
         global: {
-          plugins: [router, createPinia()],
+          plugins: [router, createPinia(), i18n],
         },
       })
 
@@ -55,7 +56,7 @@ describe('HomeView', () => {
     it('應該有導航連結', () => {
       const wrapper = mount(HomeView, {
         global: {
-          plugins: [router, createPinia()],
+          plugins: [router, createPinia(), i18n],
         },
       })
 

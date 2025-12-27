@@ -8,6 +8,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import CustomerSendView from '../../views/CustomerSendView.vue'
+import { i18n } from '@/i18n'
 import { useAuthStore } from '../../stores/auth'
 import { mockCustomerUser, createMockAuthResponse } from '../helpers'
 
@@ -46,7 +47,7 @@ describe('CustomerSendView', () => {
     it('應該渲染寄件表單', () => {
       const wrapper = mount(CustomerSendView, {
         global: {
-          plugins: [router, createPinia()],
+          plugins: [router, createPinia(), i18n],
         },
       })
 
@@ -56,7 +57,7 @@ describe('CustomerSendView', () => {
     it('應該有寄件人資訊區塊', () => {
       const wrapper = mount(CustomerSendView, {
         global: {
-          plugins: [router, createPinia()],
+          plugins: [router, createPinia(), i18n],
         },
       })
 
@@ -66,7 +67,7 @@ describe('CustomerSendView', () => {
     it('應該有收件人資訊區塊', () => {
       const wrapper = mount(CustomerSendView, {
         global: {
-          plugins: [router, createPinia()],
+          plugins: [router, createPinia(), i18n],
         },
       })
 
@@ -78,7 +79,7 @@ describe('CustomerSendView', () => {
     it('地址欄位應該存在', () => {
       const wrapper = mount(CustomerSendView, {
         global: {
-          plugins: [router, createPinia()],
+          plugins: [router, createPinia(), i18n],
         },
       })
 
@@ -91,7 +92,7 @@ describe('CustomerSendView', () => {
     it('應該有配送時效選項', () => {
       const wrapper = mount(CustomerSendView, {
         global: {
-          plugins: [router, createPinia()],
+          plugins: [router, createPinia(), i18n],
         },
       })
 
@@ -110,7 +111,7 @@ describe('CustomerSendView', () => {
     it('應該有付款方式選項', () => {
       const wrapper = mount(CustomerSendView, {
         global: {
-          plugins: [router, createPinia()],
+          plugins: [router, createPinia(), i18n],
         },
       })
 

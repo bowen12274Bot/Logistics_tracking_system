@@ -8,6 +8,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import LoginView from '../../views/LoginView.vue'
+import { i18n } from '@/i18n'
 import { mockCustomerUser, createMockAuthResponse } from '../helpers'
 
 const toastWarningSpy = vi.fn()
@@ -56,7 +57,7 @@ describe('LoginView', () => {
     it('應該渲染登入/註冊標籤切換', () => {
       const wrapper = mount(LoginView, {
         global: {
-          plugins: [router, createPinia()],
+          plugins: [router, createPinia(), i18n],
         },
       })
 
@@ -67,7 +68,7 @@ describe('LoginView', () => {
     it('預設應該顯示登入表單', () => {
       const wrapper = mount(LoginView, {
         global: {
-          plugins: [router, createPinia()],
+          plugins: [router, createPinia(), i18n],
         },
       })
 
@@ -79,7 +80,7 @@ describe('LoginView', () => {
     it('應該顯示快速測試帳號區塊', () => {
       const wrapper = mount(LoginView, {
         global: {
-          plugins: [router, createPinia()],
+          plugins: [router, createPinia(), i18n],
         },
       })
 
@@ -108,7 +109,7 @@ describe('LoginView', () => {
 
       const wrapper = mount(LoginView, {
         global: {
-          plugins: [router, createPinia()],
+          plugins: [router, createPinia(), i18n],
         },
       })
 
@@ -133,7 +134,7 @@ describe('LoginView', () => {
     it('應該有多個測試帳號按鈕', () => {
       const wrapper = mount(LoginView, {
         global: {
-          plugins: [router, createPinia()],
+          plugins: [router, createPinia(), i18n],
         },
       })
 
@@ -146,7 +147,7 @@ describe('LoginView', () => {
     it('點擊註冊標籤應切換到註冊表單', async () => {
       const wrapper = mount(LoginView, {
         global: {
-          plugins: [router, createPinia()],
+          plugins: [router, createPinia(), i18n],
         },
       })
 
