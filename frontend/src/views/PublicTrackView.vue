@@ -3,6 +3,7 @@ import { ref } from "vue";
 import { api, type TrackingPublicResponse } from "../services/api";
 import UiCard from "../components/ui/UiCard.vue";
 import UiPageShell from "../components/ui/UiPageShell.vue";
+import { toastFromApiError } from "../services/errorToast";
 
 const trackingNumber = ref("");
 const isLoading = ref(false);
@@ -28,6 +29,7 @@ const lookup = async () => {
     result.value = await api.getTrackingPublic(trackingNumber.value.trim());
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err);
+    toastFromApiError(err, error.value ?? "查詢失敗");
   } finally {
     isLoading.value = false;
   }

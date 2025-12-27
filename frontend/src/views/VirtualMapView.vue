@@ -5,6 +5,7 @@ import { api, type MapEdge, type MapNode } from "../services/api";
 import { useFullscreen } from "../composables/useFullscreen";
 import UiCard from "../components/ui/UiCard.vue";
 import UiPageShell from "../components/ui/UiPageShell.vue";
+import { toastFromApiError } from "../services/errorToast";
 
 type ViewBox = { x: number; y: number; w: number; h: number };
 
@@ -289,6 +290,7 @@ onMounted(async () => {
     if (nodeFromQuery) focusOnNode(nodeFromQuery);
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err);
+    toastFromApiError(err, error.value ?? "載入地圖失敗");
   } finally {
     loading.value = false;
   }

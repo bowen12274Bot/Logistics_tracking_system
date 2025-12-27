@@ -7,6 +7,7 @@ import { useAuthStore } from '../stores/auth'
 import { api, type BillingBillDetailResponse, type BillingPaymentRecord, type PackagePayableItem } from '../services/api'
 import UiCard from '../components/ui/UiCard.vue'
 import UiPageShell from '../components/ui/UiPageShell.vue'
+import { toastFromApiError } from '../services/errorToast'
 import {
   dimensionsLabel,
   formatDateTime,
@@ -83,6 +84,7 @@ const loadPaymentRecords = async () => {
     paidBillRecords.value = billRes.payments ?? []
   } catch (err: any) {
     recordsError.value = err?.message || '載入付款紀錄失敗'
+    toastFromApiError(err, recordsError.value)
   } finally {
     isLoadingRecords.value = false
   }
@@ -197,6 +199,7 @@ const ensureBillDetail = async (billId: string) => {
   } catch (err: any) {
     billDetailError.value = { ...billDetailError.value, [billId]: err?.message || '載入帳單明細失敗' }
     billDetails.value = { ...billDetails.value, [billId]: null }
+    toastFromApiError(err, billDetailError.value[billId] ?? '載入帳單明細失敗')
   } finally {
     billDetailLoading.value = { ...billDetailLoading.value, [billId]: false }
   }
@@ -241,6 +244,7 @@ const updatePaymentMethodFor = async (pkg: StoredPackage) => {
   } catch (err: any) {
     packageStore.setPaymentMethod(pkg.id, previous)
     feedbacks.value[pkg.id] = err?.message || '更新付款方式失敗'
+    toastFromApiError(err, feedbacks.value[pkg.id] ?? '更新付款方式失敗')
   }
 }
 
@@ -316,6 +320,7 @@ const confirmPay = async (pkg: StoredPackage) => {
     await packageStore.fetchUnpaid(auth.user?.id)
   } catch (err: any) {
     feedbacks.value[pkg.id] = err?.message || '付款失敗'
+    toastFromApiError(err, feedbacks.value[pkg.id] ?? '付款失敗')
   }
 }
 

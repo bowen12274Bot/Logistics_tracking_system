@@ -1,3 +1,23 @@
+import { navigateToForbidden, navigateToLogin } from "./navigation";
+
+export class ApiError extends Error {
+  status: number;
+  reason?: string;
+  from?: string;
+  to?: string;
+  body?: unknown;
+
+  constructor(params: { message: string; status: number; reason?: string; from?: string; to?: string; body?: unknown }) {
+    super(params.message);
+    this.name = "ApiError";
+    this.status = params.status;
+    this.reason = params.reason;
+    this.from = params.from;
+    this.to = params.to;
+    this.body = params.body;
+  }
+}
+
 export type LoginPayload = { identifier: string; password: string };
 export type RegisterPayload = {
   user_name: string;
@@ -552,6 +572,25 @@ function getStoredToken(): string | null {
   }
 }
 
+function clearStoredAuth() {
+  try {
+    localStorage.removeItem(AUTH_STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+function parseErrorBody(payload: unknown): { error?: string; reason?: string; from?: string; to?: string } {
+  if (!payload || typeof payload !== "object") return {};
+  const obj = payload as Record<string, unknown>;
+  return {
+    error: typeof obj.error === "string" ? obj.error : undefined,
+    reason: typeof obj.reason === "string" ? obj.reason : undefined,
+    from: typeof obj.from === "string" ? obj.from : undefined,
+    to: typeof obj.to === "string" ? obj.to : undefined,
+  };
+}
+
 async function request<T>(path: string, options: RequestInit): Promise<T> {
   const normalizedPath =
     baseUrl.endsWith("/api") && path.startsWith("/api") ? path.replace(/^\/api/, "") : path;
@@ -568,11 +607,33 @@ async function request<T>(path: string, options: RequestInit): Promise<T> {
     ...options,
   });
   if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
+    const rawBody = await res
+      .json()
+      .catch(async () => {
+        const text = await res.text().catch(() => "");
+        return text ? { error: text } : {};
+      });
+    const body = parseErrorBody(rawBody);
+
+    if (token && res.status === 401) {
+      clearStoredAuth();
+      navigateToLogin(undefined, "unauthorized");
+    }
+    if (token && res.status === 403) {
+      navigateToForbidden(undefined, "api_forbidden");
+    }
+
     const messageParts = [body.error || res.statusText].filter(Boolean);
     if (body.from && body.to) messageParts.push(`(from=${body.from}, to=${body.to})`);
     if (body.reason) messageParts.push(`[reason=${body.reason}]`);
-    throw new Error(messageParts.join(" "));
+    throw new ApiError({
+      message: messageParts.join(" "),
+      status: res.status,
+      reason: body.reason,
+      from: body.from,
+      to: body.to,
+      body: rawBody,
+    });
   }
   return res.json();
 }

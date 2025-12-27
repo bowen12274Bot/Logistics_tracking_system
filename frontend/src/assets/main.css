@@ -359,3 +359,41 @@ a {
   pointer-events: auto;
   padding: 8px 12px;
 }
+
+.ui-notice {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  background: rgba(15, 23, 42, 0.03);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.ui-notice__title {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.ui-notice__body {
+  opacity: 0.95;
+}
+
+.ui-notice--error {
+  border-color: rgba(185, 28, 28, 0.28);
+  background: rgba(185, 28, 28, 0.06);
+  color: rgb(127, 29, 29);
+}
+
+.ui-notice--warning {
+  border-color: rgba(217, 119, 6, 0.28);
+  background: rgba(217, 119, 6, 0.06);
+  color: rgb(124, 45, 18);
+}
+
+.ui-notice--success {
+  border-color: rgba(22, 163, 74, 0.26);
+  background: rgba(22, 163, 74, 0.06);
+  color: rgb(20, 83, 45);
+}

@@ -5,7 +5,10 @@ import { useFullscreen } from "../composables/useFullscreen";
 import { selectableReasonsFor } from "../lib/exceptionReasons";
 import UiCard from "../components/ui/UiCard.vue";
 import UiModal from "../components/ui/UiModal.vue";
+import UiNotice from "../components/ui/UiNotice.vue";
 import UiPageShell from "../components/ui/UiPageShell.vue";
+import { useToasts } from "../components/ui/toast";
+import { toastFromApiError } from "../services/errorToast";
 const truckIconUrl = new URL("../assets/truck.png", import.meta.url).href;
 
 type ViewBox = { x: number; y: number; w: number; h: number };
@@ -299,6 +302,8 @@ const hoveredIsNeighbor = computed(() => {
   return isNeighbor(id);
 });
 
+const toast = useToasts();
+
 function suggestedStatus(task: DeliveryTaskRecord) {
   if (task.task_type === "pickup") return "picked_up";
   const to = String(task.to_location ?? "");
@@ -319,6 +324,7 @@ async function refreshArriveData() {
     cargo.value = cargoRes.cargo ?? [];
   } catch (e: any) {
     arriveError.value = String(e?.message ?? e);
+    toastFromApiError(e, arriveError.value);
   }
 }
 
@@ -346,6 +352,7 @@ async function takeOverTask(taskId: string) {
     arrivePanelTab.value = "actions";
   } catch (e: any) {
     arriveError.value = String(e?.message ?? e);
+    toastFromApiError(e, arriveError.value);
   } finally {
     arriveBusy.value = false;
   }
@@ -360,6 +367,7 @@ async function completeTask(task: DeliveryTaskRecord) {
     await refreshArriveData();
   } catch (e: any) {
     arriveError.value = String(e?.message ?? e);
+    toastFromApiError(e, arriveError.value);
   } finally {
     arriveBusy.value = false;
   }
@@ -381,6 +389,7 @@ async function completeAndUpdateStatus(task: DeliveryTaskRecord) {
     await refreshArriveData();
   } catch (e: any) {
     arriveError.value = String(e?.message ?? e);
+    toastFromApiError(e, arriveError.value);
   } finally {
     arriveBusy.value = false;
   }
@@ -395,6 +404,7 @@ async function pickupTask(task: DeliveryTaskRecord) {
     await refreshArriveData();
   } catch (e: any) {
     arriveError.value = String(e?.message ?? e);
+    toastFromApiError(e, arriveError.value);
   } finally {
     arriveBusy.value = false;
   }
@@ -409,6 +419,7 @@ async function dropoffTask(task: DeliveryTaskRecord) {
     await refreshArriveData();
   } catch (e: any) {
     arriveError.value = String(e?.message ?? e);
+    toastFromApiError(e, arriveError.value);
   } finally {
     arriveBusy.value = false;
   }
@@ -427,6 +438,7 @@ async function enrouteTask(task: DeliveryTaskRecord) {
     if (destination) await highlightRouteTo(destination);
   } catch (e: any) {
     arriveError.value = String(e?.message ?? e);
+    toastFromApiError(e, arriveError.value);
   } finally {
     arriveBusy.value = false;
   }
@@ -452,10 +464,12 @@ async function submitException() {
   if (arriveBusy.value) return;
   if (!exceptionForm.reason_code.trim()) {
     arriveError.value = "請選擇異常原因";
+    toast.warning(arriveError.value);
     return;
   }
   if (!exceptionForm.description.trim()) {
     arriveError.value = "請填寫異常描述";
+    toast.warning(arriveError.value);
     return;
   }
   arriveBusy.value = true;
@@ -474,6 +488,7 @@ async function submitException() {
     await refreshArriveData();
   } catch (e: any) {
     arriveError.value = String(e?.message ?? e);
+    toastFromApiError(e, arriveError.value);
   } finally {
     arriveBusy.value = false;
   }
@@ -1005,7 +1020,7 @@ onMounted(async () => {
             </div>
           </div>
 
-          <p v-if="arriveError" class="hint" style="margin-top: 10px; color: #b91c1c">{{ arriveError }}</p>
+          <UiNotice v-if="arriveError" tone="error" role="alert" style="margin-top: 10px">{{ arriveError }}</UiNotice>
 
           <div class="arrive-tabs">
             <button

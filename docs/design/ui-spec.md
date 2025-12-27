@@ -14,6 +14,15 @@
 
 ### Loading / Error / Empty
 
+### Toast vs Inline Notice
+
+- API 錯誤：使用 `toastFromApiError(...)` 統一吐 toast（422/409/5xx）；401/403 由全域導向處理，不需要各頁重複處理。
+- 表單/頁面內的「需要留在畫面上」的訊息：使用 `UiNotice`（`frontend/src/components/ui/UiNotice.vue`）。
+- 建議規則：
+  - 阻擋操作的錯誤：`<UiNotice tone="error" role="alert">...</UiNotice>`
+  - 成功/完成提示：`<UiNotice tone="success">...</UiNotice>`
+  - 輕量提醒（例如必填欄位）：`toast.warning(...)` 或 `UiNotice tone="warning"`（擇一，避免同時出現造成吵雜）
+
 - 所有列表頁必須有三態：Loading、Empty、Error（含可重試）。
 - 所有「會改變狀態」的按鈕需有 disabled 條件與避免連點（防止重複送出）。
 
@@ -296,4 +305,3 @@ API（對照）：
 
 - `GET /api/admin/contract-applications`
 - `PUT /api/admin/contract-applications/:id`
-

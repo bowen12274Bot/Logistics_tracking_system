@@ -6,6 +6,7 @@ import { useAuthStore } from "../stores/auth";
 import { exceptionReasonLabel } from "../lib/exceptionReasons";
 import UiCard from "../components/ui/UiCard.vue";
 import UiPageShell from "../components/ui/UiPageShell.vue";
+import { toastFromApiError } from "../services/errorToast";
 
 const auth = useAuthStore();
 const router = useRouter();
@@ -559,6 +560,7 @@ const lookup = async () => {
     inTransitResult.value = null;
     historyResult.value = null;
     error.value = err instanceof Error ? err.message : String(err);
+    toastFromApiError(err, error.value ?? "查詢失敗");
   } finally {
     isLoading.value = false;
   }

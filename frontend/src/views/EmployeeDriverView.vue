@@ -4,7 +4,9 @@ import { RouterLink } from "vue-router";
 import { api, type DeliveryTaskRecord, type DriverExceptionRecord, type VehicleRecord } from "../services/api";
 import UiCard from "../components/ui/UiCard.vue";
 import UiList from "../components/ui/UiList.vue";
+import UiNotice from "../components/ui/UiNotice.vue";
 import UiPageShell from "../components/ui/UiPageShell.vue";
+import { toastFromApiError } from "../services/errorToast";
 
 const loading = ref(true);
 const error = ref<string | null>(null);
@@ -42,6 +44,7 @@ async function refresh() {
     cargoList.value = cargoRes.cargo ?? [];
   } catch (e: any) {
     error.value = String(e?.message ?? e);
+    toastFromApiError(e, error.value ?? "載入失敗");
   } finally {
     loading.value = false;
   }
@@ -54,6 +57,7 @@ async function takeOver(taskId: string) {
     tab.value = "assigned";
   } catch (e: any) {
     error.value = String(e?.message ?? e);
+    toastFromApiError(e, error.value ?? "操作失敗");
   }
 }
 
@@ -72,7 +76,7 @@ onMounted(() => {
         <RouterLink class="primary-btn" to="/driver/map">前往司機地圖</RouterLink>
       </div>
 
-      <p v-if="error" class="hint" style="margin-top: 10px; color: #b91c1c">{{ error }}</p>
+      <UiNotice v-if="error" tone="error" role="alert" style="margin-top: 10px">{{ error }}</UiNotice>
       <p v-else-if="loading" class="hint" style="margin-top: 10px">載入中…</p>
 
       <div v-else style="margin-top: 14px">

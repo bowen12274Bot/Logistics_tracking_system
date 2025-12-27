@@ -3,6 +3,8 @@ import { reactive, ref, watch, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import type { User } from '../services/api'
+import { useToasts } from '../components/ui/toast'
+import { toastFromApiError } from '../services/errorToast'
 
 type Mode = 'login' | 'register'
 type TestAccount = { email: string; password: string; role: string }
@@ -11,8 +13,18 @@ const mode = ref<Mode>('login')
 const auth = useAuthStore()
 const router = useRouter()
 const route = useRoute()
+const toast = useToasts()
 const statusMessage = ref('')
 const loading = ref(false)
+
+const applyReasonHint = () => {
+  if (statusMessage.value) return
+  const reason = route.query.reason
+  if (reason === 'unauthorized') {
+    toast.warning('登入已過期，請重新登入')
+    statusMessage.value = '登入已過期，請重新登入'
+  }
+}
 
 const syncModeFromRoute = () => {
   const q = (route.query.mode as string | undefined) ?? ''
@@ -20,8 +32,12 @@ const syncModeFromRoute = () => {
   else mode.value = 'login'
 }
 
-onMounted(syncModeFromRoute)
+onMounted(() => {
+  syncModeFromRoute()
+  applyReasonHint()
+})
 watch(() => [route.path, route.query.mode], syncModeFromRoute)
+watch(() => route.query.reason, applyReasonHint)
 
 const switchMode = (next: Mode) => {
   mode.value = next
@@ -92,6 +108,9 @@ const handleLogin = async () => {
     const redirect = route.query.redirect as string | undefined
     router.push(redirect ?? getDefaultRouteForUser(loggedInUser))
   } catch (err: any) {
+    const status = Number(err?.status)
+    if (status === 401) toast.warning(err?.message ?? '帳號或密碼錯誤')
+    else toastFromApiError(err, err?.message ?? '登入失敗')
     statusMessage.value = err?.message ?? '帳號或密碼錯誤'
   } finally {
     loading.value = false
@@ -120,6 +139,7 @@ const handleRegister = async () => {
     const redirect = (route.query.redirect as string) ?? '/customer'
     await router.push(redirect)
   } catch (err: any) {
+    toastFromApiError(err, err?.message ?? '註冊失敗')
     statusMessage.value = err?.message ?? '註冊失敗，請稍後再試'
   } finally {
     loading.value = false

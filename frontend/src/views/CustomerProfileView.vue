@@ -3,9 +3,13 @@ import { reactive, ref, watchEffect } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { api, type UpdateCustomerPayload } from '../services/api'
 import UiCard from '../components/ui/UiCard.vue'
+import UiNotice from '../components/ui/UiNotice.vue'
 import UiPageShell from '../components/ui/UiPageShell.vue'
+import { useToasts } from '../components/ui/toast'
+import { toastFromApiError } from '../services/errorToast'
 
 const auth = useAuthStore()
+const toast = useToasts()
 
 const form = reactive<UpdateCustomerPayload>({
   user_id: auth.user?.id ?? '',
@@ -35,6 +39,7 @@ const submitProfile = async () => {
 
   if (!auth.user) {
     errorMessage.value = '請先登入後再修改資料。'
+    toast.warning(errorMessage.value)
     return
   }
 
@@ -47,6 +52,7 @@ const submitProfile = async () => {
     successMessage.value = '個人資料已更新。'
   } catch (err: any) {
     errorMessage.value = err?.message || '更新失敗，請稍後再試。'
+    toastFromApiError(err, errorMessage.value)
   } finally {
     isSubmitting.value = false
   }
@@ -88,8 +94,8 @@ const submitProfile = async () => {
         </button>
       </form>
 
-      <p v-if="errorMessage" class="hint" style="color: #b00020">{{ errorMessage }}</p>
-      <p v-if="successMessage" class="hint">{{ successMessage }}</p>
+      <UiNotice v-if="errorMessage" tone="error" role="alert">{{ errorMessage }}</UiNotice>
+      <UiNotice v-if="successMessage" tone="success">{{ successMessage }}</UiNotice>
     </UiCard>
   </UiPageShell>
 </template>

@@ -4,6 +4,8 @@ import { api } from '../services/api'
 import type { PackageEstimatePayload, PackageEstimateResponse, SpecialMark } from '../services/api'
 import UiCard from '../components/ui/UiCard.vue'
 import UiPageShell from '../components/ui/UiPageShell.vue'
+import { useToasts } from '../components/ui/toast'
+import { toastFromApiError } from '../services/errorToast'
 
 type DeliveryType = PackageEstimatePayload['deliveryType']
 type BoxType = PackageEstimateResponse['estimate']['box_type']
@@ -55,6 +57,7 @@ const routeCost = ref<number | null>(null)
 const fallbackUsed = ref(false)
 const result = ref<PackageEstimateResponse['estimate'] | null>(null)
 const lastSpecialMarks = ref<SpecialMark[]>([])
+const toast = useToasts()
 
 const volumetricWeightKg = computed(() => {
   const vol = (form.lengthCm || 0) * (form.widthCm || 0) * (form.heightCm || 0)
@@ -158,10 +161,12 @@ async function handleSubmit() {
 
   if (!form.fromNodeId || !form.toNodeId) {
     error.value = '請輸入起訖節點 ID（fromNodeId / toNodeId）。'
+    toast.warning(error.value)
     return
   }
   if (!boxType.value) {
     error.value = '尺寸或重量超出可服務範圍，無法判定箱型。'
+    toast.warning(error.value)
     return
   }
 
@@ -205,7 +210,7 @@ async function handleSubmit() {
         error.value = 'API 失敗，已暫用 mock 5200 試算。'
       }
     } catch (_fallbackErr) {
-      // 保持 error 訊息
+      toastFromApiError(e, error.value)
     }
   } finally {
     loading.value = false

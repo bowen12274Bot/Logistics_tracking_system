@@ -20,9 +20,13 @@ import {
   senderDisplayName,
 } from '../utils/packageDisplay'
 import UiCard from '../components/ui/UiCard.vue'
+import UiNotice from '../components/ui/UiNotice.vue'
 import UiPageShell from '../components/ui/UiPageShell.vue'
+import { useToasts } from '../components/ui/toast'
+import { toastFromApiError } from '../services/errorToast'
 
 const auth = useAuthStore()
+const toast = useToasts()
 
 const form = reactive<ContractApplicationPayload>({
   customer_id: auth.user?.id ?? '',
@@ -99,6 +103,7 @@ const loadStatus = async () => {
     }
   } catch (err: any) {
     errorMessage.value = err?.message || '載入申請狀態失敗'
+    toastFromApiError(err, errorMessage.value)
     applicationStatus.value = 'error'
   } finally {
     isLoadingStatus.value = false
@@ -143,6 +148,7 @@ const loadCurrentBill = async () => {
     currentBill.value = detail.bill
   } catch (err: any) {
     billErrorMessage.value = err?.message || '載入本期帳單失敗'
+    toastFromApiError(err, billErrorMessage.value)
     currentBill.value = null
     currentBillMeta.value = null
   } finally {
@@ -163,6 +169,7 @@ const ensurePackageDetail = async (packageId: string) => {
     packageDetails.value = { ...packageDetails.value, [packageId]: res.package }
   } catch (err: any) {
     packageDetailError.value = { ...packageDetailError.value, [packageId]: err?.message || '載入包裹資訊失敗' }
+    toastFromApiError(err, "載入包裹狀態失敗")
     packageDetails.value = { ...packageDetails.value, [packageId]: null }
   } finally {
     packageDetailLoading.value = { ...packageDetailLoading.value, [packageId]: false }
@@ -197,6 +204,7 @@ const submitApplication = async () => {
   if (!auth.user) {
     errorMessage.value = '請先登入後再送出申請'
     applicationStatus.value = 'error'
+    toast.warning(errorMessage.value)
     return
   }
 
@@ -210,6 +218,7 @@ const submitApplication = async () => {
     message.value = res.message
   } catch (err: any) {
     errorMessage.value = err?.message || '送出申請失敗，請稍後再試'
+    toastFromApiError(err, errorMessage.value)
     applicationStatus.value = 'error'
   } finally {
     isSubmitting.value = false
@@ -309,7 +318,7 @@ onMounted(() => {
           <p class="muted">載入本期帳單中...</p>
         </div>
         <div v-else-if="billErrorMessage" class="billing-items-placeholder">
-          <p class="muted" style="color: #b00020">{{ billErrorMessage }}</p>
+          <UiNotice tone="error" role="alert">{{ billErrorMessage }}</UiNotice>
           <button class="secondary-btn" type="button" style="margin-top: 10px" @click="loadCurrentBill">重新載入</button>
         </div>
         <div v-else-if="!currentBill" class="billing-items-placeholder">
@@ -407,7 +416,7 @@ onMounted(() => {
         </template>
       </div>
 
-      <p v-if="errorMessage" class="hint" style="color: #b00020">{{ errorMessage }}</p>
+      <UiNotice v-if="errorMessage" tone="error" role="alert">{{ errorMessage }}</UiNotice>
     </UiCard>
   </UiPageShell>
 </template>

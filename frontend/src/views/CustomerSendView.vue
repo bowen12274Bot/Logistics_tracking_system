@@ -5,6 +5,8 @@ import { api } from '../services/api'
 import { useAuthStore } from '../stores/auth'
 import UiCard from '../components/ui/UiCard.vue'
 import UiPageShell from '../components/ui/UiPageShell.vue'
+import { useToasts } from '../components/ui/toast'
+import { toastFromApiError } from '../services/errorToast'
 
 type DeliveryTime = 'overnight' | 'two_day' | 'standard' | 'economy'
 type PaymentType = 'prepaid' | 'cod'
@@ -65,6 +67,7 @@ const receiverCustomerStatus = ref<'unknown' | 'checking' | 'exists' | 'not_exis
 const receiverCustomerCheckError = ref('')
 const isCodAllowed = computed(() => receiverCustomerStatus.value === 'exists')
 const lastCreatedPackageId = ref<string | null>(null)
+const toast = useToasts()
 
 const senderNameReadonly = computed(() => !!auth.user?.user_name)
 
@@ -148,6 +151,7 @@ const requestEstimate = async () => {
     estimateRoutePath.value = res.estimate.route_path ?? []
   } catch (err: any) {
     estimateError.value = err?.message || '運費試算失敗，請稍後再試。'
+    toastFromApiError(err, estimateError.value)
   } finally {
     isEstimating.value = false
   }
@@ -225,6 +229,7 @@ async function refreshReceiverCustomerStatus() {
   } catch (err: any) {
     receiverCustomerStatus.value = 'unknown'
     receiverCustomerCheckError.value = err?.message || '無法確認收件人是否為系統客戶'
+    toastFromApiError(err, receiverCustomerCheckError.value)
     if (form.paymentType === 'cod') form.paymentType = 'prepaid'
   }
 }
@@ -257,10 +262,12 @@ const submitPackage = async () => {
 
   if (!form.pickupType) {
     errorMessage.value = '請選擇寄件方式（超商寄件 / 預約到府取件）。'
+    toast.warning(errorMessage.value)
     return
   }
   if (!form.destinationType) {
     errorMessage.value = '請選擇取件方式（超商 / 住家）。'
+    toast.warning(errorMessage.value)
     return
   }
 
@@ -273,6 +280,7 @@ const submitPackage = async () => {
     !requiredTrimmed(form.receiverAddress)
   ) {
     errorMessage.value = '請完整填寫寄件/收件者的姓名、電話、地址。'
+    toast.warning(errorMessage.value)
     return
   }
 
@@ -281,28 +289,34 @@ const submitPackage = async () => {
 
   if (form.pickupType === 'home' && !isEndHomeAddress(normalizedSenderAddress)) {
     errorMessage.value = '寄件者地址需為住家節點（例如 END_HOME_0）。'
+    toast.warning(errorMessage.value)
     return
   }
   if (form.pickupType === 'store' && !isEndStoreAddress(normalizedSenderAddress)) {
     errorMessage.value = '寄件超商名稱需為超商節點（例如 END_STORE_0）。'
+    toast.warning(errorMessage.value)
     return
   }
   if (form.destinationType === 'home' && !isEndHomeAddress(normalizedReceiverAddress)) {
     errorMessage.value = '收件者地址需為住家節點（例如 END_HOME_0）。'
+    toast.warning(errorMessage.value)
     return
   }
   if (form.destinationType === 'store' && !isEndStoreAddress(normalizedReceiverAddress)) {
     errorMessage.value = '目的地超商名稱需為超商節點（例如 END_STORE_0）。'
+    toast.warning(errorMessage.value)
     return
   }
 
   if (!form.weight || !form.length || !form.width || !form.height) {
     errorMessage.value = '請填寫重量、長寬高（需為正整數）。'
+    toast.warning(errorMessage.value)
     return
   }
 
   if (form.pickupType === 'home' && (!form.pickupDate || !form.pickupTimeWindow)) {
     errorMessage.value = '到府取件需填寫取件日期與時段。'
+    toast.warning(errorMessage.value)
     return
   }
 
@@ -310,6 +324,7 @@ const submitPackage = async () => {
     await refreshReceiverCustomerStatus()
     if (!isCodAllowed.value) {
       errorMessage.value = '收件人不是系統內客戶，僅能選擇預付。'
+      toast.warning(errorMessage.value)
       return
     }
   }
@@ -378,8 +393,10 @@ const submitPackage = async () => {
       form.pickupType === 'home'
         ? `託運單已建立：追蹤碼 ${tracking}｜尺寸 ${form.length}x${form.width}x${form.height} cm / ${deliveryLabel[form.deliveryTime]}，重量 ${form.weight} kg｜付款：${paymentTypeLabel[form.paymentType]}｜寄件：到府取件 ${form.pickupDate} ${form.pickupTimeWindow}｜取件：${form.destinationType === 'store' ? '超商' : '府上'}。`
         : `託運單已建立：追蹤碼 ${tracking}｜尺寸 ${form.length}x${form.width}x${form.height} cm / ${deliveryLabel[form.deliveryTime]}，重量 ${form.weight} kg｜付款：${paymentTypeLabel[form.paymentType]}｜寄件：超商寄件｜取件：${form.destinationType === 'store' ? '超商' : '住宅'}。`
+    toast.success(`託運單已建立：${tracking}`)
   } catch (err: any) {
     errorMessage.value = err?.message || '建立寄件失敗，請稍後再試。'
+    toastFromApiError(err, errorMessage.value)
   } finally {
     isSubmitting.value = false
   }

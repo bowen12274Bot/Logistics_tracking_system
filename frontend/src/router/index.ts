@@ -15,6 +15,7 @@ import AdminView from '../views/AdminView.vue'
 import VirtualMapView from '../views/VirtualMapView.vue'
 import DriverMapView from '../views/DriverMapView.vue'
 import ShippingEstimateView from '../views/ShippingEstimateView.vue'
+import ForbiddenView from '../views/ForbiddenView.vue'
 import type { Role } from '../types/router'
 import { useAuthStore } from '../stores/auth'
 
@@ -36,6 +37,7 @@ const router = createRouter({
     { path: '/', name: 'home', component: HomeView },
     { path: '/login', name: 'login', component: LoginView },
     { path: '/register', name: 'register', component: LoginView },
+    { path: '/forbidden', name: 'forbidden', component: ForbiddenView },
     { path: '/map', name: 'virtual-map', component: VirtualMapView },
     {
       path: '/driver/map',
@@ -123,7 +125,7 @@ router.beforeEach((to) => {
 
   const role = (auth.user?.user_class ?? '') as Role | ''
   if (!requiredRoles.includes(role as Role)) {
-    return { path: '/' }
+    return { path: '/forbidden', query: { redirect: to.fullPath, reason: 'role_forbidden' } }
   }
 
   return true

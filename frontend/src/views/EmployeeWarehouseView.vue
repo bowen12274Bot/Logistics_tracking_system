@@ -7,8 +7,10 @@ import { exceptionReasonLabel, selectableReasonsFor } from "../lib/exceptionReas
 import UiCard from "../components/ui/UiCard.vue";
 import UiList from "../components/ui/UiList.vue";
 import UiModal from "../components/ui/UiModal.vue";
+import UiNotice from "../components/ui/UiNotice.vue";
 import UiPageShell from "../components/ui/UiPageShell.vue";
 import { useToasts } from "../components/ui/toast";
+import { toastFromApiError } from "../services/errorToast";
 
 const loading = ref(true);
 const busy = ref(false);
@@ -84,6 +86,7 @@ async function refresh() {
     exceptionReports.value = exceptionRes.exceptions ?? [];
   } catch (e: any) {
     error.value = String(e?.message ?? e);
+    toastFromApiError(e, error.value);
   } finally {
     loading.value = false;
   }
@@ -107,7 +110,7 @@ async function receiveSelected() {
     await refresh();
   } catch (e: any) {
     error.value = String(e?.message ?? e);
-    toast.error(error.value);
+    toastFromApiError(e, error.value);
   } finally {
     busy.value = false;
   }
@@ -127,7 +130,7 @@ async function dispatchOne(p: WarehousePackageRecord) {
     await refresh();
   } catch (e: any) {
     error.value = String(e?.message ?? e);
-    toast.error(error.value);
+    toastFromApiError(e, error.value);
   } finally {
     busy.value = false;
   }
@@ -167,6 +170,7 @@ async function submitException() {
     await refresh();
   } catch (e: any) {
     exceptionSubmitError.value = String(e?.message ?? e);
+    toastFromApiError(e, exceptionSubmitError.value);
   } finally {
     busy.value = false;
   }
@@ -197,7 +201,7 @@ onMounted(() => {
         </div>
       </div>
 
-      <p v-if="error" class="hint" style="margin-top: 10px; color: #b91c1c">{{ error }}</p>
+      <UiNotice v-if="error" tone="error" role="alert" style="margin-top: 10px">{{ error }}</UiNotice>
       <p v-else-if="loading" class="hint" style="margin-top: 10px">載入中…</p>
     </UiCard>
 
@@ -349,9 +353,7 @@ onMounted(() => {
           />
         </label>
 
-        <p v-if="exceptionSubmitError" class="hint" style="margin: 0; color: #b91c1c">
-          {{ exceptionSubmitError }}
-        </p>
+        <UiNotice v-if="exceptionSubmitError" tone="error" role="alert">{{ exceptionSubmitError }}</UiNotice>
       </div>
 
       <template #actions>
