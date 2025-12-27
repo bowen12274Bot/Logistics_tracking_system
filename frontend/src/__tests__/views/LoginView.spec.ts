@@ -99,7 +99,7 @@ describe('LoginView', () => {
       })
 
       await flushPromises()
-      expect(toastWarningSpy).toHaveBeenCalledWith('登入已過期，請重新登入')
+      expect(toastWarningSpy).toHaveBeenCalledWith('請先登入以繼續。')
     })
 
     it('點擊登入按鈕應觸發登入', async () => {

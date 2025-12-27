@@ -5,10 +5,13 @@ import UiCard from "../components/ui/UiCard.vue";
 import UiPageShell from "../components/ui/UiPageShell.vue";
 import { useAuthStore } from "../stores/auth";
 import type { Role } from "../types/router";
+import { useI18n } from "vue-i18n";
+import { roleLabelKey } from "../services/roleLabels";
 
 const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
+const { t } = useI18n();
 
 const blockedTarget = computed(() => {
   const raw = route.query.redirect;
@@ -37,6 +40,11 @@ const roleHome = computed(() => {
   return "/";
 });
 
+const roleLabel = computed(() => {
+  const key = roleLabelKey((auth.user?.user_class ?? "") as Role | "");
+  return key ? t(key) : "";
+});
+
 const goBack = () => {
   if (window.history.length > 1) router.back();
   else router.push("/");
@@ -46,8 +54,8 @@ const goBack = () => {
 <template>
   <UiPageShell eyebrow="403" title="無權限" :lede="reasonText">
     <UiCard>
-      <p v-if="auth.isLoggedIn" class="hint" style="margin: 0 0 6px">
-        目前角色：{{ auth.user?.user_class ?? "-" }}
+      <p v-if="auth.isLoggedIn && roleLabel" class="hint" style="margin: 0 0 6px">
+        目前角色：{{ roleLabel }}
       </p>
       <p v-if="blockedTarget" class="hint" style="margin: 0 0 12px">目標頁：{{ blockedTarget }}</p>
       <div style="display: flex; gap: 10px; flex-wrap: wrap">

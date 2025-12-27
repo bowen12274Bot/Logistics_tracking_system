@@ -5,6 +5,8 @@ import { storeToRefs } from 'pinia'
 import { useAuthStore } from './stores/auth'
 import UiToastHost from './components/ui/UiToastHost.vue'
 import { useI18n } from 'vue-i18n'
+import { roleLabelKey } from './services/roleLabels'
+import type { Role } from './types/router'
 
 type RoleNav = { to: string; labelKey: string }
 
@@ -40,6 +42,11 @@ const localeOptions = [
   { value: 'zh-TW', labelKey: 'locale.zh' },
   { value: 'en-US', labelKey: 'locale.en' },
 ]
+
+const userRoleLabel = computed(() => {
+  const key = roleLabelKey((user.value?.user_class ?? '') as Role | '')
+  return key ? t(key) : ''
+})
 </script>
 
 <template>
@@ -68,7 +75,7 @@ const localeOptions = [
           </label>
           <div v-if="isLoggedIn" class="user-chip">
             <span class="user-name">{{ user?.user_name }}</span>
-            <span class="user-role">{{ user?.user_class }}</span>
+            <span v-if="userRoleLabel" class="user-role">{{ userRoleLabel }}</span>
             <button class="ghost-btn small-btn" type="button" @click="logout">{{ t('nav.logout') }}</button>
           </div>
           <RouterLink v-else to="/login" class="primary-btn small-btn">{{ t('nav.login') }}</RouterLink>
@@ -105,7 +112,7 @@ const localeOptions = [
 }
 
 .topbar-inner {
-  max-width: 1200px;
+  max-width: 1320px;
   margin: 0 auto;
   padding: 14px 20px;
   display: grid;
@@ -161,7 +168,7 @@ const localeOptions = [
 }
 
 .content-inner {
-  max-width: 1200px;
+  max-width: 1320px;
   margin: 0 auto;
   padding: 0 20px;
 }
