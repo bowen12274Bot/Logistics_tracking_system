@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   api,
   type BillingBillDetailResponse,
@@ -20,6 +21,7 @@ import {
   senderDisplayName,
 } from '../utils/packageDisplay'
 
+const { t } = useI18n()
 const auth = useAuthStore()
 
 const form = reactive<ContractApplicationPayload>({
@@ -51,35 +53,33 @@ const packageDetailError = ref<Record<string, string>>({})
 const statusLabel = computed(() => {
   switch (applicationStatus.value) {
     case 'pending':
-      return '審核中'
+      return t('contract.status.pending')
     case 'approved':
-      return '已核准'
+      return t('contract.status.approved')
     case 'rejected':
-      return '已退回'
+      return t('contract.status.rejected')
     case 'error':
-      return '載入失敗'
+      return t('contract.status.error')
     default:
-      return '尚未申請'
+      return t('contract.status.notSubmitted')
   }
 })
 
 const headerTitle = computed(() =>
-  applicationStatus.value === 'approved' ? '月結資訊管理' : '申請成為合約客戶',
+  applicationStatus.value === 'approved' ? t('contract.header.titleApproved') : t('contract.header.titleApply'),
 )
 
 const headerLede = computed(() =>
-  applicationStatus.value === 'approved'
-    ? '查看本期帳單與包裹明細，並在帳期結算後於付款清單完成繳費。'
-    : '填寫公司基本資料並送出申請，客服審核通過後即可使用月結付款資格。',
+  applicationStatus.value === 'approved' ? t('contract.header.ledeApproved') : t('contract.header.ledeApply'),
 )
 
 const fillTestData = () => {
-  form.company_name = '測試物流股份有限公司'
+  form.company_name = t('contract.test.company')
   form.tax_id = '12345678'
-  form.contact_person = '王小明'
+  form.contact_person = t('contract.test.contact')
   form.contact_phone = '0912-345-678'
-  form.billing_address = '台北市中正區仁愛路一段 1 號'
-  form.notes = '這是測試資料，用於開發環境測試。'
+  form.billing_address = t('contract.test.address')
+  form.notes = t('contract.test.notes')
 }
 
 const loadStatus = async () => {
@@ -96,7 +96,7 @@ const loadStatus = async () => {
       applicationId.value = ''
     }
   } catch (err: any) {
-    errorMessage.value = err?.message || '載入申請狀態失敗'
+    errorMessage.value = err?.message || t('contract.errors.loadStatus')
     applicationStatus.value = 'error'
   } finally {
     isLoadingStatus.value = false
@@ -140,7 +140,7 @@ const loadCurrentBill = async () => {
     const detail = await api.getBillingBillDetail(selected.id)
     currentBill.value = detail.bill
   } catch (err: any) {
-    billErrorMessage.value = err?.message || '載入本期帳單失敗'
+    billErrorMessage.value = err?.message || t('contract.errors.loadBill')
     currentBill.value = null
     currentBillMeta.value = null
   } finally {
@@ -160,7 +160,7 @@ const ensurePackageDetail = async (packageId: string) => {
     const res = await api.getPackageStatus(packageId)
     packageDetails.value = { ...packageDetails.value, [packageId]: res.package }
   } catch (err: any) {
-    packageDetailError.value = { ...packageDetailError.value, [packageId]: err?.message || '載入包裹資訊失敗' }
+    packageDetailError.value = { ...packageDetailError.value, [packageId]: err?.message || t('contract.errors.loadPackage') }
     packageDetails.value = { ...packageDetails.value, [packageId]: null }
   } finally {
     packageDetailLoading.value = { ...packageDetailLoading.value, [packageId]: false }
@@ -179,12 +179,12 @@ const toggleItem = async (packageId: string) => {
 const billStatusLabel = (status?: BillingBillStatus | null) => {
   switch (status) {
     case 'paid':
-      return '已付款'
+      return t('contract.bill.status.paid')
     case 'overdue':
-      return '逾期'
+      return t('contract.bill.status.overdue')
     case 'pending':
     default:
-      return '待付款'
+      return t('contract.bill.status.pending')
   }
 }
 
@@ -193,7 +193,7 @@ const submitApplication = async () => {
   message.value = ''
 
   if (!auth.user) {
-    errorMessage.value = '請先登入後再送出申請'
+    errorMessage.value = t('contract.errors.notLoggedIn')
     applicationStatus.value = 'error'
     return
   }
@@ -207,7 +207,7 @@ const submitApplication = async () => {
     applicationStatus.value = res.status
     message.value = res.message
   } catch (err: any) {
-    errorMessage.value = err?.message || '送出申請失敗，請稍後再試'
+    errorMessage.value = err?.message || t('contract.errors.submitFailed')
     applicationStatus.value = 'error'
   } finally {
     isSubmitting.value = false
@@ -233,7 +233,7 @@ onMounted(() => {
 <template>
   <section class="page-shell">
     <header class="page-header">
-      <p class="eyebrow">合約 / 月結</p>
+      <p class="eyebrow">{{ t('contract.eyebrow') }}</p>
       <h1>{{ headerTitle }}</h1>
       <p class="lede">{{ headerLede }}</p>
     </header>
@@ -244,10 +244,10 @@ onMounted(() => {
         <div class="status-text">
           <div class="status-title">
             <strong>{{ statusLabel }}</strong>
-            <span v-if="applicationId" class="muted">申請編號：{{ applicationId }}</span>
+            <span v-if="applicationId" class="muted">{{ t('contract.status.applicationId', { id: applicationId }) }}</span>
           </div>
           <p v-if="message">{{ message }}</p>
-          <p v-if="isLoadingStatus" class="muted">正在載入申請狀態...</p>
+          <p v-if="isLoadingStatus" class="muted">{{ t('contract.loading.status') }}</p>
         </div>
       </div>
 
@@ -257,100 +257,106 @@ onMounted(() => {
         @submit.prevent="submitApplication"
       >
         <label class="form-field">
-          <span>公司名稱</span>
+          <span>{{ t('contract.form.company') }}</span>
           <input v-model="form.company_name" name="company_name" type="text" required />
         </label>
 
         <label class="form-field">
-          <span>統一編號</span>
+          <span>{{ t('contract.form.taxId') }}</span>
           <input v-model="form.tax_id" name="tax_id" type="text" required />
         </label>
 
         <label class="form-field">
-          <span>聯絡人</span>
+          <span>{{ t('contract.form.contact') }}</span>
           <input v-model="form.contact_person" name="contact_person" type="text" required />
         </label>
 
         <label class="form-field">
-          <span>聯絡電話</span>
+          <span>{{ t('contract.form.contactPhone') }}</span>
           <input v-model="form.contact_phone" name="contact_phone" type="text" required />
         </label>
 
         <label class="form-field span-2">
-          <span>帳單地址</span>
+          <span>{{ t('contract.form.billingAddress') }}</span>
           <input v-model="form.billing_address" name="billing_address" type="text" required />
         </label>
 
         <label class="form-field span-2">
-          <span>備註（選填）</span>
+          <span>{{ t('contract.form.notes') }}</span>
           <textarea
             v-model="form.notes"
             name="notes"
             rows="3"
-            placeholder="例：請在平日下午聯絡、需要客製合約條款等"
+            :placeholder="t('contract.form.notesPlaceholder')"
           ></textarea>
         </label>
 
-        <button class="secondary-btn" type="button" @click="fillTestData">填入測試資料</button>
+        <button class="secondary-btn" type="button" @click="fillTestData">{{ t('contract.form.fillTest') }}</button>
         <button class="primary-btn" type="submit" :disabled="isSubmitting">
-          {{ isSubmitting ? '送出中…' : '送出申請' }}
+          {{ isSubmitting ? t('contract.form.submitting') : t('contract.form.submit') }}
         </button>
       </form>
 
       <div v-else-if="applicationStatus === 'pending'" class="status-panel">
-        <p class="status-heading">你的申請已送出</p>
+        <p class="status-heading">{{ t('contract.pending.title') }}</p>
         <p class="muted">
-          目前狀態：<strong>{{ statusLabel }}</strong>
+          {{ t('contract.pending.status', { status: statusLabel }) }}
           <span v-if="applicationId">（{{ applicationId }}）</span>
         </p>
-        <p class="muted">客服正在審核，通過後即可使用月結付款。</p>
+        <p class="muted">{{ t('contract.pending.lede') }}</p>
       </div>
 
       <div v-else-if="applicationStatus === 'approved'" class="billing-section">
-        <h2 class="section-title">本期月結帳單</h2>
+        <h2 class="section-title">{{ t('contract.bill.title') }}</h2>
 
         <div v-if="isLoadingBill" class="billing-items-placeholder">
-          <p class="muted">載入本期帳單中...</p>
+          <p class="muted">{{ t('contract.loading.bill') }}</p>
         </div>
         <div v-else-if="billErrorMessage" class="billing-items-placeholder">
           <p class="muted" style="color: #b00020">{{ billErrorMessage }}</p>
-          <button class="secondary-btn" type="button" style="margin-top: 10px" @click="loadCurrentBill">重新載入</button>
+          <button class="secondary-btn" type="button" style="margin-top: 10px" @click="loadCurrentBill">
+            {{ t('contract.actions.reload') }}
+          </button>
         </div>
         <div v-else-if="!currentBill" class="billing-items-placeholder">
-          <p class="muted">本月尚未產生帳單（可能本期尚未有月結包裹完成配送）。</p>
-          <button class="secondary-btn" type="button" style="margin-top: 10px" @click="loadCurrentBill">刷新</button>
+          <p class="muted">{{ t('contract.bill.empty') }}</p>
+          <button class="secondary-btn" type="button" style="margin-top: 10px" @click="loadCurrentBill">
+            {{ t('contract.actions.refresh') }}
+          </button>
         </div>
         <template v-else>
           <div class="billing-summary">
             <div class="summary-item">
-              <span class="label">帳單期間</span>
+              <span class="label">{{ t('contract.bill.period') }}</span>
               <span class="value">{{ currentBill.period }}</span>
             </div>
             <div class="summary-item">
-              <span class="label">出帳狀態</span>
-              <span class="value">{{ currentBillMeta?.due_date ? '已出帳' : '未出帳' }}</span>
+              <span class="label">{{ t('contract.bill.dueStatus') }}</span>
+              <span class="value">{{ currentBillMeta?.due_date ? t('contract.bill.dueReleased') : t('contract.bill.dueUnreleased') }}</span>
             </div>
             <div class="summary-item">
-              <span class="label">帳單狀態</span>
+              <span class="label">{{ t('contract.bill.statusLabel') }}</span>
               <span class="value">{{ billStatusLabel(currentBill.status) }}</span>
             </div>
             <div class="summary-item">
-              <span class="label">包裹數</span>
-              <span class="value">{{ currentBill.items?.length ?? 0 }} 件</span>
+              <span class="label">{{ t('contract.bill.items') }}</span>
+              <span class="value">{{ currentBill.items?.length ?? 0 }} {{ t('contract.bill.itemsUnit') }}</span>
             </div>
             <div class="summary-item">
-              <span class="label">總金額</span>
-              <span class="value">{{ formatMoney(currentBill.total_amount) }} 元</span>
+              <span class="label">{{ t('contract.bill.total') }}</span>
+              <span class="value">{{ formatMoney(currentBill.total_amount) }} {{ t('contract.bill.currency') }}</span>
             </div>
             <div v-if="currentBill.due_date" class="summary-item">
-              <span class="label">繳費期限</span>
+              <span class="label">{{ t('contract.bill.dueDate') }}</span>
               <span class="value">{{ currentBill.due_date }}</span>
             </div>
           </div>
 
-          <h3 class="section-subtitle">{{ currentBillMeta?.due_date ? '本期帳單包裹' : '本期未出帳包裹' }}</h3>
+          <h3 class="section-subtitle">
+            {{ currentBillMeta?.due_date ? t('contract.bill.listTitleReleased') : t('contract.bill.listTitlePending') }}
+          </h3>
           <div class="billing-items-placeholder" style="border-style: solid">
-            <p v-if="!currentBill.items?.length" class="muted">目前沒有包裹明細。</p>
+            <p v-if="!currentBill.items?.length" class="muted">{{ t('contract.bill.noPackages') }}</p>
             <ul v-else class="package-list">
               <li
                 v-for="item in currentBill.items"
@@ -359,48 +365,46 @@ onMounted(() => {
                 :class="{ active: expandedItemIds.has(item.package_id) }"
               >
                 <button type="button" class="row-btn" @click="toggleItem(item.package_id)">
-                  <span class="tracking">月結 | {{ item.tracking_number || item.package_id }}</span>
+                  <span class="tracking">{{ t('contract.bill.packageLabel') }} | {{ item.tracking_number || item.package_id }}</span>
                   <span class="meta">{{ item.shipped_at ? formatDateTime(item.shipped_at) : '--' }}</span>
                 </button>
 
                 <div v-if="expandedItemIds.has(item.package_id)" class="package-detail">
                   <div v-if="packageDetailLoading[item.package_id]" class="empty-state">
-                    <p>載入包裹資訊中...</p>
+                    <p>{{ t('contract.loading.package') }}</p>
                   </div>
                   <div v-else-if="packageDetailError[item.package_id]" class="empty-state">
                     <p>{{ packageDetailError[item.package_id] }}</p>
-                    <button class="secondary-btn" type="button" @click="ensurePackageDetail(item.package_id)">重新載入</button>
+                    <button class="secondary-btn" type="button" @click="ensurePackageDetail(item.package_id)">
+                      {{ t('contract.actions.reload') }}
+                    </button>
                   </div>
                   <template v-else>
                     <div class="detail-grid">
                       <template v-if="packageDetails[item.package_id]">
                         <p class="meta">
-                          寄件者：{{ senderDisplayName(packageDetails[item.package_id]!, auth.user?.user_name) }}
-                          <span v-if="packageDetails[item.package_id]!.sender_phone"
-                            >（{{ packageDetails[item.package_id]!.sender_phone }}）</span
-                          >
+                          {{ t('contract.package.sender') }}{{ senderDisplayName(packageDetails[item.package_id]!, auth.user?.user_name) }}
+                          <span v-if="packageDetails[item.package_id]!.sender_phone">（{{ packageDetails[item.package_id]!.sender_phone }}）</span>
                         </p>
                         <p class="meta">
-                          收件者：{{ receiverDisplayName(packageDetails[item.package_id]!, auth.user?.user_name) }}
-                          <span v-if="packageDetails[item.package_id]!.receiver_phone"
-                            >（{{ packageDetails[item.package_id]!.receiver_phone }}）</span
-                          >
+                          {{ t('contract.package.receiver') }}{{ receiverDisplayName(packageDetails[item.package_id]!, auth.user?.user_name) }}
+                          <span v-if="packageDetails[item.package_id]!.receiver_phone">（{{ packageDetails[item.package_id]!.receiver_phone }}）</span>
                         </p>
-                        <p class="meta">寄件地址：{{ packageDetails[item.package_id]!.sender_address || '--' }}</p>
-                        <p class="meta">收件地址：{{ packageDetails[item.package_id]!.receiver_address || '--' }}</p>
+                        <p class="meta">{{ t('contract.package.senderAddress') }}{{ packageDetails[item.package_id]!.sender_address || '--' }}</p>
+                        <p class="meta">{{ t('contract.package.receiverAddress') }}{{ packageDetails[item.package_id]!.receiver_address || '--' }}</p>
                         <p class="meta">
-                          尺寸：{{ dimensionsLabel(packageDetails[item.package_id]!) }}
-                          · 重量：{{ packageDetails[item.package_id]!.weight ?? '--' }} kg
+                          {{ t('contract.package.size') }}{{ dimensionsLabel(packageDetails[item.package_id]!) }}
+                          · {{ t('contract.package.weight') }}{{ packageDetails[item.package_id]!.weight ?? '--' }} kg
                         </p>
-                        <p class="meta">配送時效：{{ resolveDeliveryLabel(packageDetails[item.package_id]!.delivery_time) }}</p>
+                        <p class="meta">{{ t('contract.package.delivery') }}{{ resolveDeliveryLabel(packageDetails[item.package_id]!.delivery_time) }}</p>
                         <p v-if="resolveSpecialMarks(packageDetails[item.package_id]!).length" class="meta">
-                          特殊標記：{{ resolveSpecialMarks(packageDetails[item.package_id]!).join('、') }}
+                          {{ t('contract.package.marks') }}{{ resolveSpecialMarks(packageDetails[item.package_id]!).join('、') }}
                         </p>
                         <p v-if="resolveNotes(packageDetails[item.package_id]!)" class="meta">
-                          備註：{{ resolveNotes(packageDetails[item.package_id]!) }}
+                          {{ t('contract.package.notes') }}{{ resolveNotes(packageDetails[item.package_id]!) }}
                         </p>
-                          <p class="meta">費用：{{ formatMoney(item.cost) }} 元</p>
-                        <p class="meta">寄出時間：{{ item.shipped_at ? formatDateTime(item.shipped_at) : '--' }}</p>
+                        <p class="meta">{{ t('contract.package.cost') }}{{ formatMoney(item.cost) }} {{ t('contract.bill.currency') }}</p>
+                        <p class="meta">{{ t('contract.package.shippedAt') }}{{ item.shipped_at ? formatDateTime(item.shipped_at) : '--' }}</p>
                       </template>
                     </div>
                   </template>
@@ -416,182 +420,3 @@ onMounted(() => {
   </section>
 </template>
 
-<style scoped>
-.status-banner {
-  display: flex;
-  gap: 0.75rem;
-  align-items: center;
-  padding: 0.75rem 1rem;
-  border-radius: 12px;
-  border: 1px solid #f0e7df;
-  background: #fffbf7;
-  margin-bottom: 1rem;
-}
-.status-dot {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: #cbd5e0;
-  flex-shrink: 0;
-}
-.status-dot.pending {
-  background: #f6ad55;
-}
-.status-dot.approved {
-  background: #48bb78;
-}
-.status-dot.rejected {
-  background: #e53e3e;
-}
-.status-text {
-  display: flex;
-  flex-direction: column;
-  gap: 0.125rem;
-}
-.status-title {
-  display: flex;
-  gap: 0.75rem;
-  align-items: center;
-  font-size: 15px;
-}
-.muted {
-  color: #6b7280;
-}
-.status-panel {
-  border: 1px dashed #e2e8f0;
-  background: #fffefc;
-  padding: 0.75rem 1rem;
-  border-radius: 12px;
-  margin-top: 0.5rem;
-}
-.status-heading {
-  font-weight: 700;
-  margin-bottom: 0.25rem;
-}
-.billing-section {
-  border-radius: 12px;
-  border: 1px dashed #e2e8f0;
-  background: #fffefc;
-  padding: 1rem 1.25rem;
-  margin-top: 0.75rem;
-}
-.section-title {
-  font-size: 16px;
-  font-weight: 700;
-  margin-bottom: 0.5rem;
-}
-.section-subtitle {
-  font-size: 14px;
-  font-weight: 600;
-  margin: 0.75rem 0 0.25rem;
-}
-.billing-summary {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 0.5rem 1rem;
-  padding: 0.5rem 0.25rem;
-}
-.summary-item {
-  display: flex;
-  flex-direction: column;
-  gap: 0.125rem;
-}
-.summary-item .label {
-  font-size: 12px;
-  color: #9ca3af;
-}
-.summary-item .value {
-  font-size: 14px;
-}
-.billing-items-placeholder {
-  border-radius: 8px;
-  border: 1px dashed #e5e7eb;
-  padding: 0.75rem;
-  background: #fdfdfc;
-}
-.package-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: grid;
-  gap: 10px;
-}
-
-.package-row {
-  border: 1px solid #eee;
-  border-radius: 10px;
-  overflow: hidden;
-  background: #fff;
-}
-
-.package-row.active {
-  border-color: var(--accent);
-}
-
-.row-btn {
-  width: 100%;
-  padding: 10px 12px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  justify-content: space-between;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  text-align: left;
-}
-
-.tracking {
-  font-weight: 700;
-}
-
-.pill {
-  padding: 4px 10px;
-  border-radius: 999px;
-  background: rgba(0, 0, 0, 0.05);
-  font-size: 13px;
-}
-
-.meta {
-  font-size: 14px;
-  color: #4a4a4a;
-}
-
-.package-detail {
-  padding: 12px;
-  border-top: 1px dashed #e5e7eb;
-  display: grid;
-  gap: 10px;
-}
-
-.detail-grid {
-  display: grid;
-  gap: 6px;
-}
-
-.empty-state {
-  border: 1px dashed #e5e7eb;
-  border-radius: 10px;
-  padding: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  background: rgba(255, 255, 255, 0.7);
-}
-@media (max-width: 640px) {
-  .status-banner,
-  .status-panel,
-  .billing-section {
-    padding: 0.75rem;
-  }
-  .status-title {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-  .row-btn {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-}
-</style>
