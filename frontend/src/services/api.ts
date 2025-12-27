@@ -457,6 +457,59 @@ export type CustomerServiceContractApplication = {
   created_at?: string | null;
 };
 
+export type AdminUserClass = "customer_service" | "warehouse_staff" | "driver" | "admin";
+
+export type AdminUserRecord = {
+  id: string;
+  user_name: string;
+  email: string;
+  phone_number?: string | null;
+  address?: string | null;
+  user_type: "employee" | "customer";
+  user_class: AdminUserClass | "contract_customer" | "non_contract_customer";
+  status?: "active" | "suspended" | "deleted";
+  created_at?: string | null;
+};
+
+export type AdminUserListResponse = {
+  success: boolean;
+  users: AdminUserRecord[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
+export type AdminUserStatsResponse = {
+  success: boolean;
+  user_id: string;
+  user_class: string;
+  stats: {
+    tasks_completed: number;
+    packages_processed: number;
+    exceptions_reported: number;
+  };
+};
+
+export type AdminSystemErrorRecord = {
+  id: string;
+  level: "info" | "warning" | "error" | "critical";
+  code: string;
+  message: string;
+  details?: string | null;
+  occurred_at: string;
+  resolved: boolean;
+};
+
+export type AdminSystemErrorResponse = {
+  success: boolean;
+  errors: AdminSystemErrorRecord[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
+export type AdminContractApplication = CustomerServiceContractApplication;
+
 export type DriverTasksResponse = {
   success: boolean;
   scope: DriverTaskScope;
@@ -704,6 +757,129 @@ export const api = {
         { method: "GET" },
       );
     },
+    adminCreateUser: (payload: {
+      user_name: string;
+      email: string;
+      password: string;
+      phone_number?: string;
+      address?: string;
+      user_class: AdminUserClass;
+    }) =>
+      request<{ success: boolean; user: AdminUserRecord }>("/api/admin/users", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+    adminGetUsers: (query: {
+      search?: string;
+      user_type?: "customer" | "employee";
+      user_class?: string;
+      status?: "active" | "suspended" | "deleted";
+      limit?: number;
+      offset?: number;
+    } = {}) => {
+      const qs = new URLSearchParams();
+      if (query.search) qs.set("search", query.search);
+      if (query.user_type) qs.set("user_type", query.user_type);
+      if (query.user_class) qs.set("user_class", query.user_class);
+      if (query.status) qs.set("status", query.status);
+      if (query.limit !== undefined) qs.set("limit", String(query.limit));
+      if (query.offset !== undefined) qs.set("offset", String(query.offset));
+      const suffix = qs.toString() ? `?${qs.toString()}` : "";
+      return request<AdminUserListResponse>(`/api/admin/users${suffix}`, { method: "GET" });
+    },
+    adminGetUser: (id: string) =>
+      request<{ success: boolean; user: AdminUserRecord & { statistics?: Record<string, unknown> } }>(
+        `/api/admin/users/${encodeURIComponent(id)}`,
+        { method: "GET" },
+      ),
+    adminUpdateUser: (
+      id: string,
+      payload: Partial<Pick<AdminUserRecord, "user_name" | "phone_number" | "address" | "user_class">>,
+    ) =>
+      request<{ success: boolean; user: AdminUserRecord }>(`/api/admin/users/${encodeURIComponent(id)}`, {
+        method: "PUT",
+        body: JSON.stringify(payload),
+      }),
+    adminSuspendUser: (id: string, payload: { reason?: string } = {}) =>
+      request<{ success: boolean; message?: string }>(`/api/admin/users/${encodeURIComponent(id)}/suspend`, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+    adminActivateUser: (id: string) =>
+      request<{ success: boolean; message?: string }>(`/api/admin/users/${encodeURIComponent(id)}/activate`, {
+        method: "POST",
+      }),
+    adminDeleteUser: (id: string) =>
+      request<{ success: boolean; message?: string }>(`/api/admin/users/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      }),
+    adminResetUserPassword: (id: string, payload: { new_password: string }) =>
+      request<{ success: boolean; message?: string }>(`/api/admin/users/${encodeURIComponent(id)}/reset-password`, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+    adminAssignVehicle: (id: string, payload: { vehicle_code: string; home_node_id?: string }) =>
+      request<{ success: boolean; vehicle: VehicleRecord }>(
+        `/api/admin/users/${encodeURIComponent(id)}/assign-vehicle`,
+        { method: "POST", body: JSON.stringify(payload) },
+      ),
+    adminUserWorkStats: (id: string) =>
+      request<AdminUserStatsResponse>(`/api/admin/users/${encodeURIComponent(id)}/work-stats`, { method: "GET" }),
+    adminListContractApplications: (query: { status?: ContractApplicationReviewStatus } = {}) => {
+      const qs = new URLSearchParams();
+      if (query.status) qs.set("status", query.status);
+      const suffix = qs.toString() ? `?${qs.toString()}` : "";
+      return request<{ success: boolean; applications: AdminContractApplication[] }>(
+        `/api/admin/contract-applications${suffix}`,
+        { method: "GET" },
+      );
+    },
+    adminReviewContractApplication: (
+      id: string,
+      payload: { status: "approved" | "rejected"; credit_limit?: number; review_notes?: string },
+    ) =>
+      request<{ success: boolean; message: string; application_id: string; status: string }>(
+        `/api/admin/contract-applications/${encodeURIComponent(id)}`,
+        { method: "PUT", body: JSON.stringify(payload) },
+      ),
+    adminSystemErrors: (query: {
+      level?: "info" | "warning" | "error" | "critical";
+      date_from?: string;
+      date_to?: string;
+      resolved?: boolean;
+      limit?: number;
+      offset?: number;
+    } = {}) => {
+      const qs = new URLSearchParams();
+      if (query.level) qs.set("level", query.level);
+      if (query.date_from) qs.set("date_from", query.date_from);
+      if (query.date_to) qs.set("date_to", query.date_to);
+      if (query.resolved !== undefined) qs.set("resolved", String(query.resolved));
+      if (query.limit !== undefined) qs.set("limit", String(query.limit));
+      if (query.offset !== undefined) qs.set("offset", String(query.offset));
+      const suffix = qs.toString() ? `?${qs.toString()}` : "";
+      return request<AdminSystemErrorResponse>(`/api/admin/system/errors${suffix}`, { method: "GET" });
+    },
+    adminSettleBilling: (payload: { cycle_year_month: string }) =>
+      request<{ success: boolean; result: unknown }>(`/api/admin/billing/settle`, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+    adminUpdateBill: (billId: string, payload: { total_amount?: number; status?: string; due_date?: string }) =>
+      request<{ success: boolean; message?: string }>(`/api/admin/billing/bills/${encodeURIComponent(billId)}`, {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      }),
+    adminAddBillItem: (billId: string, payload: { package_id: string }) =>
+      request<{ success: boolean; item_id: string }>(
+        `/api/admin/billing/bills/${encodeURIComponent(billId)}/items`,
+        { method: "POST", body: JSON.stringify(payload) },
+      ),
+    adminRemoveBillItem: (billId: string, itemId: string) =>
+      request<{ success: boolean }>(
+        `/api/admin/billing/bills/${encodeURIComponent(billId)}/items/${encodeURIComponent(itemId)}`,
+        { method: "DELETE" },
+      ),
   receiveWarehousePackages: (package_ids: string[]) =>
     request<WarehouseReceiveResponse>("/api/warehouse/packages/receive", {
       method: "POST",
