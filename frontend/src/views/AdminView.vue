@@ -1,374 +1,647 @@
 <script setup lang="ts">
-import { computed, reactive } from 'vue'
-import { RouterLink } from 'vue-router'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useAuthStore } from '../stores/auth'
+import {
+  api,
+  type AdminContractApplication,
+  type AdminSystemErrorRecord,
+  type AdminUserClass,
+  type AdminUserRecord,
+} from '../services/api'
 
 const auth = useAuthStore()
 
-const adminName = computed(() => auth.user?.user_name || '管理員')
+const adminName = computed(() => auth.user?.user_name || '系統管理員')
 const adminEmail = computed(() => auth.user?.email || 'admin@example.com')
 const envMode = import.meta.env.MODE || 'development'
 
-type Metric = {
-  title: string
-  value: string
-  hint: string
-  trend?: string
-  severity?: 'medium' | 'high'
-  badge?: string
+const sampleUsers: AdminUserRecord[] = [
+  { id: 'u-driver', user_name: '司機 HUB_1', email: 'driver_hub_1@example.com', user_class: 'driver', user_type: 'employee', address: 'HUB_1', status: 'active' },
+  { id: 'u-warehouse', user_name: '倉庫 HUB_0', email: 'warehouse_hub_0@example.com', user_class: 'warehouse_staff', user_type: 'employee', address: 'HUB_0', status: 'active' },
+  { id: 'u-cs', user_name: '客服 REG_1', email: 'cs_reg_1@example.com', user_class: 'customer_service', user_type: 'employee', address: 'REG_1', status: 'suspended' },
+  { id: 'u-admin', user_name: '系統管理員', email: 'admin@example.com', user_class: 'admin', user_type: 'employee', address: 'HQ', status: 'active' },
+]
+
+const sampleContracts: AdminContractApplication[] = [
+  {
+    id: 'c-1',
+    customer: { id: 'cust-1', email: 'cust@example.com' },
+    company_name: '範例科技',
+    tax_id: '12345678',
+    contact_person: '王小明',
+    contact_phone: '0912-345-678',
+    billing_address: '台北市信義區市府路 1 號',
+    notes: '月結 30 天',
+    status: 'pending',
+    created_at: new Date().toISOString(),
+  },
+]
+
+const sampleErrors: AdminSystemErrorRecord[] = [
+  {
+    id: 'err-1',
+    level: 'error',
+    code: 'INTERNAL_ERROR',
+    message: '範例：API 500 /api/warehouse/packages',
+    details: 'REG-3 批次掃描失敗，重試 3 次仍 500',
+    occurred_at: new Date().toISOString(),
+    resolved: false,
+  },
+  {
+    id: 'err-2',
+    level: 'warning',
+    code: 'DELAYED_JOB',
+    message: '範例：worker 延遲 15 分鐘',
+    details: '月結排程延遲 >15 分鐘，請檢查 queue 堆積',
+    occurred_at: new Date(Date.now() - 3600 * 1000).toISOString(),
+    resolved: true,
+  },
+]
+
+// 帳務
+const billing = reactive({
+  cycle: new Date().toISOString().slice(0, 7),
+  loading: false,
+  message: '',
+  error: '',
+})
+
+// 系統錯誤
+const errors = reactive({
+  list: [] as AdminSystemErrorRecord[],
+  loading: false,
+  error: '',
+  level: 'all' as 'all' | AdminSystemErrorRecord['level'],
+  resolved: 'all' as 'all' | 'true' | 'false',
+})
+
+// 合約申請
+const contracts = reactive({
+  list: [] as AdminContractApplication[],
+  loading: false,
+  error: '',
+  filter: 'pending' as 'pending' | 'approved' | 'rejected' | 'all',
+  expandedId: '',
+  decision: 'approved' as 'approved' | 'rejected',
+  credit: '',
+  notes: '',
+  submitting: false,
+  feedback: '',
+})
+
+// 員工管理
+const users = reactive({
+  list: [] as AdminUserRecord[],
+  loading: false,
+  error: '',
+  search: '',
+  role: 'all',
+  status: 'active',
+  creating: false,
+  actionMessage: '',
+  actionError: '',
+  selectedId: '',
+})
+
+const createForm = reactive({
+  user_name: '',
+  email: '',
+  password: '',
+  phone_number: '',
+  address: '',
+  user_class: 'driver' as AdminUserClass,
+})
+
+const userStats = ref<{ tasks_completed: number; packages_processed: number; exceptions_reported: number } | null>(
+  null,
+)
+const userActionLoading = ref(false)
+
+const userClassLabel: Record<string, string> = {
+  driver: '司機',
+  warehouse_staff: '倉庫',
+  customer_service: '客服',
+  admin: '管理員',
+  contract_customer: '合約客戶',
+  non_contract_customer: '一般客戶',
 }
 
-const metrics: Metric[] = [
-  { title: '今日單量', value: '1,024', hint: '含 96 件 COD', trend: '+8% vs 昨日' },
-  { title: '異常率', value: '2.4%', hint: '24 / 1,024 件', severity: 'medium' as const },
-  { title: '營收 (估)', value: '$1.82M', hint: '含月結預估 $0.72M', trend: '+5% vs 昨日' },
-  { title: 'Critical 警示', value: '2', hint: '需立即處理的系統錯誤', severity: 'high' as const },
-]
+const statusLabel: Record<string, string> = {
+  active: '啟用',
+  suspended: '停用',
+  deleted: '已刪除',
+}
 
-const trendData = [
-  { day: 'D-6', orders: 780 },
-  { day: 'D-5', orders: 820 },
-  { day: 'D-4', orders: 910 },
-  { day: 'D-3', orders: 860 },
-  { day: 'D-2', orders: 940 },
-  { day: 'D-1', orders: 950 },
-  { day: 'Today', orders: 1024 },
-]
+const statusTone = (status?: string) => {
+  if (status === 'suspended' || status === 'deleted') return 'pill--alert'
+  return 'pill--success'
+}
 
-const criticalAlerts = [
-  { id: 1, title: 'API 500 /api/warehouse/packages', time: '10:22', detail: 'REG-3 批次掃描失敗，重試 3 次仍 500' },
-  { id: 2, title: 'Delayed worker job', time: '09:58', detail: '月結排程延遲 >15 分鐘，請檢查 queue 堆積' },
-]
+const formatDateTime = (value?: string | null) => {
+  if (!value) return '--'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleString()
+}
 
-const quickActions = [
-  {
-    title: '服務規則與計價',
-    detail: '維護尺寸、時效、特殊標記的費率組合',
-    cta: '檢視草稿',
-    to: { path: '/admin', hash: '#section-service-rules' },
-  },
-  { title: '虛擬地圖', detail: '調整中心、轉運站、門市、車隊位置', cta: '前往地圖', to: '/map' },
-  {
-    title: '角色與權限',
-    detail: '稽核 user_class、測試帳號、強制登出',
-    cta: '管理用戶',
-    to: { path: '/admin', hash: '#section-user-permissions' },
-  },
-  {
-    title: '帳務維護',
-    detail: '重新產生月結、處理貨到付款對帳',
-    cta: '檢視作業',
-    to: { path: '/admin', hash: '#section-queue' },
-  },
-]
+const loadUsers = async () => {
+  users.loading = true
+  users.error = ''
+  try {
+    const res = await api.adminGetUsers({
+      search: users.search || undefined,
+      user_class: users.role === 'all' ? undefined : users.role,
+      status: users.status === 'all' ? undefined : (users.status as any),
+      limit: 50,
+    })
+    users.list = res.users ?? []
+  } catch (err: any) {
+    users.error = err?.message || '載入員工失敗，改用範例資料'
+    users.list = sampleUsers
+  } finally {
+    users.loading = false
+  }
+}
 
-const workflow = [
-  {
-    title: '例行監控',
-    items: ['API 狀態：正常', 'Worker 發佈：12/23 03:12', '資料庫備份：完成'],
-    state: 'success',
-  },
-  {
-    title: '待辦提醒',
-    items: ['設定 service_rules 規則卡', '匯入最新區域路徑成本', '客服異常處理 SLA'],
-    state: 'warning',
-  },
-  {
-    title: '風險觀察',
-    items: ['轉運站 R2 負載 82%', 'Driver 手動 override 路徑：3 筆', '待覆核的 exception：2 件'],
-    state: 'alert',
-  },
-]
+const createUser = async () => {
+  users.actionMessage = ''
+  users.error = ''
+  users.actionError = ''
+  if (!createForm.user_name || !createForm.email || !createForm.password) {
+    users.actionError = '姓名、Email、密碼必填'
+    return
+  }
+  users.creating = true
+  try {
+    await api.adminCreateUser({
+      ...createForm,
+      phone_number: createForm.phone_number || undefined,
+      address: createForm.address || undefined,
+    })
+    users.actionMessage = '已建立員工帳號'
+    Object.assign(createForm, {
+      user_name: '',
+      email: '',
+      password: '',
+      phone_number: '',
+      address: '',
+      user_class: createForm.user_class,
+    })
+    await loadUsers()
+  } catch (err: any) {
+    users.actionError = err?.message || '建立失敗'
+  } finally {
+    users.creating = false
+  }
+}
 
-const queueItems = [
-  { title: '權限 / 帳號', desc: '客戶改為合約戶、重設密碼、停用測試帳號', owner: '客服', eta: '今天 17:00' },
-  { title: '運費與規則', desc: '易碎與國際件疊加費率、禁運組合提示', owner: '定價', eta: '本週' },
-  { title: '路徑與車隊', desc: '調整 hub_2 週邊門市班次，檢查車輛位置回報', owner: '營運', eta: '明日' },
-]
+const selectUser = (id: string) => {
+  users.selectedId = users.selectedId === id ? '' : id
+  users.actionMessage = ''
+  users.actionError = ''
+  userStats.value = null
+}
 
-const userFilters = reactive({
-  keyword: '',
-  role: 'all',
-  site: 'all',
+const toggleUserStatus = async (user: AdminUserRecord) => {
+  userActionLoading.value = true
+  users.actionError = ''
+  users.actionMessage = ''
+  try {
+    if (user.status === 'active') {
+      await api.adminSuspendUser(user.id, { reason: 'manual' })
+      users.actionMessage = '已停用'
+    } else {
+      await api.adminActivateUser(user.id)
+      users.actionMessage = '已啟用'
+    }
+    await loadUsers()
+  } catch (err: any) {
+    users.actionError = err?.message || '狀態更新失敗'
+  } finally {
+    userActionLoading.value = false
+  }
+}
+
+const resetPassword = async (user: AdminUserRecord) => {
+  const pwd = window.prompt(`請輸入 ${user.email} 的新密碼`, '')
+  if (!pwd) return
+  userActionLoading.value = true
+  users.actionError = ''
+  users.actionMessage = ''
+  try {
+    await api.adminResetUserPassword(user.id, { new_password: pwd })
+    users.actionMessage = '已重設密碼並強制登出該用戶'
+  } catch (err: any) {
+    users.actionError = err?.message || '重設失敗'
+  } finally {
+    userActionLoading.value = false
+  }
+}
+
+const assignVehicle = async (user: AdminUserRecord) => {
+  const code = window.prompt(`指派車輛給 ${user.email}，車輛代碼`, '')
+  if (!code) return
+  const home = window.prompt('車輛起始節點（預設用戶地址，可留空）', user.address || '')
+  userActionLoading.value = true
+  users.actionError = ''
+  users.actionMessage = ''
+  try {
+    await api.adminAssignVehicle(user.id, { vehicle_code: code, home_node_id: home || undefined })
+    users.actionMessage = '已指派車輛'
+  } catch (err: any) {
+    users.actionError = err?.message || '指派失敗'
+  } finally {
+    userActionLoading.value = false
+  }
+}
+
+const fetchUserStats = async (user: AdminUserRecord) => {
+  userActionLoading.value = true
+  users.actionError = ''
+  try {
+    const res = await api.adminUserWorkStats(user.id)
+    userStats.value = res.stats
+  } catch (err: any) {
+    users.actionError = err?.message || '統計載入失敗'
+  } finally {
+    userActionLoading.value = false
+  }
+}
+
+const loadContracts = async () => {
+  contracts.loading = true
+  contracts.error = ''
+  try {
+    const res = await api.adminListContractApplications(
+      contracts.filter === 'all' ? {} : { status: contracts.filter as any },
+    )
+    contracts.list = res.applications ?? []
+  } catch (err: any) {
+    contracts.error = err?.message || '載入合約申請失敗，改用範例資料'
+    contracts.list = sampleContracts
+  } finally {
+    contracts.loading = false
+  }
+}
+
+const reviewContract = async () => {
+  if (!contracts.expandedId) return
+  contracts.submitting = true
+  contracts.error = ''
+  contracts.feedback = ''
+  try {
+    const credit = contracts.credit.trim()
+    const creditNum = credit ? Number(credit) : undefined
+    if (credit && (!Number.isFinite(creditNum) || creditNum < 0)) {
+      contracts.error = '信用額度需為正整數'
+      contracts.submitting = false
+      return
+    }
+    await api.adminReviewContractApplication(contracts.expandedId, {
+      status: contracts.decision,
+      credit_limit: credit ? Math.floor(creditNum as number) : undefined,
+      review_notes: contracts.notes.trim() || undefined,
+    })
+    contracts.feedback = contracts.decision === 'approved' ? '已核准合約申請' : '已拒絕合約申請'
+    contracts.notes = ''
+    contracts.credit = ''
+    contracts.expandedId = ''
+    await loadContracts()
+  } catch (err: any) {
+    contracts.error = err?.message || '審核失敗'
+  } finally {
+    contracts.submitting = false
+  }
+}
+
+const loadErrors = async () => {
+  errors.loading = true
+  errors.error = ''
+  try {
+    const res = await api.adminSystemErrors({
+      level: errors.level === 'all' ? undefined : (errors.level as any),
+      resolved: errors.resolved === 'all' ? undefined : errors.resolved === 'true',
+      limit: 50,
+    })
+    errors.list = res.errors ?? []
+  } catch (err: any) {
+    errors.error = err?.message || '載入系統錯誤失敗，改用範例資料'
+    errors.list = sampleErrors
+  } finally {
+    errors.loading = false
+  }
+}
+
+const settleBilling = async () => {
+  billing.loading = true
+  billing.error = ''
+  billing.message = ''
+  try {
+    if (!/^\d{4}-\d{2}$/.test(billing.cycle)) {
+      billing.error = '請輸入 YYYY-MM'
+      billing.loading = false
+      return
+    }
+    await api.adminSettleBilling({ cycle_year_month: billing.cycle })
+    billing.message = `已送出 ${billing.cycle} 結算`
+  } catch (err: any) {
+    billing.error = err?.message || '結算失敗'
+  } finally {
+    billing.loading = false
+  }
+}
+
+onMounted(async () => {
+  await Promise.all([loadUsers(), loadContracts(), loadErrors()])
 })
-
-const userList = [
-  { id: 'u1', name: '王小明', email: 'driver_hub_0@example.com', role: 'Driver', site: 'HUB-0', status: 'active' },
-  { id: 'u2', name: '李倉庫', email: 'warehouse_hub_0@example.com', role: 'Warehouse', site: 'HUB-0', status: 'active' },
-  { id: 'u3', name: '林客服', email: 'cs@example.com', role: 'CS', site: 'REG-2', status: 'locked' },
-  { id: 'u4', name: 'Admin', email: 'admin@example.com', role: 'Admin', site: 'HQ', status: 'active' },
-]
-
-const filteredUsers = computed(() => {
-  return userList.filter((u) => {
-    const kw = userFilters.keyword.trim().toLowerCase()
-    const matchKw = kw ? u.name.toLowerCase().includes(kw) || u.email.toLowerCase().includes(kw) : true
-    const matchRole = userFilters.role === 'all' ? true : u.role === userFilters.role
-    const matchSite = userFilters.site === 'all' ? true : u.site === userFilters.site
-    return matchKw && matchRole && matchSite
-  })
-})
-
-const serviceRules = [
-  { box: 'Envelope', level: 'Overnight', base: 120, intl: true, fragile: false },
-  { box: 'S', level: 'Two-day', base: 180, intl: false, fragile: true },
-  { box: 'M', level: 'Standard', base: 260, intl: false, fragile: true },
-  { box: 'L', level: 'Economy', base: 320, intl: false, fragile: false },
-]
-
-const mockAction = (msg: string) => window.alert(msg)
 </script>
 
 <template>
   <section class="page-shell admin-hero">
     <div class="hero-copy">
-      <p class="eyebrow">管理員</p>
-      <h1>登入後的控制台</h1>
-      <p class="lede">集中檢視規則、權限、地圖與帳務，快速確認系統健康度。</p>
+      <p class="eyebrow">系統管理員</p>
+      <h1>管理後台</h1>
+      <p class="lede">日常維運、帳務、合約審核與權限管理。</p>
       <div class="pill-row">
-        <span class="pill">登入帳號：{{ adminEmail }}</span>
+        <span class="pill">登入：{{ adminEmail }}</span>
         <span class="pill pill--success">角色：{{ auth.user?.user_class ?? 'admin' }}</span>
         <span class="pill pill--muted">環境：{{ envMode }}</span>
       </div>
-      <div class="hero-actions">
-        <RouterLink to="/map" class="primary-btn small-btn">虛擬地圖</RouterLink>
-        <RouterLink to="/shipping/estimate" class="ghost-btn small-btn">試算運價</RouterLink>
-        <button type="button" class="ghost-btn small-btn muted">同步最新設定</button>
-      </div>
     </div>
-
     <div class="card hero-side">
-      <div class="hero-side-top">
-        <div>
-          <p class="eyebrow">登入身分</p>
-          <h3>{{ adminName }}</h3>
-          <p class="hint">{{ adminEmail }}</p>
-        </div>
-        <span class="badge">Admin</span>
-      </div>
-      <ul class="task-list side-list">
-        <li>服務規則：等待新一版費率</li>
-        <li>異常稽核：2 件待覆核</li>
-        <li>帳務：月結批次預計凌晨執行</li>
+      <p class="eyebrow">快速檢視</p>
+      <ul class="hero-list">
+        <li>帳期：{{ billing.cycle }}</li>
+        <li>待審合約：{{ contracts.list.filter((c) => c.status === 'pending').length }}</li>
+        <li>員工數：{{ users.list.length }}</li>
       </ul>
+      <button class="ghost-btn small-btn" type="button" :disabled="errors.loading" @click="loadErrors">刷新錯誤</button>
     </div>
   </section>
 
-  <section class="page-shell">
-    <header class="section-header">
-      <h2>系統總覽</h2>
-      <p class="hint">以 mock 資料呈現，後續可接上 /api/admin/stats。</p>
-    </header>
-    <div class="card-grid stats-grid">
-      <div v-for="metric in metrics" :key="metric.title" class="card stat-card">
-        <div class="stat-head">
-          <p class="eyebrow">{{ metric.title }}</p>
-          <span v-if="metric.badge" class="pill pill--muted">{{ metric.badge }}</span>
-          <span
-            v-else-if="metric.severity"
-            class="pill"
-            :class="{ 'pill--alert': metric.severity === 'high', 'pill--warning': metric.severity === 'medium' }"
-          >
-            {{ metric.severity === 'high' ? '需要注意' : '留意' }}
-          </span>
-        </div>
-        <div class="stat-value">{{ metric.value }}</div>
-        <p class="hint">{{ metric.hint }}</p>
-        <p v-if="metric.trend" class="stat-trend">{{ metric.trend }}</p>
-      </div>
-    </div>
-
-    <div class="card trend-card">
-      <div class="trend-head">
+  <section class="page-shell grid two-col">
+    <div class="card">
+      <div class="card-head">
         <div>
-          <p class="eyebrow">最近 7 日單量趨勢</p>
-          <p class="hint">後續可替換為折線圖，現用條狀圖占位。</p>
+          <p class="eyebrow">帳務</p>
+          <h2>帳期結算</h2>
+          <p class="hint">呼叫 /api/admin/billing/settle 產生月結帳單。</p>
         </div>
-        <span class="pill pill--muted">mock data</span>
+        <button class="primary-btn small-btn" type="button" :disabled="billing.loading" @click="settleBilling">
+          {{ billing.loading ? '執行中…' : '執行結算' }}
+        </button>
       </div>
-      <div class="trend-bars">
-        <div v-for="point in trendData" :key="point.day" class="trend-bar">
-          <div class="bar" :style="{ height: `${(point.orders / 1100) * 100}%` }"></div>
-          <span class="trend-day">{{ point.day }}</span>
-          <span class="trend-value">{{ point.orders }}</span>
-        </div>
+      <div class="form-row">
+        <label class="form-field">
+          <span>帳期 (YYYY-MM)</span>
+          <input v-model="billing.cycle" type="month" />
+        </label>
       </div>
+      <p v-if="billing.message" class="hint success">{{ billing.message }}</p>
+      <p v-if="billing.error" class="hint error">{{ billing.error }}</p>
     </div>
 
-    <div class="card alert-card" v-if="criticalAlerts.length">
-      <div class="alert-head">
-        <p class="eyebrow">Critical 警示</p>
-        <span class="pill pill--alert">需立即處理</span>
+    <div class="card">
+      <div class="card-head">
+        <div>
+          <p class="eyebrow">系統</p>
+          <h2>系統錯誤列表</h2>
+        </div>
+        <button class="ghost-btn small-btn" type="button" :disabled="errors.loading" @click="loadErrors">重新整理</button>
       </div>
-      <ul class="task-list">
-        <li v-for="alert in criticalAlerts" :key="alert.id" class="alert-item">
-          <div class="alert-main">
-            <strong>{{ alert.title }}</strong>
-            <span class="hint">{{ alert.detail }}</span>
+      <div class="filters">
+        <select v-model="errors.level">
+          <option value="all">全部等級</option>
+          <option value="info">Info</option>
+          <option value="warning">Warning</option>
+          <option value="error">Error</option>
+          <option value="critical">Critical</option>
+        </select>
+        <select v-model="errors.resolved">
+          <option value="all">全部狀態</option>
+          <option value="false">未處理</option>
+          <option value="true">已處理</option>
+        </select>
+        <button class="ghost-btn small-btn" type="button" :disabled="errors.loading" @click="loadErrors">套用篩選</button>
+      </div>
+      <p v-if="errors.loading" class="hint">載入中…</p>
+      <p v-else-if="errors.error" class="hint error">{{ errors.error }}</p>
+      <p v-else-if="!errors.list.length" class="hint">目前沒有錯誤紀錄。</p>
+      <ul v-else class="list">
+        <li v-for="err in errors.list" :key="err.id" class="row">
+          <div>
+            <strong>{{ err.code }}</strong>
+            <p class="hint">{{ err.message }}</p>
+            <p class="hint">時間：{{ formatDateTime(err.occurred_at) }}</p>
+            <p v-if="err.details" class="hint">詳細：{{ err.details }}</p>
           </div>
-          <span class="pill pill--muted">{{ alert.time }}</span>
+          <div class="pill-stack">
+            <span class="pill pill--muted">{{ err.level }}</span>
+            <span :class="['pill', err.resolved ? 'pill--success' : 'pill--alert']">
+              {{ err.resolved ? '已處理' : '未處理' }}
+            </span>
+          </div>
         </li>
       </ul>
     </div>
   </section>
 
   <section class="page-shell">
-    <header class="section-header">
-      <h2>常用操作</h2>
-      <p class="hint">整理管理員登入後最常需要的入口，部分先以占位顯示。</p>
+    <header class="section-head">
+      <div>
+        <p class="eyebrow">合約</p>
+        <h2>合約申請審核</h2>
+        <p class="hint">串接 /api/admin/contract-applications 與審核端點。</p>
+      </div>
+      <div class="filters">
+        <select v-model="contracts.filter">
+          <option value="all">全部狀態</option>
+          <option value="pending">待審核</option>
+          <option value="approved">已核准</option>
+          <option value="rejected">已拒絕</option>
+        </select>
+        <button class="ghost-btn small-btn" type="button" :disabled="contracts.loading" @click="loadContracts">
+          套用篩選
+        </button>
+      </div>
     </header>
-    <div class="card-grid quick-grid">
-      <div v-for="item in quickActions" :key="item.title" class="card quick-card link-card">
-        <div>
-          <p class="eyebrow">{{ item.title }}</p>
-          <p class="hint">{{ item.detail }}</p>
+    <p v-if="contracts.loading" class="hint">載入中…</p>
+    <p v-else-if="contracts.error" class="hint error">{{ contracts.error }}</p>
+    <p v-else-if="!contracts.list.length" class="hint">目前沒有合約申請。</p>
+    <div v-else class="card list">
+      <div
+        v-for="app in contracts.list"
+        :key="app.id"
+        class="row contract-row"
+        :class="{ active: contracts.expandedId === app.id }"
+      >
+        <button class="row-btn" type="button" @click="contracts.expandedId = contracts.expandedId === app.id ? '' : app.id">
+          <div>
+            <strong>{{ app.company_name }}</strong>
+            <p class="hint">申請人：{{ app.customer?.email || app.customer?.id }}</p>
+            <p class="hint">稅籍：{{ app.tax_id }}</p>
+          </div>
+          <div class="pill-stack">
+            <span class="pill pill--muted">{{ app.status }}</span>
+            <span class="pill pill--muted">{{ formatDateTime(app.created_at) }}</span>
+          </div>
+        </button>
+
+        <div v-if="contracts.expandedId === app.id" class="panel">
+          <div class="detail-grid">
+            <p class="hint">聯絡人：{{ app.contact_person }}（{{ app.contact_phone }}）</p>
+            <p class="hint">帳單地址：{{ app.billing_address }}</p>
+            <p class="hint">備註：{{ app.notes || '-' }}</p>
+          </div>
+          <div v-if="app.status === 'pending'" class="form-grid">
+            <label class="form-field">
+              <span>審核結果</span>
+              <select v-model="contracts.decision" :disabled="contracts.submitting">
+                <option value="approved">核准</option>
+                <option value="rejected">拒絕</option>
+              </select>
+            </label>
+            <label class="form-field">
+              <span>信用額度 (選填)</span>
+              <input v-model="contracts.credit" type="number" min="0" :disabled="contracts.submitting" />
+            </label>
+            <label class="form-field span-2">
+              <span>審核備註 (選填)</span>
+              <textarea v-model="contracts.notes" rows="2" :disabled="contracts.submitting"></textarea>
+            </label>
+            <div class="actions">
+              <button class="primary-btn" type="button" :disabled="contracts.submitting" @click="reviewContract">
+                {{ contracts.submitting ? '送出中…' : '送出審核' }}
+              </button>
+            </div>
+          </div>
+          <p v-else class="hint">此申請已完成：{{ app.status }}</p>
+          <p v-if="contracts.feedback" class="hint success">{{ contracts.feedback }}</p>
         </div>
-        <RouterLink v-if="item.to" :to="item.to" class="pill pill--action">{{ item.cta }}</RouterLink>
-        <span v-else class="pill pill--muted">{{ item.cta }}</span>
       </div>
     </div>
   </section>
 
-  <section class="page-shell" id="section-user-permissions">
-    <header class="section-header">
-      <h2>使用者與權限</h2>
-      <p class="hint">員工列表、搜尋、角色/站點篩選，後續串 /api/admin/users。</p>
-    </header>
-    <div class="card user-card">
-      <div class="user-filters">
-        <input v-model="userFilters.keyword" type="text" placeholder="搜尋姓名 / Email" />
-        <select v-model="userFilters.role">
-          <option value="all">全部角色</option>
-          <option value="Driver">Driver</option>
-          <option value="Warehouse">Warehouse</option>
-          <option value="CS">CS</option>
-          <option value="Admin">Admin</option>
-        </select>
-        <select v-model="userFilters.site">
-          <option value="all">全部站點</option>
-          <option value="HQ">HQ</option>
-          <option value="HUB-0">HUB-0</option>
-          <option value="REG-2">REG-2</option>
-        </select>
-        <button class="ghost-btn small-btn" type="button" @click="mockAction('搜尋 /api/admin/users')">搜尋</button>
-        <button class="primary-btn small-btn" type="button" @click="mockAction('新增員工')">新增員工</button>
+  <section class="page-shell">
+    <header class="section-head">
+      <div>
+        <p class="eyebrow">人員</p>
+        <h2>員工管理</h2>
+        <p class="hint">串接 /api/admin/users 全套操作。</p>
       </div>
-      <div class="user-table">
-        <div class="user-row user-header">
-          <span>姓名 / Email</span>
+      <div class="filters">
+        <input v-model="users.search" type="text" placeholder="搜尋姓名 / Email" />
+        <select v-model="users.role">
+          <option value="all">全部角色</option>
+          <option value="driver">司機</option>
+          <option value="warehouse_staff">倉庫</option>
+          <option value="customer_service">客服</option>
+          <option value="admin">管理員</option>
+        </select>
+        <select v-model="users.status">
+          <option value="all">全部狀態</option>
+          <option value="active">啟用</option>
+          <option value="suspended">停用</option>
+          <option value="deleted">已刪除</option>
+        </select>
+        <button class="ghost-btn small-btn" type="button" :disabled="users.loading" @click="loadUsers">套用篩選</button>
+      </div>
+    </header>
+
+    <div class="card">
+      <p class="eyebrow">建立員工</p>
+      <div class="form-grid">
+        <label class="form-field">
+          <span>姓名 *</span>
+          <input v-model="createForm.user_name" type="text" />
+        </label>
+        <label class="form-field">
+          <span>Email *</span>
+          <input v-model="createForm.email" type="email" />
+        </label>
+        <label class="form-field">
+          <span>密碼 *</span>
+          <input v-model="createForm.password" type="password" />
+        </label>
+        <label class="form-field">
+          <span>電話</span>
+          <input v-model="createForm.phone_number" type="tel" />
+        </label>
+        <label class="form-field">
+          <span>工作節點</span>
+          <input v-model="createForm.address" type="text" placeholder="例：HUB_0 / REG_1" />
+        </label>
+        <label class="form-field">
           <span>角色</span>
-          <span>站點</span>
-          <span>狀態</span>
-          <span>操作</span>
-        </div>
-        <div v-for="u in filteredUsers" :key="u.id" class="user-row">
-          <div class="user-main">
-            <strong>{{ u.name }}</strong>
-            <span class="hint">{{ u.email }}</span>
+          <select v-model="createForm.user_class">
+            <option value="driver">司機</option>
+            <option value="warehouse_staff">倉庫</option>
+            <option value="customer_service">客服</option>
+            <option value="admin">管理員</option>
+          </select>
+        </label>
+      </div>
+      <div class="actions">
+        <button class="primary-btn" type="button" :disabled="users.creating" @click="createUser">
+          {{ users.creating ? '建立中…' : '建立員工' }}
+        </button>
+        <p v-if="users.actionMessage" class="hint success">{{ users.actionMessage }}</p>
+        <p v-if="users.actionError" class="hint error">{{ users.actionError }}</p>
+      </div>
+    </div>
+
+    <div class="card list">
+      <p v-if="users.loading" class="hint">載入中…</p>
+      <p v-else-if="users.error" class="hint error">{{ users.error }}</p>
+      <p v-else-if="!users.list.length" class="hint">沒有符合條件的員工。</p>
+      <div
+        v-else
+        v-for="user in users.list"
+        :key="user.id"
+        class="row user-row"
+        :class="{ active: users.selectedId === user.id }"
+      >
+        <button class="row-btn" type="button" @click="selectUser(user.id)">
+          <div>
+            <strong>{{ user.user_name }}</strong>
+            <p class="hint">{{ user.email }}</p>
+            <p class="hint">節點：{{ user.address || '--' }}</p>
           </div>
-          <span>{{ u.role }}</span>
-          <span>{{ u.site }}</span>
-          <span :class="['status', u.status === 'active' ? 'status-ok' : 'status-lock']">
-            {{ u.status === 'active' ? '啟用' : '停用' }}
-          </span>
-          <div class="user-actions">
-            <button class="ghost-btn tiny-btn" type="button" @click="mockAction(`重設密碼 ${u.email}`)">重設密碼</button>
-            <button class="ghost-btn tiny-btn" type="button" @click="mockAction(`編輯 ${u.email}`)">編輯</button>
-            <button class="ghost-btn tiny-btn" type="button" @click="mockAction(`${u.status === 'active' ? '停用' : '啟用'} ${u.email}`)">
-              {{ u.status === 'active' ? '停用' : '啟用' }}
+          <div class="pill-stack">
+            <span class="pill pill--muted">{{ userClassLabel[user.user_class] || user.user_class }}</span>
+            <span :class="['pill', statusTone(user.status)]">{{ statusLabel[user.status ?? 'active'] || user.status }}</span>
+          </div>
+        </button>
+
+        <div v-if="users.selectedId === user.id" class="panel">
+          <div class="actions">
+            <button class="ghost-btn small-btn" type="button" :disabled="userActionLoading" @click="toggleUserStatus(user)">
+              {{ user.status === 'active' ? '停用' : '啟用' }}
+            </button>
+            <button class="ghost-btn small-btn" type="button" :disabled="userActionLoading" @click="resetPassword(user)">
+              重設密碼
+            </button>
+            <button
+              class="ghost-btn small-btn"
+              type="button"
+              :disabled="userActionLoading || user.user_class !== 'driver'"
+              @click="assignVehicle(user)"
+            >
+              指派車輛
+            </button>
+            <button class="ghost-btn small-btn" type="button" :disabled="userActionLoading" @click="fetchUserStats(user)">
+              工作統計
             </button>
           </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <section class="page-shell" id="section-service-rules">
-    <header class="section-header">
-      <h2>服務規則設定</h2>
-      <p class="hint">運費與服務參數，後續可串 service_rules API / S3 / S5。</p>
-    </header>
-    <div class="card service-card">
-      <div class="service-header">
-        <span class="eyebrow">表格編輯器 (mock)</span>
-        <button class="primary-btn small-btn" type="button" @click="mockAction('儲存規則')">儲存規則</button>
-      </div>
-      <div class="service-table">
-        <div class="service-row service-header-row">
-          <span>Box Type</span>
-          <span>Service Level</span>
-          <span>基礎費率</span>
-          <span>國際加價</span>
-          <span>易碎加價</span>
-        </div>
-        <div v-for="rule in serviceRules" :key="`${rule.box}-${rule.level}`" class="service-row">
-          <span>{{ rule.box }}</span>
-          <span>{{ rule.level }}</span>
-          <input type="number" :value="rule.base" />
-          <label class="toggle">
-            <input type="checkbox" :checked="rule.intl" />
-            <span>啟用</span>
-          </label>
-          <label class="toggle">
-            <input type="checkbox" :checked="rule.fragile" />
-            <span>啟用</span>
-          </label>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <section class="page-shell">
-    <header class="section-header">
-      <h2>作業監控</h2>
-      <p class="hint">例行任務、待辦與風險觀察，協助管理員快速掃描狀態。</p>
-    </header>
-    <div class="card-grid workflow-grid">
-      <div v-for="block in workflow" :key="block.title" class="card workflow-card">
-        <div class="workflow-head">
-          <p class="eyebrow">{{ block.title }}</p>
-          <span
-            class="pill"
-            :class="{
-              'pill--success': block.state === 'success',
-              'pill--warning': block.state === 'warning',
-              'pill--alert': block.state === 'alert'
-            }"
-          >
-            {{
-              block.state === 'success'
-                ? '正常'
-                : block.state === 'warning'
-                  ? '提醒'
-                  : '需注意'
-            }}
-          </span>
-        </div>
-        <ul class="task-list">
-          <li v-for="line in block.items" :key="line">{{ line }}</li>
-        </ul>
-      </div>
-    </div>
-  </section>
-
-  <section class="page-shell" id="section-queue">
-    <header class="section-header">
-      <h2>待處理隊列</h2>
-      <p class="hint">尚未完成的維運項目，後續可接上工單/通知 API。</p>
-    </header>
-    <div class="card queue-card">
-      <ul class="task-list queue-list">
-        <li v-for="item in queueItems" :key="item.title" class="queue-item">
-          <div class="queue-main">
-            <strong>{{ item.title }}</strong>
-            <p class="hint">{{ item.desc }}</p>
+          <p v-if="users.actionMessage" class="hint success">{{ users.actionMessage }}</p>
+          <p v-if="users.actionError" class="hint error">{{ users.actionError }}</p>
+          <div v-if="userStats" class="stats">
+            <p class="hint">任務完成：{{ userStats.tasks_completed }}</p>
+            <p class="hint">處理包裹：{{ userStats.packages_processed }}</p>
+            <p class="hint">異常回報：{{ userStats.exceptions_reported }}</p>
           </div>
-          <div class="queue-meta">
-            <span class="pill pill--muted">{{ item.owner }}</span>
-            <span class="pill pill--action">{{ item.eta }}</span>
-          </div>
-        </li>
-      </ul>
+        </div>
+      </div>
     </div>
   </section>
 </template>
@@ -378,10 +651,6 @@ const mockAction = (msg: string) => window.alert(msg)
   display: grid;
   grid-template-columns: 2fr 1fr;
   gap: 14px;
-}
-
-.hero-copy h1 {
-  margin-bottom: 6px;
 }
 
 .pill-row {
@@ -408,11 +677,6 @@ const mockAction = (msg: string) => window.alert(msg)
   border-color: rgba(78, 154, 117, 0.35);
 }
 
-.pill--warning {
-  background: rgba(255, 191, 105, 0.18);
-  border-color: rgba(208, 152, 78, 0.4);
-}
-
 .pill--alert {
   background: rgba(239, 72, 111, 0.12);
   border-color: rgba(200, 64, 93, 0.35);
@@ -422,315 +686,160 @@ const mockAction = (msg: string) => window.alert(msg)
   background: rgba(255, 255, 255, 0.55);
 }
 
-.pill--action {
-  background: rgba(244, 182, 194, 0.3);
-  border-color: rgba(244, 182, 194, 0.5);
+.hero-side {
+  display: grid;
+  gap: 10px;
 }
 
-.hero-actions {
+.hero-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.grid.two-col {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 12px;
+}
+
+.card-head {
   display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 10px;
+  margin-bottom: 8px;
   flex-wrap: wrap;
 }
 
-.hero-side {
+.filters {
   display: flex;
-  flex-direction: column;
-  gap: 10px;
-  justify-content: space-between;
-}
-
-.hero-side-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
   gap: 8px;
-}
-
-.badge {
-  display: inline-flex;
-  padding: 8px 12px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.6);
-  border: 1px solid rgba(165, 122, 99, 0.2);
-  font-weight: 700;
-}
-
-.side-list {
-  margin-top: 4px;
-  gap: 6px;
-}
-
-.stats-grid {
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-}
-
-.stat-card {
-  display: grid;
-  gap: 8px;
-}
-
-.stat-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
-}
-
-.stat-value {
-  font-size: 32px;
-  font-weight: 800;
-}
-
-.stat-trend {
-  color: #2f6f4e;
-  font-weight: 700;
-}
-
-.quick-grid {
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-}
-
-.quick-card {
-  align-items: flex-start;
-}
-
-.workflow-grid {
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-}
-
-.workflow-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 6px;
-}
-
-.trend-card {
-  margin-top: 14px;
-}
-
-.trend-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 10px;
-}
-
-.trend-bars {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
-  gap: 12px;
-  align-items: end;
-}
-
-.trend-bar {
-  display: grid;
-  gap: 6px;
-  justify-items: center;
-}
-
-.bar {
-  width: 100%;
-  max-width: 80px;
-  background: linear-gradient(180deg, rgba(244, 182, 194, 0.8), rgba(244, 182, 194, 0.25));
-  border-radius: 10px 10px 4px 4px;
-  min-height: 24px;
-}
-
-.trend-day {
-  font-weight: 700;
-}
-
-.trend-value {
-  font-size: 12px;
-  color: var(--text-muted);
-}
-
-.alert-card {
-  margin-top: 14px;
-}
-
-.alert-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 8px;
-}
-
-.alert-item {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 10px;
+  flex-wrap: wrap;
   align-items: center;
 }
 
-.alert-main strong {
-  display: block;
-  margin-bottom: 4px;
-}
-
-.alert-main .hint {
-  display: block;
-}
-
-.user-card {
-  display: grid;
-  gap: 12px;
-}
-
-.user-filters {
-  display: grid;
-  gap: 10px;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  align-items: center;
-}
-
-.user-filters input,
-.user-filters select {
-  padding: 10px 12px;
+.filters input,
+.filters select {
+  padding: 8px 10px;
   border-radius: 10px;
   border: 1px solid var(--surface-stroke);
   background: rgba(255, 255, 255, 0.86);
 }
 
-.user-table {
+.form-row {
+  display: grid;
+  gap: 10px;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+}
+
+.form-field {
   display: grid;
   gap: 6px;
 }
 
-.user-row {
-  display: grid;
-  grid-template-columns: 2fr 1fr 1fr 1fr 2fr;
-  align-items: center;
-  gap: 10px;
+.form-field input,
+.form-field select,
+.form-field textarea {
   padding: 10px 12px;
-  border-radius: 12px;
-  border: 1px solid rgba(165, 122, 99, 0.18);
-  background: rgba(255, 255, 255, 0.6);
+  border-radius: 10px;
+  border: 1px solid var(--surface-stroke);
+  background: rgba(255, 255, 255, 0.86);
+  color: var(--text-main);
 }
 
-.user-header {
-  font-weight: 700;
-  background: rgba(255, 255, 255, 0.8);
+.form-field span {
+  font-size: 13px;
+  color: var(--text-muted);
 }
 
-.user-main {
+.actions {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.user-actions {
-  display: inline-flex;
+  gap: 8px;
   flex-wrap: wrap;
-  gap: 6px;
-  justify-content: flex-end;
-}
-
-.tiny-btn {
-  padding: 6px 10px;
-  border-radius: 10px;
-}
-
-.status {
-  display: inline-flex;
-  padding: 6px 10px;
-  border-radius: 10px;
-  border: 1px solid rgba(165, 122, 99, 0.2);
-}
-
-.status-ok {
-  background: rgba(97, 185, 140, 0.12);
-  border-color: rgba(78, 154, 117, 0.35);
-}
-
-.status-lock {
-  background: rgba(239, 72, 111, 0.08);
-  border-color: rgba(200, 64, 93, 0.35);
-}
-
-.service-card {
-  display: grid;
-  gap: 10px;
-}
-
-.service-header {
-  display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
+  margin-top: 8px;
 }
 
-.service-table {
+.list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
   display: grid;
   gap: 8px;
 }
 
-.service-row {
-  display: grid;
-  grid-template-columns: 1.2fr 1.2fr 1fr 1fr 1fr;
-  gap: 10px;
-  align-items: center;
-  padding: 10px 12px;
-  border-radius: 12px;
-  border: 1px solid rgba(165, 122, 99, 0.16);
-  background: rgba(255, 255, 255, 0.7);
-}
-
-.service-header-row {
-  font-weight: 700;
-  background: rgba(255, 255, 255, 0.85);
-}
-
-.service-row input[type='number'] {
-  width: 100%;
-  padding: 8px 10px;
-  border-radius: 10px;
+.row {
   border: 1px solid var(--surface-stroke);
-}
-
-.toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.queue-card {
-  padding: 8px 12px;
-}
-
-.queue-list {
-  gap: 10px;
-}
-
-.queue-item {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 10px;
-  align-items: center;
-  padding: 10px 12px;
   border-radius: 12px;
-  border: 1px dashed rgba(165, 122, 99, 0.24);
+  background: rgba(255, 255, 255, 0.7);
+  padding: 8px;
 }
 
-.queue-main strong {
-  display: block;
-  margin-bottom: 4px;
+.row-btn {
+  display: flex;
+  width: 100%;
+  text-align: left;
+  gap: 10px;
+  justify-content: space-between;
+  align-items: center;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 6px;
 }
 
-.queue-meta {
+.row.active {
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.08);
+}
+
+.panel {
+  border-top: 1px dashed var(--surface-stroke);
+  margin-top: 6px;
+  padding-top: 8px;
+  display: grid;
+  gap: 8px;
+}
+
+.pill-stack {
   display: inline-flex;
   gap: 6px;
   flex-wrap: wrap;
   justify-content: flex-end;
 }
 
-.muted {
-  opacity: 0.7;
+.detail-grid {
+  display: grid;
+  gap: 6px;
+}
+
+.contract-row .row-btn {
+  align-items: flex-start;
+}
+
+.user-row .actions {
+  margin: 0;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 6px;
+}
+
+.hint.success {
+  color: #166534;
+}
+
+.hint.error {
+  color: #b91c1c;
 }
 
 @media (max-width: 860px) {
@@ -738,16 +847,8 @@ const mockAction = (msg: string) => window.alert(msg)
     grid-template-columns: 1fr;
   }
 
-  .user-row {
-    grid-template-columns: 1fr;
-  }
-
-  .user-actions {
-    justify-content: flex-start;
-  }
-
-  .service-row {
-    grid-template-columns: 1fr;
+  .row-btn {
+    align-items: flex-start;
   }
 }
 </style>
