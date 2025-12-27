@@ -1,6 +1,9 @@
 ﻿
 <script setup lang="ts">
 import { RouterLink } from 'vue-router'
+import UiCard from '../components/ui/UiCard.vue'
+import UiList from '../components/ui/UiList.vue'
+import UiPageShell from '../components/ui/UiPageShell.vue'
 
 const highlights = [
   { title: '虛擬地圖', copy: '四環：中心、轉運站、門市、住家，車隊固定區域行駛。' },
@@ -18,7 +21,7 @@ const roles = [
 </script>
 
 <template>
-  <section class="page-shell page-hero">
+  <UiPageShell class="page-hero">
     <div class="hero-grid">
       <div class="hero-copy">
         <p class="eyebrow">物流模擬系統</p>
@@ -33,25 +36,25 @@ const roles = [
         </div>
       </div>
 
-      <div class="card highlight-card">
+      <UiCard class="highlight-card">
         <p class="eyebrow">路徑</p>
-        <ul class="task-list">
+        <UiList>
           <li>取件：住家/門市 -> 轉運站 -> 物流中心</li>
           <li>派送：物流中心 -> 轉運站 -> 住家/門市</li>
           <li>事件：取件、分揀、轉運、配送、異常</li>
           <li>帳務：抵達物流中心時更新月結週期</li>
-        </ul>
-      </div>
+        </UiList>
+      </UiCard>
     </div>
-  </section>
+  </UiPageShell>
 
-  <section class="page-shell">
+  <UiPageShell>
     <header class="section-header">
       <h2>運費算法</h2>
       <p class="hint">目前先提供面板佈局，後續會接上實際計價規則與 API。</p>
     </header>
 
-    <div class="card">
+    <UiCard>
       <div class="stack">
         <div>
           <p class="eyebrow">輸入</p>
@@ -66,6 +69,6 @@ const roles = [
           <p class="hint">預估運費、拆解明細（各項加成）、以及不符合規則時的原因提示。</p>
         </div>
       </div>
-    </div>
-  </section>
+    </UiCard>
+  </UiPageShell>
 </template>

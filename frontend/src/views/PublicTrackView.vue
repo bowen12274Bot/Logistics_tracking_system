@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import { api, type TrackingPublicResponse } from "../services/api";
+import UiCard from "../components/ui/UiCard.vue";
+import UiPageShell from "../components/ui/UiPageShell.vue";
 
 const trackingNumber = ref("");
 const isLoading = ref(false);
@@ -33,14 +35,8 @@ const lookup = async () => {
 </script>
 
 <template>
-  <section class="page-shell">
-    <header class="page-header">
-      <p class="eyebrow">追蹤</p>
-      <h1>包裹追蹤（公開）</h1>
-      <p class="lede">未登入可用追蹤編號查詢單一包裹。</p>
-    </header>
-
-    <div class="card">
+  <UiPageShell eyebrow="追蹤" title="包裹追蹤（公開）" lede="未登入可用追蹤編號查詢單一包裹。">
+    <UiCard>
       <form class="form-grid" @submit.prevent="lookup">
         <label class="form-field span-2">
           <span>追蹤編號</span>
@@ -63,8 +59,8 @@ const lookup = async () => {
           <span>包裹更新時間：{{ formatDateTime(result.updated_at) }}</span>
         </div>
       </div>
-    </div>
-  </section>
+    </UiCard>
+  </UiPageShell>
 </template>
 
 <style scoped>

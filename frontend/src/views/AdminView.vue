@@ -2,6 +2,9 @@
 import { computed, reactive } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
+import UiCard from '../components/ui/UiCard.vue'
+import UiList from '../components/ui/UiList.vue'
+import UiPageShell from '../components/ui/UiPageShell.vue'
 
 const auth = useAuthStore()
 
@@ -120,7 +123,7 @@ const mockAction = (msg: string) => window.alert(msg)
 </script>
 
 <template>
-  <section class="page-shell admin-hero">
+  <UiPageShell class="admin-hero">
     <div class="hero-copy">
       <p class="eyebrow">管理員</p>
       <h1>登入後的控制台</h1>
@@ -137,7 +140,7 @@ const mockAction = (msg: string) => window.alert(msg)
       </div>
     </div>
 
-    <div class="card hero-side">
+    <UiCard class="hero-side">
       <div class="hero-side-top">
         <div>
           <p class="eyebrow">登入身分</p>
@@ -146,21 +149,21 @@ const mockAction = (msg: string) => window.alert(msg)
         </div>
         <span class="badge">Admin</span>
       </div>
-      <ul class="task-list side-list">
+      <UiList class="side-list">
         <li>服務規則：等待新一版費率</li>
         <li>異常稽核：2 件待覆核</li>
         <li>帳務：月結批次預計凌晨執行</li>
-      </ul>
-    </div>
-  </section>
+      </UiList>
+    </UiCard>
+  </UiPageShell>
 
-  <section class="page-shell">
+  <UiPageShell>
     <header class="section-header">
       <h2>系統總覽</h2>
       <p class="hint">以 mock 資料呈現，後續可接上 /api/admin/stats。</p>
     </header>
     <div class="card-grid stats-grid">
-      <div v-for="metric in metrics" :key="metric.title" class="card stat-card">
+      <UiCard v-for="metric in metrics" :key="metric.title" class="stat-card">
         <div class="stat-head">
           <p class="eyebrow">{{ metric.title }}</p>
           <span v-if="metric.badge" class="pill pill--muted">{{ metric.badge }}</span>
@@ -175,10 +178,10 @@ const mockAction = (msg: string) => window.alert(msg)
         <div class="stat-value">{{ metric.value }}</div>
         <p class="hint">{{ metric.hint }}</p>
         <p v-if="metric.trend" class="stat-trend">{{ metric.trend }}</p>
-      </div>
+      </UiCard>
     </div>
 
-    <div class="card trend-card">
+    <UiCard class="trend-card">
       <div class="trend-head">
         <div>
           <p class="eyebrow">最近 7 日單量趨勢</p>
@@ -193,14 +196,14 @@ const mockAction = (msg: string) => window.alert(msg)
           <span class="trend-value">{{ point.orders }}</span>
         </div>
       </div>
-    </div>
+    </UiCard>
 
-    <div class="card alert-card" v-if="criticalAlerts.length">
+    <UiCard v-if="criticalAlerts.length" class="alert-card">
       <div class="alert-head">
         <p class="eyebrow">Critical 警示</p>
         <span class="pill pill--alert">需立即處理</span>
       </div>
-      <ul class="task-list">
+      <UiList>
         <li v-for="alert in criticalAlerts" :key="alert.id" class="alert-item">
           <div class="alert-main">
             <strong>{{ alert.title }}</strong>
@@ -208,33 +211,33 @@ const mockAction = (msg: string) => window.alert(msg)
           </div>
           <span class="pill pill--muted">{{ alert.time }}</span>
         </li>
-      </ul>
-    </div>
-  </section>
+      </UiList>
+    </UiCard>
+  </UiPageShell>
 
-  <section class="page-shell">
+  <UiPageShell>
     <header class="section-header">
       <h2>常用操作</h2>
       <p class="hint">整理管理員登入後最常需要的入口，部分先以占位顯示。</p>
     </header>
     <div class="card-grid quick-grid">
-      <div v-for="item in quickActions" :key="item.title" class="card quick-card link-card">
+      <UiCard v-for="item in quickActions" :key="item.title" class="quick-card link-card">
         <div>
           <p class="eyebrow">{{ item.title }}</p>
           <p class="hint">{{ item.detail }}</p>
         </div>
         <RouterLink v-if="item.to" :to="item.to" class="pill pill--action">{{ item.cta }}</RouterLink>
         <span v-else class="pill pill--muted">{{ item.cta }}</span>
-      </div>
+      </UiCard>
     </div>
-  </section>
+  </UiPageShell>
 
-  <section class="page-shell" id="section-user-permissions">
+  <UiPageShell id="section-user-permissions">
     <header class="section-header">
       <h2>使用者與權限</h2>
       <p class="hint">員工列表、搜尋、角色/站點篩選，後續串 /api/admin/users。</p>
     </header>
-    <div class="card user-card">
+    <UiCard class="user-card">
       <div class="user-filters">
         <input v-model="userFilters.keyword" type="text" placeholder="搜尋姓名 / Email" />
         <select v-model="userFilters.role">
@@ -280,15 +283,15 @@ const mockAction = (msg: string) => window.alert(msg)
           </div>
         </div>
       </div>
-    </div>
-  </section>
+    </UiCard>
+  </UiPageShell>
 
-  <section class="page-shell" id="section-service-rules">
+  <UiPageShell id="section-service-rules">
     <header class="section-header">
       <h2>服務規則設定</h2>
       <p class="hint">運費與服務參數，後續可串 service_rules API / S3 / S5。</p>
     </header>
-    <div class="card service-card">
+    <UiCard class="service-card">
       <div class="service-header">
         <span class="eyebrow">表格編輯器 (mock)</span>
         <button class="primary-btn small-btn" type="button" @click="mockAction('儲存規則')">儲存規則</button>
@@ -315,16 +318,16 @@ const mockAction = (msg: string) => window.alert(msg)
           </label>
         </div>
       </div>
-    </div>
-  </section>
+    </UiCard>
+  </UiPageShell>
 
-  <section class="page-shell">
+  <UiPageShell>
     <header class="section-header">
       <h2>作業監控</h2>
       <p class="hint">例行任務、待辦與風險觀察，協助管理員快速掃描狀態。</p>
     </header>
     <div class="card-grid workflow-grid">
-      <div v-for="block in workflow" :key="block.title" class="card workflow-card">
+      <UiCard v-for="block in workflow" :key="block.title" class="workflow-card">
         <div class="workflow-head">
           <p class="eyebrow">{{ block.title }}</p>
           <span
@@ -344,20 +347,20 @@ const mockAction = (msg: string) => window.alert(msg)
             }}
           </span>
         </div>
-        <ul class="task-list">
+        <UiList>
           <li v-for="line in block.items" :key="line">{{ line }}</li>
-        </ul>
-      </div>
+        </UiList>
+      </UiCard>
     </div>
-  </section>
+  </UiPageShell>
 
-  <section class="page-shell" id="section-queue">
+  <UiPageShell id="section-queue">
     <header class="section-header">
       <h2>待處理隊列</h2>
       <p class="hint">尚未完成的維運項目，後續可接上工單/通知 API。</p>
     </header>
-    <div class="card queue-card">
-      <ul class="task-list queue-list">
+    <UiCard class="queue-card">
+      <UiList class="queue-list">
         <li v-for="item in queueItems" :key="item.title" class="queue-item">
           <div class="queue-main">
             <strong>{{ item.title }}</strong>
@@ -368,9 +371,9 @@ const mockAction = (msg: string) => window.alert(msg)
             <span class="pill pill--action">{{ item.eta }}</span>
           </div>
         </li>
-      </ul>
-    </div>
-  </section>
+      </UiList>
+    </UiCard>
+  </UiPageShell>
 </template>
 
 <style scoped>

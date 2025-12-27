@@ -5,6 +5,8 @@ import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { usePackageStore, type PaymentMethod, type StoredPackage } from '../stores/packages'
 import { useAuthStore } from '../stores/auth'
 import { api, type BillingBillDetailResponse, type BillingPaymentRecord, type PackagePayableItem } from '../services/api'
+import UiCard from '../components/ui/UiCard.vue'
+import UiPageShell from '../components/ui/UiPageShell.vue'
 import {
   dimensionsLabel,
   formatDateTime,
@@ -347,12 +349,7 @@ const payableReasonFor = (pkg: StoredPackage) => {
 </script>
 
 <template>
-  <section class="page-shell">
-    <header class="page-header">
-      <p class="eyebrow">付款</p>
-      <h1>包裹付款介面</h1>
-      <p class="lede">顯示已建立但未付款的包裹，到付會由收件者處理。</p>
-    </header>
+  <UiPageShell eyebrow="付款" title="包裹付款介面" lede="顯示已建立但未付款的包裹，到付會由收件者處理。">
 
     <div class="tab-switch">
       <button
@@ -373,7 +370,7 @@ const payableReasonFor = (pkg: StoredPackage) => {
       </button>
     </div>
 
-    <div v-if="activeTab === 'list'" class="card">
+    <UiCard v-if="activeTab === 'list'">
       <div class="legend">
         <p class="eyebrow">付款清單</p>
         <p class="hint">列出需要你付款的貨件，顯示編號與建立時間；點擊後選擇付款方式。</p>
@@ -450,9 +447,9 @@ const payableReasonFor = (pkg: StoredPackage) => {
           </div>
         </li>
       </ul>
-    </div>
+    </UiCard>
 
-    <div v-else class="card records-card">
+    <UiCard v-else class="records-card">
       <div class="legend">
         <p class="eyebrow">付款紀錄</p>
         <p class="hint">現金/信用卡/網銀/第三方的付款會出現在這裡；月結包裹不列入付款紀錄。</p>
@@ -558,8 +555,8 @@ const payableReasonFor = (pkg: StoredPackage) => {
           </ul>
         </div>
       </div>
-    </div>
-  </section>
+    </UiCard>
+  </UiPageShell>
 </template>
 
 <style scoped>

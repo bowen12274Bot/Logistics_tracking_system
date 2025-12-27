@@ -4,6 +4,7 @@ import { computed, onMounted } from 'vue'
 import { RouterLink } from 'vue-router'
 import { usePackageStore } from '../stores/packages'
 import { useAuthStore } from '../stores/auth'
+import UiPageShell from '../components/ui/UiPageShell.vue'
 
 type Link = {
   title: string
@@ -37,13 +38,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <section class="page-shell">
-    <header class="page-header">
-      <p class="eyebrow">客戶</p>
-      <h1>你的包裹主控台</h1>
-      <p class="lede">監控每件貨態、快速寄件，並以月結讓帳務更可預期。</p>
-    </header>
-
+  <UiPageShell eyebrow="客戶" title="你的包裹主控台" lede="監控每件貨態、快速寄件，並以月結讓帳務更可預期。">
     <div class="card-grid">
       <RouterLink
         v-for="link in quickLinks"
@@ -59,7 +54,7 @@ onMounted(() => {
         <span aria-hidden="true">&rarr;</span>
       </RouterLink>
     </div>
-  </section>
+  </UiPageShell>
 </template>
 
 <style scoped>

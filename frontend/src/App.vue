@@ -4,6 +4,7 @@ import { storeToRefs } from 'pinia'
 import { useAuthStore } from './stores/auth'
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
+import UiToastHost from './components/ui/UiToastHost.vue'
 
 const auth = useAuthStore()
 const { user, isLoggedIn } = storeToRefs(auth)
@@ -64,6 +65,8 @@ const roleNav = computed(() => {
         <RouterView />
       </div>
     </main>
+
+    <UiToastHost />
   </div>
 </template>
 

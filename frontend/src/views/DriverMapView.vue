@@ -3,6 +3,9 @@ import { computed, onMounted, reactive, ref } from "vue";
 import { api, type DeliveryTaskRecord, type MapEdge, type MapNode, type VehicleRecord } from "../services/api";
 import { useFullscreen } from "../composables/useFullscreen";
 import { selectableReasonsFor } from "../lib/exceptionReasons";
+import UiCard from "../components/ui/UiCard.vue";
+import UiModal from "../components/ui/UiModal.vue";
+import UiPageShell from "../components/ui/UiPageShell.vue";
 const truckIconUrl = new URL("../assets/truck.png", import.meta.url).href;
 
 type ViewBox = { x: number; y: number; w: number; h: number };
@@ -438,6 +441,12 @@ function startException(task: DeliveryTaskRecord) {
   exceptionModalOpen.value = true;
 }
 
+function closeExceptionModal() {
+  exceptionModalOpen.value = false;
+  exceptionTarget.value = null;
+  arriveError.value = null;
+}
+
 async function submitException() {
   if (!exceptionTarget.value) return;
   if (arriveBusy.value) return;
@@ -804,7 +813,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <section class="page-shell map-page--bleed">
+  <UiPageShell class="map-page--bleed">
     <header class="page-header section-header--split">
       <div>
         <p class="eyebrow">員工 · 司機</p>
@@ -813,8 +822,8 @@ onMounted(async () => {
       </div>
     </header>
 
-    <div v-if="error" class="card error-card">{{ error }}</div>
-    <div v-else-if="loading" class="card">載入中…</div>
+    <UiCard v-if="error" class="error-card">{{ error }}</UiCard>
+    <UiCard v-else-if="loading">載入中…</UiCard>
 
     <div v-else ref="stageEl" class="card map-canvas" :class="{ fullscreen: isFullscreen }">
       <div class="map-stage">
@@ -971,7 +980,7 @@ onMounted(async () => {
           </g>
         </svg>
 
-        <div class="card map-overlay" role="complementary" aria-label="driver map panel">
+        <UiCard class="map-overlay" role="complementary" aria-label="driver map panel">
           <p class="eyebrow">司機資訊</p>
           <div class="hint">
             <div><strong>貨車編號：</strong>{{ vehicle?.vehicle_code ?? "未串接" }}</div>
@@ -982,7 +991,7 @@ onMounted(async () => {
             <p class="eyebrow">導航路徑</p>
             <div class="route-chip">{{ activeRoutePath.join(" → ") }}</div>
           </div>
-        </div>
+        </UiCard>
 
         <div v-if="arrivePanelOpen" class="arrive-panel" role="dialog" aria-label="arrive panel">
           <div class="arrive-header">
@@ -1124,50 +1133,55 @@ onMounted(async () => {
             </ul>
           </div>
 
-          <div v-if="exceptionModalOpen" class="arrive-modal" role="dialog" aria-label="report exception">
-            <div class="arrive-modal-card">
-              <div class="arrive-header" style="margin: 0">
-                <div>
-                  <p class="eyebrow">申報異常</p>
-                  <p class="hint" style="margin: 0">包裹：{{ exceptionTarget?.packageId }}</p>
-                </div>
-                <button class="ghost-btn" type="button" @click="exceptionModalOpen = false">關閉</button>
-              </div>
+          <UiModal
+            v-model="exceptionModalOpen"
+            title="申報異常"
+            aria-label="report exception"
+            :close-on-backdrop="!arriveBusy"
+            :close-on-esc="!arriveBusy"
+            @close="closeExceptionModal"
+          >
+            <template #subtitle>
+              <p class="hint" style="margin: 0">包裹：{{ exceptionTarget?.packageId ?? "-" }}</p>
+            </template>
 
-              <label class="hint" style="display: grid; gap: 6px; margin-top: 10px">
-                異常原因（請選擇）
-                <select v-model="exceptionForm.reason_code" class="text-input">
+            <div class="form-grid" style="grid-template-columns: 1fr; gap: 10px">
+              <label class="form-field">
+                <span>異常原因（請選擇）</span>
+                <select v-model="exceptionForm.reason_code" :disabled="arriveBusy">
                   <option value="" disabled>請選擇異常原因</option>
                   <option v-for="r in exceptionReasons" :key="r.code" :value="r.code">{{ r.label }}</option>
                 </select>
               </label>
-              <label class="hint" style="display: grid; gap: 6px; margin-top: 10px">
-                發生位置（貨車 / 節點二選一）
-                <select v-model="exceptionForm.location_mode" class="text-input">
+
+              <label class="form-field">
+                <span>發生位置（貨車 / 節點二選一）</span>
+                <select v-model="exceptionForm.location_mode" :disabled="arriveBusy">
                   <option value="truck">車上（{{ truckCode || "-" }}）</option>
                   <option value="node">節點（{{ currentNodeId || "-" }}）</option>
                 </select>
               </label>
-              <label class="hint" style="display: grid; gap: 6px; margin-top: 10px">
-                說明（必填，請描述狀況與處理）
+
+              <label class="form-field">
+                <span>說明（必填，請描述狀況與處理）</span>
                 <textarea
                   v-model="exceptionForm.description"
-                  class="text-input"
                   rows="3"
+                  :disabled="arriveBusy"
                   placeholder="例：收件人拒收，原因：貨件外箱破損；已拍照並聯絡客服。"
                 />
               </label>
-
-              <div class="arrive-task-actions" style="margin-top: 12px">
-                <button class="primary-btn small-btn" type="button" :disabled="arriveBusy" @click="submitException">送出</button>
-                <button class="ghost-btn small-btn" type="button" :disabled="arriveBusy" @click="exceptionModalOpen = false">取消</button>
-              </div>
             </div>
-          </div>
+
+            <template #actions>
+              <button class="primary-btn small-btn" type="button" :disabled="arriveBusy" @click="submitException">送出</button>
+              <button class="ghost-btn small-btn" type="button" :disabled="arriveBusy" @click="closeExceptionModal">取消</button>
+            </template>
+          </UiModal>
         </div>
       </div> <!-- map-stage -->
     </div> <!-- map-canvas -->
-  </section>
+  </UiPageShell>
 </template>
 
 <style scoped>
@@ -1506,31 +1520,6 @@ onMounted(async () => {
   user-select: none;
 }
 
-.arrive-modal {
-  position: fixed;
-  inset: 0;
-  background: rgba(15, 23, 42, 0.4);
-  display: grid;
-  place-items: center;
-  z-index: 20;
-}
-
-.arrive-modal-card {
-  width: min(520px, calc(100vw - 32px));
-  background: white;
-  border-radius: 16px;
-  padding: 14px;
-  border: 1px solid rgba(15, 23, 42, 0.12);
-  box-shadow: 0 30px 70px rgba(15, 23, 42, 0.25);
-}
-
-.text-input {
-  width: 100%;
-  padding: 10px 12px;
-  border-radius: 12px;
-  border: 1px solid rgba(15, 23, 42, 0.16);
-  background: rgba(255, 255, 255, 0.96);
-}
 </style>
 
 

@@ -2,6 +2,8 @@
 import { computed, reactive, ref } from 'vue'
 import { api } from '../services/api'
 import type { PackageEstimatePayload, PackageEstimateResponse, SpecialMark } from '../services/api'
+import UiCard from '../components/ui/UiCard.vue'
+import UiPageShell from '../components/ui/UiPageShell.vue'
 
 type DeliveryType = PackageEstimatePayload['deliveryType']
 type BoxType = PackageEstimateResponse['estimate']['box_type']
@@ -212,13 +214,12 @@ async function handleSubmit() {
 </script>
 
 <template>
-  <section class="page-shell">
-    <header class="section-header">
-      <h2>計算運費</h2>
-      <p class="hint">依地圖 routeCost 估價，含箱型判定、時效係數、重量加價、特殊標記、floor/cap。</p>
-    </header>
-
-    <div class="card estimator">
+  <UiPageShell
+    eyebrow="運費"
+    title="計算運費"
+    lede="依地圖 routeCost 估價，含箱型判定、時效係數、重量加價、特殊標記、floor/cap。"
+  >
+    <UiCard class="estimator">
       <div class="form-grid">
         <div class="field">
           <label>起點 fromNodeId</label>
@@ -331,8 +332,8 @@ async function handleSubmit() {
           </div>
         </div>
       </div>
-    </div>
-  </section>
+    </UiCard>
+  </UiPageShell>
 </template>
 
 <style scoped>

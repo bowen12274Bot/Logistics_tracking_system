@@ -19,6 +19,8 @@ import {
   resolveSpecialMarks,
   senderDisplayName,
 } from '../utils/packageDisplay'
+import UiCard from '../components/ui/UiCard.vue'
+import UiPageShell from '../components/ui/UiPageShell.vue'
 
 const auth = useAuthStore()
 
@@ -231,14 +233,8 @@ onMounted(() => {
 </script>
 
 <template>
-  <section class="page-shell">
-    <header class="page-header">
-      <p class="eyebrow">合約 / 月結</p>
-      <h1>{{ headerTitle }}</h1>
-      <p class="lede">{{ headerLede }}</p>
-    </header>
-
-    <div class="card" style="background: linear-gradient(135deg, #fff7f0, #fffdf9)">
+  <UiPageShell eyebrow="合約 / 月結" :title="headerTitle" :lede="headerLede">
+    <UiCard style="background: linear-gradient(135deg, #fff7f0, #fffdf9)">
       <div class="status-banner" :class="applicationStatus">
         <span class="status-dot" :class="applicationStatus"></span>
         <div class="status-text">
@@ -412,8 +408,8 @@ onMounted(() => {
       </div>
 
       <p v-if="errorMessage" class="hint" style="color: #b00020">{{ errorMessage }}</p>
-    </div>
-  </section>
+    </UiCard>
+  </UiPageShell>
 </template>
 
 <style scoped>

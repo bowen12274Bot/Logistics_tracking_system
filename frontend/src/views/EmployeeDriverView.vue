@@ -2,6 +2,9 @@
 import { computed, onMounted, ref } from "vue";
 import { RouterLink } from "vue-router";
 import { api, type DeliveryTaskRecord, type DriverExceptionRecord, type VehicleRecord } from "../services/api";
+import UiCard from "../components/ui/UiCard.vue";
+import UiList from "../components/ui/UiList.vue";
+import UiPageShell from "../components/ui/UiPageShell.vue";
 
 const loading = ref(true);
 const error = ref<string | null>(null);
@@ -60,14 +63,8 @@ onMounted(() => {
 </script>
 
 <template>
-  <section class="page-shell">
-    <header class="page-header">
-      <p class="eyebrow">員工 · 司機</p>
-      <h1>司機工作看板</h1>
-      <p class="lede">管理任務段清單，並在 HUB/REG 節點接手任務。</p>
-    </header>
-
-    <div class="card" style="margin-top: 16px">
+  <UiPageShell eyebrow="員工 · 司機" title="司機工作看板" lede="管理任務段清單，並在 HUB/REG 節點接手任務。">
+    <UiCard style="margin-top: 16px">
       <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center">
         <button class="ghost-btn" type="button" @click="tab = 'assigned'">任務清單</button>
         <button class="ghost-btn" type="button" @click="tab = 'handoff'">可接手任務</button>
@@ -90,7 +87,7 @@ onMounted(() => {
 
         <div v-if="list.length === 0" class="hint">目前沒有任務</div>
 
-        <ul v-else class="task-list">
+        <UiList v-else>
           <li v-for="t in list" :key="t.id" style="display: grid; gap: 6px">
             <div style="display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap">
               <strong>{{ t.tracking_number ?? t.package_id }}</strong>
@@ -110,11 +107,11 @@ onMounted(() => {
               <button class="primary-btn small-btn" type="button" @click="takeOver(t.id)">接手任務</button>
             </div>
           </li>
-        </ul>
+        </UiList>
       </div>
-    </div>
+    </UiCard>
 
-    <div class="card" style="margin-top: 16px">
+    <UiCard style="margin-top: 16px">
       <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px">
         <div>
           <p class="eyebrow">異常任務申報紀錄</p>
@@ -124,7 +121,7 @@ onMounted(() => {
       </div>
 
       <div v-if="exceptionReports.length === 0" class="hint" style="margin-top: 12px">目前沒有異常紀錄。</div>
-      <ul v-else class="task-list" style="margin-top: 12px">
+      <UiList v-else style="margin-top: 12px">
         <li v-for="r in exceptionReports" :key="r.id" style="display: grid; gap: 6px">
           <div style="display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap">
             <strong>{{ r.tracking_number ?? r.package_id }}</strong>
@@ -137,10 +134,10 @@ onMounted(() => {
             申報時間：{{ r.reported_at ?? "-" }} · 狀態：{{ r.package_status === "exception" ? "異常" : "正常" }}
           </div>
         </li>
-      </ul>
-    </div>
+      </UiList>
+    </UiCard>
 
-    <div class="card" style="margin-top: 16px">
+    <UiCard style="margin-top: 16px">
       <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px">
         <div>
           <p class="eyebrow">查看貨車</p>
@@ -150,7 +147,7 @@ onMounted(() => {
       </div>
 
       <div v-if="cargoList.length === 0" class="hint" style="margin-top: 12px">目前車上沒有包裹。</div>
-      <ul v-else class="task-list" style="margin-top: 12px">
+      <UiList v-else style="margin-top: 12px">
         <li v-for="c in cargoList" :key="c.package_id" style="display: grid; gap: 6px">
           <div style="display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap">
             <strong>{{ c.tracking_number ?? c.package_id }}</strong>
@@ -158,7 +155,7 @@ onMounted(() => {
           </div>
           <div class="hint">上車時間：{{ c.loaded_at ?? "-" }}</div>
         </li>
-      </ul>
-    </div>
-  </section>
+      </UiList>
+    </UiCard>
+  </UiPageShell>
 </template>

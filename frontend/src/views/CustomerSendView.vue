@@ -3,6 +3,8 @@ import { computed, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from '../services/api'
 import { useAuthStore } from '../stores/auth'
+import UiCard from '../components/ui/UiCard.vue'
+import UiPageShell from '../components/ui/UiPageShell.vue'
 
 type DeliveryTime = 'overnight' | 'two_day' | 'standard' | 'economy'
 type PaymentType = 'prepaid' | 'cod'
@@ -390,14 +392,8 @@ const goToPayment = async () => {
 </script>
 
 <template>
-  <section class="page-shell">
-    <header class="page-header">
-      <p class="eyebrow">寄件</p>
-      <h1>建立託運單</h1>
-      <p class="lede">請填寫寄收件資訊與包裹資料</p>
-    </header>
-
-    <div class="card send-card">
+  <UiPageShell eyebrow="寄件" title="建立託運單" lede="請填寫寄收件資訊與包裹資料">
+    <UiCard class="send-card">
       <form class="send-form" @submit.prevent="submitPackage">
         <div class="send-top">
           <div class="send-control">
@@ -624,8 +620,8 @@ const goToPayment = async () => {
         </div>
         
       </form>
-    </div>
-  </section>
+    </UiCard>
+  </UiPageShell>
 </template>
 
 <style scoped>

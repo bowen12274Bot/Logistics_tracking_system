@@ -4,6 +4,8 @@ import { useRouter } from "vue-router";
 import { api, type MapNode, type PackageEventRecord, type TrackingSearchResponse } from "../services/api";
 import { useAuthStore } from "../stores/auth";
 import { exceptionReasonLabel } from "../lib/exceptionReasons";
+import UiCard from "../components/ui/UiCard.vue";
+import UiPageShell from "../components/ui/UiPageShell.vue";
 
 const auth = useAuthStore();
 const router = useRouter();
@@ -579,12 +581,11 @@ onMounted(async () => {
 </script>
 
 <template>
-  <section class="page-shell">
-    <header class="page-header">
-      <p class="eyebrow">客戶</p>
-      <h1>包裹追蹤</h1>
-      <p class="lede">直接列出所有與你相關的包裹，點擊可展開查看配送流程與預計送達。</p>
-    </header>
+  <UiPageShell
+    eyebrow="客戶"
+    title="包裹追蹤"
+    lede="直接列出所有與你相關的包裹，點擊可展開查看配送流程與預計送達。"
+  >
 
     <div class="tab-switch">
       <button class="tab-btn" :class="{ active: activeTab === 'in_transit' }" type="button" @click="activeTab = 'in_transit'">
@@ -595,7 +596,7 @@ onMounted(async () => {
       </button>
     </div>
 
-    <div class="card filters-card">
+    <UiCard class="filters-card">
       <div class="legend">
         <p class="eyebrow">篩選</p>
       </div>
@@ -637,9 +638,9 @@ onMounted(async () => {
         <button class="primary-btn" type="submit" :disabled="isLoading">{{ isLoading ? "套用中..." : "套用篩選" }}</button>
         <button class="ghost-btn" type="button" @click="clearFilters" :disabled="isLoading">清除篩選</button>
       </form>
-    </div>
+    </UiCard>
 
-    <div class="card">
+    <UiCard>
       <div class="legend">
         <p class="eyebrow">{{ activeTab === "in_transit" ? "配送中" : "配送紀錄" }}</p>
       </div>
@@ -766,8 +767,8 @@ onMounted(async () => {
           </li>
         </ul>
       </div>
-    </div>
-  </section>
+    </UiCard>
+  </UiPageShell>
 
   <div v-if="tooltip.open" ref="tooltipEl" class="hover-tip" :style="tooltipStyle" role="tooltip">
     {{ tooltip.text }}

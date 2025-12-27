@@ -6,6 +6,8 @@ import {
   type CustomerServiceExceptionRecord,
 } from "../services/api";
 import { exceptionReasonLabel } from "../lib/exceptionReasons";
+import UiCard from "../components/ui/UiCard.vue";
+import UiPageShell from "../components/ui/UiPageShell.vue";
 
 type TabKey = "current" | "history";
 type TaskKind = "exception" | "contract";
@@ -280,12 +282,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <section class="page-shell">
-    <header class="page-header">
-      <p class="eyebrow">員工 · 客服</p>
-      <h1>客服任務清單</h1>
-      <p class="lede">切換現在任務/過去紀錄，點開後再執行處理動作。</p>
-    </header>
+  <UiPageShell eyebrow="員工 · 客服" title="客服任務清單" lede="切換現在任務/過去紀錄，點開後再執行處理動作。">
 
     <div class="tab-switch">
       <button class="tab-btn" :class="{ active: activeTab === 'current' }" type="button" :disabled="isLoading" @click="activeTab = 'current'">
@@ -300,7 +297,7 @@ onMounted(async () => {
     <p v-if="error" class="hint" style="margin-top: 10px; color: #b91c1c">{{ error }}</p>
     <p v-else-if="notice" class="hint" style="margin-top: 10px; color: #166534">{{ notice }}</p>
 
-    <div class="card" style="margin-top: 16px">
+    <UiCard style="margin-top: 16px">
       <p v-if="isLoading" class="hint">載入中…</p>
       <p v-else-if="tasksForActiveTab.length === 0" class="hint">目前沒有資料。</p>
 
@@ -467,8 +464,8 @@ onMounted(async () => {
           </div>
         </li>
       </ul>
-    </div>
-  </section>
+    </UiCard>
+  </UiPageShell>
 </template>
 
 <style scoped>

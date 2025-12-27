@@ -2,6 +2,8 @@
 import { reactive, ref, watchEffect } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { api, type UpdateCustomerPayload } from '../services/api'
+import UiCard from '../components/ui/UiCard.vue'
+import UiPageShell from '../components/ui/UiPageShell.vue'
 
 const auth = useAuthStore()
 
@@ -52,14 +54,8 @@ const submitProfile = async () => {
 </script>
 
 <template>
-  <section class="page-shell">
-    <header class="page-header">
-      <p class="eyebrow">客戶</p>
-      <h1>更新個人資料</h1>
-      <p class="lede">修改你的姓名、電話、地址與支付偏好。</p>
-    </header>
-
-    <div class="card">
+  <UiPageShell eyebrow="客戶" title="更新個人資料" lede="修改你的姓名、電話、地址與支付偏好。">
+    <UiCard>
       <form class="form-grid" @submit.prevent="submitProfile">
         <label class="form-field">
           <span>姓名</span>
@@ -94,7 +90,7 @@ const submitProfile = async () => {
 
       <p v-if="errorMessage" class="hint" style="color: #b00020">{{ errorMessage }}</p>
       <p v-if="successMessage" class="hint">{{ successMessage }}</p>
-    </div>
-  </section>
+    </UiCard>
+  </UiPageShell>
 </template>
 
