@@ -53,6 +53,15 @@ const routeCost = ref<number | null>(null)
 const fallbackUsed = ref(false)
 const result = ref<PackageEstimateResponse['estimate'] | null>(null)
 const lastSpecialMarks = ref<SpecialMark[]>([])
+const lastSnapshot = reactive<{
+  billableWeightKg: number
+  volumetricWeightKg: number
+  boxType: BoxType | null
+}>({
+  billableWeightKg: 0,
+  volumetricWeightKg: 0,
+  boxType: null,
+})
 
 const volumetricWeightKg = computed(() => {
   const vol = (form.lengthCm || 0) * (form.widthCm || 0) * (form.heightCm || 0)
@@ -153,6 +162,9 @@ async function handleSubmit() {
   routeCost.value = null
   fallbackUsed.value = false
   lastSpecialMarks.value = []
+  lastSnapshot.billableWeightKg = billableWeightKg.value
+  lastSnapshot.volumetricWeightKg = volumetricWeightKg.value
+  lastSnapshot.boxType = boxType.value
 
   if (!form.fromNodeId || !form.toNodeId) {
     error.value = '請輸入起訖節點 ID（fromNodeId / toNodeId）。'
@@ -304,8 +316,11 @@ async function handleSubmit() {
           </div>
           <div>
             <p class="eyebrow">箱型與重量</p>
-            <p>箱型: {{ result.box_type }}</p>
-            <p>billable 重量: {{ billableWeightKg.toFixed(2) }} kg (材積 {{ volumetricWeightKg.toFixed(2) }} kg)</p>
+            <p>箱型: {{ lastSnapshot.boxType ?? result.box_type }}</p>
+            <p>
+              billable 重量: {{ lastSnapshot.billableWeightKg.toFixed(2) }} kg
+              (材積 {{ lastSnapshot.volumetricWeightKg.toFixed(2) }} kg)
+            </p>
           </div>
           <div>
             <p class="eyebrow">基礎與時效</p>
