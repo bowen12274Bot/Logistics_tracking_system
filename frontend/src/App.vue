@@ -3,57 +3,74 @@ import { computed } from 'vue'
 import { RouterLink, RouterView, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { useAuthStore } from './stores/auth'
+import { useI18n } from 'vue-i18n'
+
+type RoleNav = { to: string; labelKey: string }
 
 const auth = useAuthStore()
 const { user, isLoggedIn } = storeToRefs(auth)
 const router = useRouter()
+const { t, locale } = useI18n()
 
 const logout = () => {
   auth.logout()
   router.push('/')
 }
 
-const roleNav = computed(() => {
+const roleNav = computed<RoleNav | null>(() => {
   const role = user.value?.user_class
   if (!role) return null
 
   if (role === 'contract_customer' || role === 'non_contract_customer') {
-    return { to: '/customer', label: '客戶中心' }
+    return { to: '/customer', labelKey: 'nav.customer' }
   }
 
-  const map: Record<string, { to: string; label: string }> = {
-    driver: { to: '/employee/driver', label: '司機面板' },
-    warehouse_staff: { to: '/employee/warehouse', label: '倉儲面板' },
-    customer_service: { to: '/employee/customer-service', label: '客服面板' },
-    admin: { to: '/admin', label: '管理後台' },
+  const map: Record<string, RoleNav> = {
+    driver: { to: '/employee/driver', labelKey: 'nav.driver' },
+    warehouse_staff: { to: '/employee/warehouse', labelKey: 'nav.warehouse' },
+    customer_service: { to: '/employee/customer-service', labelKey: 'nav.customerService' },
+    admin: { to: '/admin', labelKey: 'nav.admin' },
   }
 
   return map[role] ?? null
 })
+
+const localeOptions = [
+  { value: 'zh-TW', labelKey: 'locale.zh' },
+  { value: 'en-US', labelKey: 'locale.en' },
+]
 </script>
 
 <template>
   <div class="app-shell">
     <header class="topbar">
       <div class="topbar-inner">
-        <RouterLink to="/" class="brand" aria-label="LogiSim 物流追蹤系統">
-          <span class="brand-mark">LogiSim</span>
-          <span class="brand-sub">物流追蹤系統</span>
+        <RouterLink to="/" class="brand" :aria-label="t('aria.brand')">
+          <span class="brand-mark">{{ t('brand.name') }}</span>
+          <span class="brand-sub">{{ t('brand.sub') }}</span>
         </RouterLink>
 
-        <nav class="nav-links" aria-label="主導覽">
-          <RouterLink to="/">首頁</RouterLink>
-          <RouterLink v-if="!isLoggedIn" to="/login">登入</RouterLink>
-          <RouterLink v-if="isLoggedIn && roleNav" :to="roleNav.to">{{ roleNav.label }}</RouterLink>
+        <nav class="nav-links" :aria-label="t('aria.mainNav')">
+          <RouterLink to="/">{{ t('nav.home') }}</RouterLink>
+          <RouterLink v-if="!isLoggedIn" to="/login">{{ t('nav.login') }}</RouterLink>
+          <RouterLink v-if="isLoggedIn && roleNav" :to="roleNav.to">{{ t(roleNav.labelKey) }}</RouterLink>
         </nav>
 
         <div class="topbar-actions">
+          <label class="locale-switch">
+            <span class="sr-only">{{ t('aria.localeSwitch') }}</span>
+            <select v-model="locale">
+              <option v-for="option in localeOptions" :key="option.value" :value="option.value">
+                {{ t(option.labelKey) }}
+              </option>
+            </select>
+          </label>
           <div v-if="isLoggedIn" class="user-chip">
             <span class="user-name">{{ user?.user_name }}</span>
             <span class="user-role">{{ user?.user_class }}</span>
-            <button class="ghost-btn small-btn" type="button" @click="logout">登出</button>
+            <button class="ghost-btn small-btn" type="button" @click="logout">{{ t('nav.logout') }}</button>
           </div>
-          <RouterLink v-else to="/login" class="primary-btn small-btn">登入</RouterLink>
+          <RouterLink v-else to="/login" class="primary-btn small-btn">{{ t('nav.login') }}</RouterLink>
         </div>
       </div>
     </header>
@@ -151,6 +168,26 @@ const roleNav = computed(() => {
   align-items: center;
   gap: 10px;
   justify-self: end;
+}
+
+.locale-switch select {
+  padding: 6px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  background: rgba(255, 255, 255, 0.8);
+  color: #2f2a24;
+  font-size: 12px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
 }
 
 .user-chip {
