@@ -7,6 +7,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { createRouter, createMemoryHistory } from 'vue-router'
+import { i18n } from '../../i18n'
 import PublicTrackView from '../../views/PublicTrackView.vue'
 
 // Mock API
@@ -35,7 +36,7 @@ describe('PublicTrackView', () => {
     it('應該渲染追蹤輸入欄位', () => {
       const wrapper = mount(PublicTrackView, {
         global: {
-          plugins: [router, createPinia()],
+          plugins: [router, createPinia(), i18n],
         },
       })
 
@@ -46,7 +47,7 @@ describe('PublicTrackView', () => {
     it('應該有查詢按鈕', () => {
       const wrapper = mount(PublicTrackView, {
         global: {
-          plugins: [router, createPinia()],
+          plugins: [router, createPinia(), i18n],
         },
       })
 
@@ -69,7 +70,7 @@ describe('PublicTrackView', () => {
 
       const wrapper = mount(PublicTrackView, {
         global: {
-          plugins: [router, createPinia()],
+          plugins: [router, createPinia(), i18n],
         },
       })
 
