@@ -1,9 +1,8 @@
 <script setup lang="ts">
-import { RouterLink, RouterView } from 'vue-router'
+import { computed } from 'vue'
+import { RouterLink, RouterView, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { useAuthStore } from './stores/auth'
-import { computed } from 'vue'
-import { useRouter } from 'vue-router'
 
 const auth = useAuthStore()
 const { user, isLoggedIn } = storeToRefs(auth)
@@ -19,14 +18,14 @@ const roleNav = computed(() => {
   if (!role) return null
 
   if (role === 'contract_customer' || role === 'non_contract_customer') {
-    return { to: '/customer', label: '客戶' }
+    return { to: '/customer', label: '客戶中心' }
   }
 
   const map: Record<string, { to: string; label: string }> = {
-    driver: { to: '/employee/driver', label: '司機' },
-    warehouse_staff: { to: '/employee/warehouse', label: '倉儲' },
-    customer_service: { to: '/employee/customer-service', label: '客服' },
-    admin: { to: '/admin', label: '管理' },
+    driver: { to: '/employee/driver', label: '司機面板' },
+    warehouse_staff: { to: '/employee/warehouse', label: '倉儲面板' },
+    customer_service: { to: '/employee/customer-service', label: '客服面板' },
+    admin: { to: '/admin', label: '管理後台' },
   }
 
   return map[role] ?? null
@@ -37,13 +36,13 @@ const roleNav = computed(() => {
   <div class="app-shell">
     <header class="topbar">
       <div class="topbar-inner">
-        <RouterLink to="/" class="brand" aria-label="回到總覽">
+        <RouterLink to="/" class="brand" aria-label="LogiSim 物流追蹤系統">
           <span class="brand-mark">LogiSim</span>
-          <span class="brand-sub">物流系統</span>
+          <span class="brand-sub">物流追蹤系統</span>
         </RouterLink>
 
         <nav class="nav-links" aria-label="主導覽">
-          <RouterLink to="/">總覽</RouterLink>
+          <RouterLink to="/">首頁</RouterLink>
           <RouterLink v-if="!isLoggedIn" to="/login">登入</RouterLink>
           <RouterLink v-if="isLoggedIn && roleNav" :to="roleNav.to">{{ roleNav.label }}</RouterLink>
         </nav>
@@ -54,7 +53,7 @@ const roleNav = computed(() => {
             <span class="user-role">{{ user?.user_class }}</span>
             <button class="ghost-btn small-btn" type="button" @click="logout">登出</button>
           </div>
-          <RouterLink v-else to="/login" class="primary-btn small-btn">開啟控制台</RouterLink>
+          <RouterLink v-else to="/login" class="primary-btn small-btn">登入</RouterLink>
         </div>
       </div>
     </header>
@@ -135,15 +134,6 @@ const roleNav = computed(() => {
   color: #3f2620;
 }
 
-.small-btn {
-  padding: 10px 16px;
-  border-radius: 999px;
-  font-weight: 700;
-  background: rgba(244, 182, 194, 0.4);
-  border-color: rgba(244, 182, 194, 0.55);
-  color: #3f2620;
-}
-
 .content {
   padding: 28px 0 72px;
   background: #fff8f2;
@@ -206,11 +196,13 @@ const roleNav = computed(() => {
 }
 
 .small-btn {
+  font-weight: 700;
   font-size: 12px;
   padding: 6px 10px;
   background: rgba(244, 182, 194, 0.4);
-  border-color: rgba(244, 182, 194, 0.55);
+  border: 1px solid rgba(244, 182, 194, 0.55);
   color: #3f2620;
+  border-radius: 999px;
 }
 
 @media (max-width: 768px) {
