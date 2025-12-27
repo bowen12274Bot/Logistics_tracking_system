@@ -16,6 +16,13 @@
 
 ### Toast vs Inline Notice
 
+Example:
+
+```vue
+<UiNotice v-if="error" tone="error" role="alert">{{ error }}</UiNotice>
+<UiNotice v-else-if="notice" tone="success">{{ notice }}</UiNotice>
+```
+
 - API 錯誤：使用 `toastFromApiError(...)` 統一吐 toast（422/409/5xx）；401/403 由全域導向處理，不需要各頁重複處理。
 - 表單/頁面內的「需要留在畫面上」的訊息：使用 `UiNotice`（`frontend/src/components/ui/UiNotice.vue`）。
 - 建議規則：

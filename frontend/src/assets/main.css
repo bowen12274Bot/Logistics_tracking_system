@@ -397,3 +397,9 @@ a {
   background: rgba(22, 163, 74, 0.06);
   color: rgb(20, 83, 45);
 }
+
+.ui-notice--info {
+  border-color: rgba(37, 99, 235, 0.24);
+  background: rgba(37, 99, 235, 0.06);
+  color: rgb(30, 64, 175);
+}

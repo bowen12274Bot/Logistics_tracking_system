@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { api } from '../services/api'
 import { useAuthStore } from '../stores/auth'
 import UiCard from '../components/ui/UiCard.vue'
+import UiNotice from '../components/ui/UiNotice.vue'
 import UiPageShell from '../components/ui/UiPageShell.vue'
 import { useToasts } from '../components/ui/toast'
 import { toastFromApiError } from '../services/errorToast'
@@ -555,7 +556,7 @@ const goToPayment = async () => {
                 <option value="prepaid">預付（寄件者付款）</option>
                 <option value="cod" :disabled="!isCodAllowed">到付（收件者付款）</option>
               </select>
-              <!--<small v-if="receiverCustomerCheckError" class="hint" style="color: #b00020">
+              <!--<small v-if="receiverCustomerCheckError" class="hint">
                 {{ receiverCustomerCheckError }}
               </small>
               <small v-else-if="receiverCustomerStatus === 'checking'" class="hint">正在確認收件人是否為系統客戶…</small>
@@ -616,16 +617,18 @@ const goToPayment = async () => {
           </div>
         </section>
 
-        <p v-if="errorMessage" class="hint send-message error">{{ errorMessage }}</p>
-        <p v-if="estimateError" class="hint send-message error">{{ estimateError }}</p>
-        <p v-if="estimateMessage" class="hint send-message success">{{ estimateMessage }}</p>
-        <p v-if="confirmation" class="hint send-message success">{{ confirmation }}</p>
+        <UiNotice v-if="errorMessage" tone="error" role="alert" class="send-message">{{ errorMessage }}</UiNotice>
+        <UiNotice v-if="estimateError" tone="error" role="alert" class="send-message">{{ estimateError }}</UiNotice>
+        <UiNotice v-if="estimateMessage" tone="info" class="send-message">{{ estimateMessage }}</UiNotice>
+        <UiNotice v-if="confirmation" tone="success" class="send-message">{{ confirmation }}</UiNotice>
 
         <div class="send-actions">
           <div v-if="lastCreatedPackageId" class="send-actions-left">
             <button class="primary-btn" type="button" @click="goToPayment">前往付款</button>
           </div>
-          <p v-if="lastCreatedPackageId" style="color:brown;">用戶尚未付款，請盡快前往付款。</p>
+          <UiNotice v-if="lastCreatedPackageId" tone="warning" class="send-message">
+            用戶尚未付款，請盡快前往付款。
+          </UiNotice>
           <div class="send-actions-right">
             <button class="ghost-btn" type="button" :disabled="isEstimating" @click="requestEstimate">
               {{ isEstimating ? '試算中…' : '運費試算' }}
@@ -793,13 +796,6 @@ const goToPayment = async () => {
   margin-top: 12px;
 }
 
-.send-message.error {
-  color: #b00020;
-}
-
-.send-message.success {
-  color: var(--text-muted);
-}
 
 .send-card code {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
