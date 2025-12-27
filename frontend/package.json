@@ -8,6 +8,7 @@
   },
   "scripts": {
     "dev": "vite",
+    "dev:utf8": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/utf8.ps1 vite",
     "build": "run-p type-check \"build-only {@}\" --",
     "preview": "vite preview",
     "test:unit": "vitest",

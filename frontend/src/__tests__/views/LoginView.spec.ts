@@ -11,6 +11,21 @@ import LoginView from '../../views/LoginView.vue'
 import { i18n } from '../../i18n'
 import { mockCustomerUser, createMockAuthResponse } from '../helpers'
 
+const toastWarningSpy = vi.fn()
+
+vi.mock('../../components/ui/toast', () => ({
+  useToasts: () => ({
+    items: { value: [] },
+    push: vi.fn(),
+    remove: vi.fn(),
+    clear: vi.fn(),
+    info: vi.fn(),
+    success: vi.fn(),
+    warning: toastWarningSpy,
+    error: vi.fn(),
+  }),
+}))
+
 // Mock API
 vi.mock('../../services/api', () => ({
   api: {
@@ -25,6 +40,7 @@ const router = createRouter({
   routes: [
     { path: '/', name: 'home', component: { template: '<div />' } },
     { path: '/login', name: 'login', component: LoginView },
+    { path: '/register', name: 'register', component: LoginView },
     { path: '/customer', name: 'customer-dashboard', component: { template: '<div />' } },
   ],
 })
@@ -73,6 +89,20 @@ describe('LoginView', () => {
   })
 
   describe('登入功能', () => {
+    it('reason=unauthorized 會顯示 toast 警告', async () => {
+      router.push({ path: '/login', query: { reason: 'unauthorized' } })
+      await router.isReady()
+
+      mount(LoginView, {
+        global: {
+          plugins: [router, createPinia()],
+        },
+      })
+
+      await flushPromises()
+      expect(toastWarningSpy).toHaveBeenCalledWith('請先登入以繼續。')
+    })
+
     it('點擊登入按鈕應觸發登入', async () => {
       const { api } = await import('../../services/api')
       vi.mocked(api.login).mockResolvedValue(createMockAuthResponse(mockCustomerUser))

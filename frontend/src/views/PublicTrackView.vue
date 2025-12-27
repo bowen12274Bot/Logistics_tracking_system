@@ -1,63 +1,52 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { useI18n } from 'vue-i18n'
-import { api, type TrackingPublicResponse } from '../services/api'
+import { ref } from "vue";
+import { api, type TrackingPublicResponse } from "../services/api";
+import UiCard from "../components/ui/UiCard.vue";
+import UiPageShell from "../components/ui/UiPageShell.vue";
+import { toastFromApiError } from "../services/errorToast";
 
-const { t, locale } = useI18n()
+const trackingNumber = ref("");
+const isLoading = ref(false);
+const error = ref<string | null>(null);
+const result = ref<TrackingPublicResponse | null>(null);
 
-const trackingNumber = ref('')
-const isLoading = ref(false)
-const error = ref<string | null>(null)
-const result = ref<TrackingPublicResponse | null>(null)
-
-const simplifiedProgress = (status?: string | null) =>
-  status === 'delivered' ? t('publicTrack.progress.delivered') : t('publicTrack.progress.inTransit')
+const simplifiedProgress = (status?: string | null) => (status === "delivered" ? "配送完成" : "配送中");
 
 const formatDateTime = (value?: string | null) => {
-  if (!value) return '-'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
-  return date.toLocaleString(locale.value === 'zh-TW' ? 'zh-TW' : 'en-US')
-}
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString();
+};
 
 const lookup = async () => {
-  if (!trackingNumber.value.trim()) return
+  if (!trackingNumber.value.trim()) return;
 
-  isLoading.value = true
-  error.value = null
-  result.value = null
+  isLoading.value = true;
+  error.value = null;
+  result.value = null;
   try {
-    result.value = await api.getTrackingPublic(trackingNumber.value.trim())
+    result.value = await api.getTrackingPublic(trackingNumber.value.trim());
   } catch (err) {
-    error.value = err instanceof Error ? err.message : String(err)
+    error.value = err instanceof Error ? err.message : String(err);
+    toastFromApiError(err, error.value ?? "查詢失敗");
   } finally {
-    isLoading.value = false
+    isLoading.value = false;
   }
-}
+};
 </script>
 
 <template>
-  <section class="page-shell">
-    <header class="page-header">
-      <p class="eyebrow">{{ t('publicTrack.eyebrow') }}</p>
-      <h1>{{ t('publicTrack.title') }}</h1>
-      <p class="lede">{{ t('publicTrack.lede') }}</p>
-    </header>
-
-    <div class="card">
+  <UiPageShell eyebrow="追蹤" title="包裹追蹤（公開）" lede="未登入可用追蹤編號查詢單一包裹。">
+    <UiCard>
       <form class="form-grid" @submit.prevent="lookup">
         <label class="form-field span-2">
-          <span>{{ t('publicTrack.trackingLabel') }}</span>
-          <input
-            v-model="trackingNumber"
-            name="trackingNumber"
-            type="text"
-            :placeholder="t('publicTrack.placeholder')"
-          />
+          <span>追蹤編號</span>
+          <input v-model="trackingNumber" name="trackingNumber" type="text" placeholder="例如 TRK-xxxx" />
         </label>
 
         <button class="primary-btn" type="submit" :disabled="isLoading || !trackingNumber.trim()">
-          {{ isLoading ? t('publicTrack.submitting') : t('publicTrack.submit') }}
+          {{ isLoading ? "查詢中..." : "查詢" }}
         </button>
       </form>
 
@@ -69,11 +58,11 @@ const lookup = async () => {
           <span class="tag">{{ simplifiedProgress(result.current_status) }}</span>
         </div>
         <div class="result-meta">
-          <span>{{ t('publicTrack.updatedAt', { time: formatDateTime(result.updated_at) }) }}</span>
+          <span>包裹更新時間：{{ formatDateTime(result.updated_at) }}</span>
         </div>
       </div>
-    </div>
-  </section>
+    </UiCard>
+  </UiPageShell>
 </template>
 
 <style scoped>
@@ -103,4 +92,5 @@ const lookup = async () => {
   font-size: 13px;
   opacity: 0.9;
 }
+
 </style>

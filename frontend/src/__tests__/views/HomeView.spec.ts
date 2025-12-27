@@ -16,6 +16,8 @@ const router = createRouter({
     { path: '/', name: 'home', component: HomeView },
     { path: '/login', name: 'login', component: { template: '<div />' } },
     { path: '/track', name: 'public-track', component: { template: '<div />' } },
+    { path: '/map', name: 'virtual-map', component: { template: '<div />' } },
+    { path: '/shipping/estimate', name: 'shipping-estimate', component: { template: '<div />' } },
   ],
 })
 

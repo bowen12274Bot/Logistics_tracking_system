@@ -4,6 +4,8 @@ import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '../stores/auth'
 import type { User } from '../services/api'
+import { useToasts } from '../components/ui/toast'
+import { toastFromApiError } from '../services/errorToast'
 
 type Mode = 'login' | 'register'
 type TestAccount = { email: string; password: string; roleKey: string }
@@ -12,9 +14,20 @@ const mode = ref<Mode>('login')
 const auth = useAuthStore()
 const router = useRouter()
 const route = useRoute()
+const toast = useToasts()
 const statusMessage = ref('')
 const loading = ref(false)
 const { t } = useI18n()
+
+const applyReasonHint = () => {
+  if (statusMessage.value) return
+  const reason = route.query.reason
+  if (reason === 'unauthorized') {
+    const message = t('login.reasonUnauthorized')
+    toast.warning(message)
+    statusMessage.value = message
+  }
+}
 
 const syncModeFromRoute = () => {
   const q = (route.query.mode as string | undefined) ?? ''
@@ -22,8 +35,12 @@ const syncModeFromRoute = () => {
   else mode.value = 'login'
 }
 
-onMounted(syncModeFromRoute)
+onMounted(() => {
+  syncModeFromRoute()
+  applyReasonHint()
+})
 watch(() => [route.path, route.query.mode], syncModeFromRoute)
+watch(() => route.query.reason, applyReasonHint)
 
 const switchMode = (next: Mode) => {
   mode.value = next
@@ -57,15 +74,6 @@ const quickAccounts = computed<TestAccount[]>(() => [
   { email: 'admin@example.com', password: 'admin123', roleKey: 'login.quickRoles.admin' },
 ])
 
-const roleHomeByCurrentUser = () => {
-  const r = auth.user?.user_class
-  if (r === 'admin') return '/admin'
-  if (r === 'customer_service') return '/employee/customer-service'
-  if (r === 'warehouse_staff') return '/employee/warehouse'
-  if (r === 'driver') return '/employee/driver'
-  return '/customer'
-}
-
 const getDefaultRouteForUser = (user: User | null | undefined) => {
   const role = user?.user_class
   if (!role) return '/'
@@ -94,7 +102,11 @@ const handleLogin = async () => {
     const redirect = route.query.redirect as string | undefined
     router.push(redirect ?? getDefaultRouteForUser(loggedInUser))
   } catch (err: any) {
-    statusMessage.value = err?.message ?? t('login.error')
+    const status = Number(err?.status)
+    const message = err?.message ?? (status === 401 ? t('login.error') : t('login.loginFailed'))
+    if (status === 401) toast.warning(message)
+    else toastFromApiError(err, message)
+    statusMessage.value = message
   } finally {
     loading.value = false
   }
@@ -121,7 +133,9 @@ const handleRegister = async () => {
     const redirect = (route.query.redirect as string) ?? '/customer'
     await router.push(redirect)
   } catch (err: any) {
-    statusMessage.value = err?.message ?? t('login.registerError')
+    const message = err?.message ?? t('login.registerError')
+    toastFromApiError(err, message)
+    statusMessage.value = message
   } finally {
     loading.value = false
   }
@@ -158,12 +172,7 @@ const fillTestAccount = (acct: TestAccount) => {
           <button :class="{ active: mode === 'login' }" type="button" role="tab" @click="switchMode('login')">
             {{ t('login.loginTab') }}
           </button>
-          <button
-            :class="{ active: mode === 'register' }"
-            type="button"
-            role="tab"
-            @click="switchMode('register')"
-          >
+          <button :class="{ active: mode === 'register' }" type="button" role="tab" @click="switchMode('register')">
             {{ t('login.registerTab') }}
           </button>
         </div>

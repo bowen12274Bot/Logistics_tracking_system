@@ -15,7 +15,7 @@ import { mockCustomerUser, createMockAuthResponse } from '../helpers'
 // Mock API
 vi.mock('../../services/api', () => ({
   api: {
-    getPackages: vi.fn().mockResolvedValue({ success: true, packages: [] }),
+    searchTracking: vi.fn().mockResolvedValue({ success: true, packages: [], total: 0 }),
     getPackageStatus: vi.fn(),
     getMap: vi.fn().mockResolvedValue({ success: true, nodes: [], edges: [] }),
   },
@@ -92,5 +92,21 @@ describe('CustomerTrackView', () => {
       // 頁面應該正常渲染而不會報錯
       expect(wrapper.exists()).toBe(true)
     })
+  })
+
+  it('prefills tracking filter from query', async () => {
+    router.push({ path: '/customer/track', query: { tracking_number: 'TRK-QUERY-1' } })
+    await router.isReady()
+
+    const wrapper = mount(CustomerTrackView, {
+      global: {
+        plugins: [router, createPinia(), i18n],
+      },
+    })
+
+    await flushPromises()
+    await wrapper.get('button.filters-toggle').trigger('click')
+    await flushPromises()
+    expect((wrapper.get('input[name="tracking_number"]').element as HTMLInputElement).value).toBe('TRK-QUERY-1')
   })
 })
