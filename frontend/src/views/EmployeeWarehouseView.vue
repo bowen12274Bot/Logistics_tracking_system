@@ -2,6 +2,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from "vue";
 import { RouterLink } from "vue-router";
+import { useI18n } from "vue-i18n";
 import { api, type WarehouseExceptionRecord, type WarehousePackageRecord } from "../services/api";
 import { exceptionReasonLabel, selectableReasonsFor } from "../lib/exceptionReasons";
 import UiCard from "../components/ui/UiCard.vue";
@@ -16,6 +17,7 @@ const loading = ref(true);
 const busy = ref(false);
 const error = ref<string | null>(null);
 const toast = useToasts();
+const { t } = useI18n();
 
 const warehouseNodeId = ref<string | null>(null);
 const neighbors = ref<string[]>([]);
@@ -31,7 +33,9 @@ const dispatched = computed(() => packages.value.filter((p) => p.ui_state === "d
 
 const exceptionModalOpen = ref(false);
 const exceptionTarget = ref<WarehousePackageRecord | null>(null);
-const exceptionReasons = selectableReasonsFor("warehouse_staff").map((r) => ({ code: r.code, label: r.label }));
+const exceptionReasons = computed(() =>
+  selectableReasonsFor("warehouse_staff").map((r) => ({ code: r.code, label: exceptionReasonLabel(r.code, t) })),
+);
 const exceptionForm = reactive({ reason_code: "", description: "" });
 const exceptionSubmitError = ref<string | null>(null);
 
@@ -321,7 +325,7 @@ onMounted(() => {
             <strong>{{ r.tracking_number ?? r.package_id }}</strong>
             <span class="hint">{{ (r.handled ?? 0) === 1 ? "已處理" : "未處理" }} · {{ r.reported_at ?? "-" }}</span>
           </div>
-          <div class="hint">{{ exceptionReasonLabel(r.reason_code) }}</div>
+          <div class="hint">{{ exceptionReasonLabel(r.reason_code, t) }}</div>
           <div class="hint">{{ r.description ?? "-" }}</div>
         </li>
       </UiList>
