@@ -291,24 +291,29 @@ const reviewContract = async () => {
   contracts.feedback = ''
   try {
     const credit = contracts.credit.trim()
-    const creditNum = credit ? Number(credit) : undefined
-    if (credit && (!Number.isFinite(creditNum) || creditNum < 0)) {
-      contracts.error = '信用額度需為正整數'
-      contracts.submitting = false
-      return
+    let creditLimit: number | undefined
+    if (credit) {
+      const creditNum = Number(credit)
+      if (!Number.isFinite(creditNum) || creditNum < 0) {
+        contracts.error = '淇＄敤椤嶅害?€?烘?存暩'
+        contracts.submitting = false
+        return
+      }
+      creditLimit = Math.floor(creditNum)
     }
     await api.adminReviewContractApplication(contracts.expandedId, {
       status: contracts.decision,
-      credit_limit: credit ? Math.floor(creditNum as number) : undefined,
+      credit_limit: creditLimit,
       review_notes: contracts.notes.trim() || undefined,
     })
-    contracts.feedback = contracts.decision === 'approved' ? '已核准合約申請' : '已拒絕合約申請'
+    contracts.feedback =
+      contracts.decision === 'approved' ? '宸叉牳?嗗?绱勭敵璜?' : '宸叉?绲曞?绱勭敵璜?'
     contracts.notes = ''
     contracts.credit = ''
     contracts.expandedId = ''
     await loadContracts()
   } catch (err: any) {
-    contracts.error = err?.message || '審核失敗'
+    contracts.error = err?.message || '瀵╂牳澶辨?'
   } finally {
     contracts.submitting = false
   }
@@ -325,7 +330,7 @@ const loadErrors = async () => {
     })
     errors.list = res.errors ?? []
   } catch (err: any) {
-    errors.error = err?.message || '載入系統錯誤失敗，改用範例資料'
+    errors.error = err?.message || '杓夊叆绯荤当?澶辨?锛屾敼?ㄧ?渚嬭???'
     errors.list = sampleErrors
   } finally {
     errors.loading = false
@@ -338,84 +343,18 @@ const settleBilling = async () => {
   billing.message = ''
   try {
     if (!/^\d{4}-\d{2}$/.test(billing.cycle)) {
-      billing.error = '請輸入 YYYY-MM'
+      billing.error = '璜嬭几??YYYY-MM'
       billing.loading = false
       return
     }
     await api.adminSettleBilling({ cycle_year_month: billing.cycle })
-    billing.message = `已送出 ${billing.cycle} 結算`
+    billing.message = '宸查€佸嚭 ' + billing.cycle + ' 绲愮?'
   } catch (err: any) {
-    billing.error = err?.message || '結算失敗'
+    billing.error = err?.message || '绲愮?澶辨?'
   } finally {
     billing.loading = false
   }
 }
-
-onMounted(async () => {
-  await Promise.all([loadUsers(), loadContracts(), loadErrors()])
-})
-</script>
-
-<template>
-  <section class="page-shell admin-hero">
-    <div class="hero-copy">
-      <p class="eyebrow">系統管理員</p>
-      <h1>管理後台</h1>
-      <p class="lede">日常維運、帳務、合約審核與權限管理。</p>
-      <div class="pill-row">
-        <span class="pill">登入：{{ adminEmail }}</span>
-        <span class="pill pill--success">角色：{{ auth.user?.user_class ?? 'admin' }}</span>
-        <span class="pill pill--muted">環境：{{ envMode }}</span>
-      </div>
-    </div>
-    <div class="card hero-side">
-      <p class="eyebrow">快速檢視</p>
-      <ul class="hero-list">
-        <li>帳期：{{ billing.cycle }}</li>
-        <li>待審合約：{{ contracts.list.filter((c) => c.status === 'pending').length }}</li>
-        <li>員工數：{{ users.list.length }}</li>
-      </ul>
-      <button class="ghost-btn small-btn" type="button" :disabled="errors.loading" @click="loadErrors">刷新錯誤</button>
-    </div>
-  </section>
-
-  <section class="page-shell grid two-col">
-    <div class="card">
-      <div class="card-head">
-        <div>
-          <p class="eyebrow">帳務</p>
-          <h2>帳期結算</h2>
-          <p class="hint">呼叫 /api/admin/billing/settle 產生月結帳單。</p>
-        </div>
-        <button class="primary-btn small-btn" type="button" :disabled="billing.loading" @click="settleBilling">
-          {{ billing.loading ? '執行中…' : '執行結算' }}
-        </button>
-      </div>
-      <div class="form-row">
-        <label class="form-field">
-          <span>帳期 (YYYY-MM)</span>
-          <input v-model="billing.cycle" type="month" />
-        </label>
-      </div>
-      <p v-if="billing.message" class="hint success">{{ billing.message }}</p>
-      <p v-if="billing.error" class="hint error">{{ billing.error }}</p>
-    </div>
-
-    <div class="card">
-      <div class="card-head">
-        <div>
-          <p class="eyebrow">系統</p>
-          <h2>系統錯誤列表</h2>
-        </div>
-        <button class="ghost-btn small-btn" type="button" :disabled="errors.loading" @click="loadErrors">重新整理</button>
-      </div>
-      <div class="filters">
-        <select v-model="errors.level">
-          <option value="all">全部等級</option>
-          <option value="info">Info</option>
-          <option value="warning">Warning</option>
-          <option value="error">Error</option>
-          <option value="critical">Critical</option>
         </select>
         <select v-model="errors.resolved">
           <option value="all">全部狀態</option>
