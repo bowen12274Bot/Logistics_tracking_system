@@ -11,27 +11,27 @@ import {
 
 const auth = useAuthStore()
 
-const adminName = computed(() => auth.user?.user_name || '系統管理員')
+const adminName = computed(() => auth.user?.user_name || '系統管�???)
 const adminEmail = computed(() => auth.user?.email || 'admin@example.com')
 const envMode = import.meta.env.MODE || 'development'
 
 const sampleUsers: AdminUserRecord[] = [
-  { id: 'u-driver', user_name: '司機 HUB_1', email: 'driver_hub_1@example.com', user_class: 'driver', user_type: 'employee', address: 'HUB_1', status: 'active' },
-  { id: 'u-warehouse', user_name: '倉庫 HUB_0', email: 'warehouse_hub_0@example.com', user_class: 'warehouse_staff', user_type: 'employee', address: 'HUB_0', status: 'active' },
-  { id: 'u-cs', user_name: '客服 REG_1', email: 'cs_reg_1@example.com', user_class: 'customer_service', user_type: 'employee', address: 'REG_1', status: 'suspended' },
-  { id: 'u-admin', user_name: '系統管理員', email: 'admin@example.com', user_class: 'admin', user_type: 'employee', address: 'HQ', status: 'active' },
+  { id: 'u-driver', user_name: '?��? HUB_1', email: 'driver_hub_1@example.com', user_class: 'driver', user_type: 'employee', address: 'HUB_1', status: 'active' },
+  { id: 'u-warehouse', user_name: '?�庫 HUB_0', email: 'warehouse_hub_0@example.com', user_class: 'warehouse_staff', user_type: 'employee', address: 'HUB_0', status: 'active' },
+  { id: 'u-cs', user_name: '客�? REG_1', email: 'cs_reg_1@example.com', user_class: 'customer_service', user_type: 'employee', address: 'REG_1', status: 'suspended' },
+  { id: 'u-admin', user_name: '系統管�???, email: 'admin@example.com', user_class: 'admin', user_type: 'employee', address: 'HQ', status: 'active' },
 ]
 
 const sampleContracts: AdminContractApplication[] = [
   {
     id: 'c-1',
     customer: { id: 'cust-1', email: 'cust@example.com' },
-    company_name: '範例科技',
+    company_name: '範�?科�?',
     tax_id: '12345678',
-    contact_person: '王小明',
+    contact_person: '?��???,
     contact_phone: '0912-345-678',
-    billing_address: '台北市信義區市府路 1 號',
-    notes: '月結 30 天',
+    billing_address: '?��?市信義�?市�?�?1 ??,
+    notes: '?��? 30 �?,
     status: 'pending',
     created_at: new Date().toISOString(),
   },
@@ -42,8 +42,8 @@ const sampleErrors: AdminSystemErrorRecord[] = [
     id: 'err-1',
     level: 'error',
     code: 'INTERNAL_ERROR',
-    message: '範例：API 500 /api/warehouse/packages',
-    details: 'REG-3 批次掃描失敗，重試 3 次仍 500',
+    message: '範�?：API 500 /api/warehouse/packages',
+    details: 'REG-3 ?�次?��?失�?，�?�?3 次�? 500',
     occurred_at: new Date().toISOString(),
     resolved: false,
   },
@@ -51,14 +51,14 @@ const sampleErrors: AdminSystemErrorRecord[] = [
     id: 'err-2',
     level: 'warning',
     code: 'DELAYED_JOB',
-    message: '範例：worker 延遲 15 分鐘',
-    details: '月結排程延遲 >15 分鐘，請檢查 queue 堆積',
+    message: '範�?：worker 延遲 15 ?��?',
+    details: '?��??��?延遲 >15 ?��?，�?檢查 queue ?��?',
     occurred_at: new Date(Date.now() - 3600 * 1000).toISOString(),
     resolved: true,
   },
 ]
 
-// 帳務
+// 帳�?
 const billing = reactive({
   cycle: new Date().toISOString().slice(0, 7),
   loading: false,
@@ -66,7 +66,7 @@ const billing = reactive({
   error: '',
 })
 
-// 系統錯誤
+// 系統?�誤
 const errors = reactive({
   list: [] as AdminSystemErrorRecord[],
   loading: false,
@@ -75,7 +75,7 @@ const errors = reactive({
   resolved: 'all' as 'all' | 'true' | 'false',
 })
 
-// 合約申請
+// ?��??��?
 const contracts = reactive({
   list: [] as AdminContractApplication[],
   loading: false,
@@ -89,7 +89,7 @@ const contracts = reactive({
   feedback: '',
 })
 
-// 員工管理
+// ?�工管�?
 const users = reactive({
   list: [] as AdminUserRecord[],
   loading: false,
@@ -118,18 +118,18 @@ const userStats = ref<{ tasks_completed: number; packages_processed: number; exc
 const userActionLoading = ref(false)
 
 const userClassLabel: Record<string, string> = {
-  driver: '司機',
-  warehouse_staff: '倉庫',
-  customer_service: '客服',
-  admin: '管理員',
-  contract_customer: '合約客戶',
-  non_contract_customer: '一般客戶',
+  driver: '?��?',
+  warehouse_staff: '?�庫',
+  customer_service: '客�?',
+  admin: '管�???,
+  contract_customer: '?��?客戶',
+  non_contract_customer: '一?�客??,
 }
 
 const statusLabel: Record<string, string> = {
-  active: '啟用',
-  suspended: '停用',
-  deleted: '已刪除',
+  active: '?�用',
+  suspended: '?�用',
+  deleted: '已刪??,
 }
 
 const statusTone = (status?: string) => {
@@ -156,7 +156,7 @@ const loadUsers = async () => {
     })
     users.list = res.users ?? []
   } catch (err: any) {
-    users.error = err?.message || '載入員工失敗，改用範例資料'
+    users.error = err?.message || '載入?�工失�?，改?��?例�???
     users.list = sampleUsers
   } finally {
     users.loading = false
@@ -168,7 +168,7 @@ const createUser = async () => {
   users.error = ''
   users.actionError = ''
   if (!createForm.user_name || !createForm.email || !createForm.password) {
-    users.actionError = '姓名、Email、密碼必填'
+    users.actionError = '姓�??�Email?��?碼�?�?
     return
   }
   users.creating = true
@@ -178,7 +178,7 @@ const createUser = async () => {
       phone_number: createForm.phone_number || undefined,
       address: createForm.address || undefined,
     })
-    users.actionMessage = '已建立員工帳號'
+    users.actionMessage = '已建立員工帳??
     Object.assign(createForm, {
       user_name: '',
       email: '',
@@ -189,7 +189,7 @@ const createUser = async () => {
     })
     await loadUsers()
   } catch (err: any) {
-    users.actionError = err?.message || '建立失敗'
+    users.actionError = err?.message || '建�?失�?'
   } finally {
     users.creating = false
   }
@@ -209,47 +209,47 @@ const toggleUserStatus = async (user: AdminUserRecord) => {
   try {
     if (user.status === 'active') {
       await api.adminSuspendUser(user.id, { reason: 'manual' })
-      users.actionMessage = '已停用'
+      users.actionMessage = '已�???
     } else {
       await api.adminActivateUser(user.id)
-      users.actionMessage = '已啟用'
+      users.actionMessage = '已�???
     }
     await loadUsers()
   } catch (err: any) {
-    users.actionError = err?.message || '狀態更新失敗'
+    users.actionError = err?.message || '?�?�更?�失??
   } finally {
     userActionLoading.value = false
   }
 }
 
 const resetPassword = async (user: AdminUserRecord) => {
-  const pwd = window.prompt(`請輸入 ${user.email} 的新密碼`, '')
+  const pwd = window.prompt(`請輸??${user.email} ?�新密碼`, '')
   if (!pwd) return
   userActionLoading.value = true
   users.actionError = ''
   users.actionMessage = ''
   try {
     await api.adminResetUserPassword(user.id, { new_password: pwd })
-    users.actionMessage = '已重設密碼並強制登出該用戶'
+    users.actionMessage = '已�?設�?碼並強制?�出該用??
   } catch (err: any) {
-    users.actionError = err?.message || '重設失敗'
+    users.actionError = err?.message || '?�設失�?'
   } finally {
     userActionLoading.value = false
   }
 }
 
 const assignVehicle = async (user: AdminUserRecord) => {
-  const code = window.prompt(`指派車輛給 ${user.email}，車輛代碼`, '')
+  const code = window.prompt(`?�派車�?�?${user.email}，�?輛代碼`, '')
   if (!code) return
-  const home = window.prompt('車輛起始節點（預設用戶地址，可留空）', user.address || '')
+  const home = window.prompt('車�?起�?節點�??�設?�戶?��?，可?�空�?, user.address || '')
   userActionLoading.value = true
   users.actionError = ''
   users.actionMessage = ''
   try {
     await api.adminAssignVehicle(user.id, { vehicle_code: code, home_node_id: home || undefined })
-    users.actionMessage = '已指派車輛'
+    users.actionMessage = '已�?派�?�?
   } catch (err: any) {
-    users.actionError = err?.message || '指派失敗'
+    users.actionError = err?.message || '?�派失�?'
   } finally {
     userActionLoading.value = false
   }
@@ -262,7 +262,7 @@ const fetchUserStats = async (user: AdminUserRecord) => {
     const res = await api.adminUserWorkStats(user.id)
     userStats.value = res.stats
   } catch (err: any) {
-    users.actionError = err?.message || '統計載入失敗'
+    users.actionError = err?.message || '統�?載入失�?'
   } finally {
     userActionLoading.value = false
   }
@@ -277,7 +277,7 @@ const loadContracts = async () => {
     )
     contracts.list = res.applications ?? []
   } catch (err: any) {
-    contracts.error = err?.message || '載入合約申請失敗，改用範例資料'
+    contracts.error = err?.message || '載入?��??��?失�?，改?��?例�???
     contracts.list = sampleContracts
   } finally {
     contracts.loading = false
@@ -295,7 +295,7 @@ const reviewContract = async () => {
     if (credit) {
       const creditNum = Number(credit)
       if (!Number.isFinite(creditNum) || creditNum < 0) {
-        contracts.error = '淇＄敤椤嶅害?€?烘?存暩'
+        contracts.error = '淇�??�椤嶅害????��??存暩'
         contracts.submitting = false
         return
       }
@@ -307,13 +307,13 @@ const reviewContract = async () => {
       review_notes: contracts.notes.trim() || undefined,
     })
     contracts.feedback =
-      contracts.decision === 'approved' ? '宸叉牳?嗗?绱勭敵璜?' : '宸叉?绲曞?绱勭敵璜?'
+      contracts.decision === 'approved' ? '宸�?????绱勭?��??' : '宸�??绲�??绱勭?��??'
     contracts.notes = ''
     contracts.credit = ''
     contracts.expandedId = ''
     await loadContracts()
   } catch (err: any) {
-    contracts.error = err?.message || '瀵╂牳澶辨?'
+    contracts.error = err?.message || '?��??�澶�?'
   } finally {
     contracts.submitting = false
   }
@@ -330,7 +330,7 @@ const loadErrors = async () => {
     })
     errors.list = res.errors ?? []
   } catch (err: any) {
-    errors.error = err?.message || '杓夊叆绯荤当?澶辨?锛屾敼?ㄧ?渚嬭???'
+    errors.error = err?.message || '?��??�绯?��???�澶�??�屾????渚嬭???'
     errors.list = sampleErrors
   } finally {
     errors.loading = false
@@ -343,12 +343,12 @@ const settleBilling = async () => {
   billing.message = ''
   try {
     if (!/^\d{4}-\d{2}$/.test(billing.cycle)) {
-      billing.error = '璜嬭几??YYYY-MM'
+      billing.error = '?�嬭???YYYY-MM'
       billing.loading = false
       return
     }
     await api.adminSettleBilling({ cycle_year_month: billing.cycle })
-    billing.message = '宸查€佸嚭 ' + billing.cycle + ' 绲愮?'
+    billing.message = '宸查?�佸??' + billing.cycle + ' 绲愮?'
   } catch (err: any) {
     billing.error = err?.message || '绲愮?澶辨?'
   } finally {
@@ -357,27 +357,27 @@ const settleBilling = async () => {
 }
         </select>
         <select v-model="errors.resolved">
-          <option value="all">全部狀態</option>
-          <option value="false">未處理</option>
-          <option value="true">已處理</option>
+          <option value="all">?�部?�??/option>
+          <option value="false">?��???/option>
+          <option value="true">已�???/option>
         </select>
         <button class="ghost-btn small-btn" type="button" :disabled="errors.loading" @click="loadErrors">套用篩選</button>
       </div>
-      <p v-if="errors.loading" class="hint">載入中…</p>
+      <p v-if="errors.loading" class="hint">載入中�?/p>
       <p v-else-if="errors.error" class="hint error">{{ errors.error }}</p>
-      <p v-else-if="!errors.list.length" class="hint">目前沒有錯誤紀錄。</p>
+      <p v-else-if="!errors.list.length" class="hint">?��?沒�??�誤紀?��?/p>
       <ul v-else class="list">
         <li v-for="err in errors.list" :key="err.id" class="row">
           <div>
             <strong>{{ err.code }}</strong>
             <p class="hint">{{ err.message }}</p>
-            <p class="hint">時間：{{ formatDateTime(err.occurred_at) }}</p>
+            <p class="hint">?��?：{{ formatDateTime(err.occurred_at) }}</p>
             <p v-if="err.details" class="hint">詳細：{{ err.details }}</p>
           </div>
           <div class="pill-stack">
             <span class="pill pill--muted">{{ err.level }}</span>
             <span :class="['pill', err.resolved ? 'pill--success' : 'pill--alert']">
-              {{ err.resolved ? '已處理' : '未處理' }}
+              {{ err.resolved ? '已�??? : '?��??? }}
             </span>
           </div>
         </li>
@@ -388,25 +388,25 @@ const settleBilling = async () => {
   <section class="page-shell">
     <header class="section-head">
       <div>
-        <p class="eyebrow">合約</p>
-        <h2>合約申請審核</h2>
-        <p class="hint">串接 /api/admin/contract-applications 與審核端點。</p>
+        <p class="eyebrow">?��?</p>
+        <h2>?��??��?審核</h2>
+        <p class="hint">串接 /api/admin/contract-applications ?�審?�端點�?/p>
       </div>
       <div class="filters">
         <select v-model="contracts.filter">
-          <option value="all">全部狀態</option>
-          <option value="pending">待審核</option>
-          <option value="approved">已核准</option>
-          <option value="rejected">已拒絕</option>
+          <option value="all">?�部?�??/option>
+          <option value="pending">待審??/option>
+          <option value="approved">已核??/option>
+          <option value="rejected">已�?�?/option>
         </select>
         <button class="ghost-btn small-btn" type="button" :disabled="contracts.loading" @click="loadContracts">
           套用篩選
         </button>
       </div>
     </header>
-    <p v-if="contracts.loading" class="hint">載入中…</p>
+    <p v-if="contracts.loading" class="hint">載入中�?/p>
     <p v-else-if="contracts.error" class="hint error">{{ contracts.error }}</p>
-    <p v-else-if="!contracts.list.length" class="hint">目前沒有合約申請。</p>
+    <p v-else-if="!contracts.list.length" class="hint">?��?沒�??��??��???/p>
     <div v-else class="card list">
       <div
         v-for="app in contracts.list"
@@ -417,8 +417,8 @@ const settleBilling = async () => {
         <button class="row-btn" type="button" @click="contracts.expandedId = contracts.expandedId === app.id ? '' : app.id">
           <div>
             <strong>{{ app.company_name }}</strong>
-            <p class="hint">申請人：{{ app.customer?.email || app.customer?.id }}</p>
-            <p class="hint">稅籍：{{ app.tax_id }}</p>
+            <p class="hint">?��?人�?{{ app.customer?.email || app.customer?.id }}</p>
+            <p class="hint">稅�?：{{ app.tax_id }}</p>
           </div>
           <div class="pill-stack">
             <span class="pill pill--muted">{{ app.status }}</span>
@@ -428,33 +428,33 @@ const settleBilling = async () => {
 
         <div v-if="contracts.expandedId === app.id" class="panel">
           <div class="detail-grid">
-            <p class="hint">聯絡人：{{ app.contact_person }}（{{ app.contact_phone }}）</p>
-            <p class="hint">帳單地址：{{ app.billing_address }}</p>
-            <p class="hint">備註：{{ app.notes || '-' }}</p>
+            <p class="hint">?�絡人�?{{ app.contact_person }}（{{ app.contact_phone }}�?/p>
+            <p class="hint">帳單?��?：{{ app.billing_address }}</p>
+            <p class="hint">?�註：{{ app.notes || '-' }}</p>
           </div>
           <div v-if="app.status === 'pending'" class="form-grid">
             <label class="form-field">
-              <span>審核結果</span>
+              <span>審核結�?</span>
               <select v-model="contracts.decision" :disabled="contracts.submitting">
-                <option value="approved">核准</option>
-                <option value="rejected">拒絕</option>
+                <option value="approved">?��?</option>
+                <option value="rejected">?��?</option>
               </select>
             </label>
             <label class="form-field">
-              <span>信用額度 (選填)</span>
+              <span>信用額度 (?�填)</span>
               <input v-model="contracts.credit" type="number" min="0" :disabled="contracts.submitting" />
             </label>
             <label class="form-field span-2">
-              <span>審核備註 (選填)</span>
+              <span>審核?�註 (?�填)</span>
               <textarea v-model="contracts.notes" rows="2" :disabled="contracts.submitting"></textarea>
             </label>
             <div class="actions">
               <button class="primary-btn" type="button" :disabled="contracts.submitting" @click="reviewContract">
-                {{ contracts.submitting ? '送出中…' : '送出審核' }}
+                {{ contracts.submitting ? '?�出中�? : '?�出審核' }}
               </button>
             </div>
           </div>
-          <p v-else class="hint">此申請已完成：{{ app.status }}</p>
+          <p v-else class="hint">此申請已完�?：{{ app.status }}</p>
           <p v-if="contracts.feedback" class="hint success">{{ contracts.feedback }}</p>
         </div>
       </div>
@@ -465,33 +465,33 @@ const settleBilling = async () => {
     <header class="section-head">
       <div>
         <p class="eyebrow">人員</p>
-        <h2>員工管理</h2>
-        <p class="hint">串接 /api/admin/users 全套操作。</p>
+        <h2>?�工管�?</h2>
+        <p class="hint">串接 /api/admin/users ?��??��???/p>
       </div>
       <div class="filters">
-        <input v-model="users.search" type="text" placeholder="搜尋姓名 / Email" />
+        <input v-model="users.search" type="text" placeholder="?��?姓�? / Email" />
         <select v-model="users.role">
-          <option value="all">全部角色</option>
-          <option value="driver">司機</option>
-          <option value="warehouse_staff">倉庫</option>
-          <option value="customer_service">客服</option>
-          <option value="admin">管理員</option>
+          <option value="all">?�部角色</option>
+          <option value="driver">?��?</option>
+          <option value="warehouse_staff">?�庫</option>
+          <option value="customer_service">客�?</option>
+          <option value="admin">管�???/option>
         </select>
         <select v-model="users.status">
-          <option value="all">全部狀態</option>
-          <option value="active">啟用</option>
-          <option value="suspended">停用</option>
-          <option value="deleted">已刪除</option>
+          <option value="all">?�部?�??/option>
+          <option value="active">?�用</option>
+          <option value="suspended">?�用</option>
+          <option value="deleted">已刪??/option>
         </select>
         <button class="ghost-btn small-btn" type="button" :disabled="users.loading" @click="loadUsers">套用篩選</button>
       </div>
     </header>
 
     <div class="card">
-      <p class="eyebrow">建立員工</p>
+      <p class="eyebrow">建�??�工</p>
       <div class="form-grid">
         <label class="form-field">
-          <span>姓名 *</span>
+          <span>姓�? *</span>
           <input v-model="createForm.user_name" type="text" />
         </label>
         <label class="form-field">
@@ -503,26 +503,26 @@ const settleBilling = async () => {
           <input v-model="createForm.password" type="password" />
         </label>
         <label class="form-field">
-          <span>電話</span>
+          <span>?�話</span>
           <input v-model="createForm.phone_number" type="tel" />
         </label>
         <label class="form-field">
-          <span>工作節點</span>
-          <input v-model="createForm.address" type="text" placeholder="例：HUB_0 / REG_1" />
+          <span>工�?節�?/span>
+          <input v-model="createForm.address" type="text" placeholder="例�?HUB_0 / REG_1" />
         </label>
         <label class="form-field">
           <span>角色</span>
           <select v-model="createForm.user_class">
-            <option value="driver">司機</option>
-            <option value="warehouse_staff">倉庫</option>
-            <option value="customer_service">客服</option>
-            <option value="admin">管理員</option>
+            <option value="driver">?��?</option>
+            <option value="warehouse_staff">?�庫</option>
+            <option value="customer_service">客�?</option>
+            <option value="admin">管�???/option>
           </select>
         </label>
       </div>
       <div class="actions">
         <button class="primary-btn" type="button" :disabled="users.creating" @click="createUser">
-          {{ users.creating ? '建立中…' : '建立員工' }}
+          {{ users.creating ? '建�?中�? : '建�??�工' }}
         </button>
         <p v-if="users.actionMessage" class="hint success">{{ users.actionMessage }}</p>
         <p v-if="users.actionError" class="hint error">{{ users.actionError }}</p>
@@ -530,9 +530,9 @@ const settleBilling = async () => {
     </div>
 
     <div class="card list">
-      <p v-if="users.loading" class="hint">載入中…</p>
+      <p v-if="users.loading" class="hint">載入中�?/p>
       <p v-else-if="users.error" class="hint error">{{ users.error }}</p>
-      <p v-else-if="!users.list.length" class="hint">沒有符合條件的員工。</p>
+      <p v-else-if="!users.list.length" class="hint">沒�?符�?條件?�員工�?/p>
       <div
         v-else
         v-for="user in users.list"
@@ -544,7 +544,7 @@ const settleBilling = async () => {
           <div>
             <strong>{{ user.user_name }}</strong>
             <p class="hint">{{ user.email }}</p>
-            <p class="hint">節點：{{ user.address || '--' }}</p>
+            <p class="hint">節點�?{{ user.address || '--' }}</p>
           </div>
           <div class="pill-stack">
             <span class="pill pill--muted">{{ userClassLabel[user.user_class] || user.user_class }}</span>
@@ -555,10 +555,10 @@ const settleBilling = async () => {
         <div v-if="users.selectedId === user.id" class="panel">
           <div class="actions">
             <button class="ghost-btn small-btn" type="button" :disabled="userActionLoading" @click="toggleUserStatus(user)">
-              {{ user.status === 'active' ? '停用' : '啟用' }}
+              {{ user.status === 'active' ? '?�用' : '?�用' }}
             </button>
             <button class="ghost-btn small-btn" type="button" :disabled="userActionLoading" @click="resetPassword(user)">
-              重設密碼
+              ?�設密碼
             </button>
             <button
               class="ghost-btn small-btn"
@@ -566,18 +566,18 @@ const settleBilling = async () => {
               :disabled="userActionLoading || user.user_class !== 'driver'"
               @click="assignVehicle(user)"
             >
-              指派車輛
+              ?�派車�?
             </button>
             <button class="ghost-btn small-btn" type="button" :disabled="userActionLoading" @click="fetchUserStats(user)">
-              工作統計
+              工�?統�?
             </button>
           </div>
           <p v-if="users.actionMessage" class="hint success">{{ users.actionMessage }}</p>
           <p v-if="users.actionError" class="hint error">{{ users.actionError }}</p>
           <div v-if="userStats" class="stats">
-            <p class="hint">任務完成：{{ userStats.tasks_completed }}</p>
-            <p class="hint">處理包裹：{{ userStats.packages_processed }}</p>
-            <p class="hint">異常回報：{{ userStats.exceptions_reported }}</p>
+            <p class="hint">任�?完�?：{{ userStats.tasks_completed }}</p>
+            <p class="hint">?��??�裹：{{ userStats.packages_processed }}</p>
+            <p class="hint">?�常?�報：{{ userStats.exceptions_reported }}</p>
           </div>
         </div>
       </div>
