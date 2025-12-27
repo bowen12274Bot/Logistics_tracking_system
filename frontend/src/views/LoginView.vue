@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { reactive, ref, watch, onMounted } from 'vue'
+import { reactive, ref, watch, onMounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '../stores/auth'
 import type { User } from '../services/api'
 
 type Mode = 'login' | 'register'
-type TestAccount = { email: string; password: string; role: string }
+type TestAccount = { email: string; password: string; roleKey: string }
 
 const mode = ref<Mode>('login')
 const auth = useAuthStore()
@@ -13,6 +14,7 @@ const router = useRouter()
 const route = useRoute()
 const statusMessage = ref('')
 const loading = ref(false)
+const { t } = useI18n()
 
 const syncModeFromRoute = () => {
   const q = (route.query.mode as string | undefined) ?? ''
@@ -47,13 +49,13 @@ const registerForm = reactive({
   address: '',
 })
 
-const quickAccounts = [
-  { email: 'customer@example.com', password: 'customer123', role: '客戶' },
-  { email: 'driver_hub_0@example.com', password: 'driver123', role: '司機' },
-  { email: 'warehouse_hub_0@example.com', password: 'warehouse123', role: '倉儲' },
-  { email: 'cs@example.com', password: 'cs123', role: '客服' },
-  { email: 'admin@example.com', password: 'admin123', role: '管理員' },
-]
+const quickAccounts = computed<TestAccount[]>(() => [
+  { email: 'customer@example.com', password: 'customer123', roleKey: 'login.quickRoles.customer' },
+  { email: 'driver_hub_0@example.com', password: 'driver123', roleKey: 'login.quickRoles.driver' },
+  { email: 'warehouse_hub_0@example.com', password: 'warehouse123', roleKey: 'login.quickRoles.warehouse' },
+  { email: 'cs@example.com', password: 'cs123', roleKey: 'login.quickRoles.cs' },
+  { email: 'admin@example.com', password: 'admin123', roleKey: 'login.quickRoles.admin' },
+])
 
 const roleHomeByCurrentUser = () => {
   const r = auth.user?.user_class
@@ -84,7 +86,7 @@ const handleLogin = async () => {
   statusMessage.value = ''
   loading.value = true
 
-  // ✅ 強制清掉舊登入狀態（避免 admin 殘留）
+  // clear stale state before new login attempt
   auth.logout()
 
   try {
@@ -92,7 +94,7 @@ const handleLogin = async () => {
     const redirect = route.query.redirect as string | undefined
     router.push(redirect ?? getDefaultRouteForUser(loggedInUser))
   } catch (err: any) {
-    statusMessage.value = err?.message ?? '帳號或密碼錯誤'
+    statusMessage.value = err?.message ?? t('login.error')
   } finally {
     loading.value = false
   }
@@ -102,7 +104,7 @@ const handleRegister = async () => {
   statusMessage.value = ''
   loading.value = true
 
-  // ✅ 強制清掉舊登入狀態
+  // clear stale state before register attempt
   auth.logout()
 
   try {
@@ -116,30 +118,29 @@ const handleRegister = async () => {
       user_class: 'non_contract_customer',
     })
 
-    // ✅ 註冊完成後：若有 redirect 就回去，沒有就去客戶首頁
     const redirect = (route.query.redirect as string) ?? '/customer'
     await router.push(redirect)
   } catch (err: any) {
-    statusMessage.value = err?.message ?? '註冊失敗，請稍後再試'
+    statusMessage.value = err?.message ?? t('login.registerError')
   } finally {
     loading.value = false
   }
 }
 
-const testAccounts: TestAccount[] = [
-  { email: 'cust@example.com', password: 'cust123', role: '合約客戶' },
-  { email: 'noncontract@example.com', password: 'custnc123', role: '非合約客戶' },
-  { email: 'driver_hub_0@example.com', password: 'driver123', role: '貨車司機' },
-  { email: 'warehouse_hub_0@example.com', password: 'warehouse123', role: '倉儲人員' },
-  { email: 'cs@example.com', password: 'cs123', role: '客服專員' },
-  { email: 'admin@example.com', password: 'admin123', role: '系統管理員' },
-]
+const testAccounts = computed<TestAccount[]>(() => [
+  { email: 'cust@example.com', password: 'cust123', roleKey: 'login.testRoles.contract' },
+  { email: 'noncontract@example.com', password: 'custnc123', roleKey: 'login.testRoles.nonContract' },
+  { email: 'driver_hub_0@example.com', password: 'driver123', roleKey: 'login.testRoles.driver' },
+  { email: 'warehouse_hub_0@example.com', password: 'warehouse123', roleKey: 'login.testRoles.warehouse' },
+  { email: 'cs@example.com', password: 'cs123', roleKey: 'login.testRoles.cs' },
+  { email: 'admin@example.com', password: 'admin123', roleKey: 'login.testRoles.admin' },
+])
 
 const fillTestAccount = (acct: TestAccount) => {
   switchMode('login')
   loginForm.identifier = acct.email
   loginForm.password = acct.password
-  statusMessage.value = `已填入：${acct.role}`
+  statusMessage.value = `${t('login.filled')}: ${t(acct.roleKey)}`
 }
 </script>
 
@@ -147,39 +148,41 @@ const fillTestAccount = (acct: TestAccount) => {
   <section class="auth-page">
     <div class="auth-card">
       <header class="page-header auth-header">
-        <p class="eyebrow">帳號</p>
-        <h1>登入 / 註冊</h1>
-        <p class="lede">以帳號登入取得對應角色權限，或立即註冊新客戶。</p>
+        <p class="eyebrow">{{ t('login.eyebrow') }}</p>
+        <h1>{{ t('login.title') }}</h1>
+        <p class="lede">{{ t('login.lede') }}</p>
       </header>
 
       <div class="auth-panel">
-        <div class="tab-switch auth-tabs" role="tablist" aria-label="登入或註冊">
-          <button :class="{ active: mode === 'login' }" type="button" role="tab" @click="switchMode('login')">登入</button>
+        <div class="tab-switch auth-tabs" role="tablist" :aria-label="t('login.tabAria')">
+          <button :class="{ active: mode === 'login' }" type="button" role="tab" @click="switchMode('login')">
+            {{ t('login.loginTab') }}
+          </button>
           <button
             :class="{ active: mode === 'register' }"
             type="button"
             role="tab"
             @click="switchMode('register')"
           >
-            註冊
+            {{ t('login.registerTab') }}
           </button>
         </div>
 
         <form v-if="mode === 'login'" class="auth-login-grid" @submit.prevent="handleLogin">
           <label class="form-field">
-            <span>Email 或帳號</span>
+            <span>{{ t('login.identifier') }}</span>
             <input
               v-model="loginForm.identifier"
               required
               name="identifier"
               type="text"
-              placeholder="cust@example.com 或 0912xxxxxx"
+              :placeholder="t('login.identifierPlaceholder')"
               autocomplete="username"
             />
           </label>
 
           <label class="form-field">
-            <span>密碼</span>
+            <span>{{ t('login.password') }}</span>
             <input
               v-model="loginForm.password"
               required
@@ -191,14 +194,20 @@ const fillTestAccount = (acct: TestAccount) => {
           </label>
 
           <button class="primary-btn auth-submit" type="submit" :disabled="loading">
-            {{ loading ? '登入中...' : '登入' }}
+            {{ loading ? t('login.loggingIn') : t('login.loginTab') }}
           </button>
         </form>
 
         <form v-else class="auth-register-grid" @submit.prevent="handleRegister">
           <label class="form-field reg-name">
-            <span>姓名</span>
-            <input v-model="registerForm.user_name" required name="user_name" type="text" placeholder="姓名" />
+            <span>{{ t('login.register.name') }}</span>
+            <input
+              v-model="registerForm.user_name"
+              required
+              name="user_name"
+              type="text"
+              :placeholder="t('login.register.namePlaceholder')"
+            />
           </label>
 
           <label class="form-field reg-email">
@@ -207,22 +216,32 @@ const fillTestAccount = (acct: TestAccount) => {
           </label>
 
           <label class="form-field reg-password">
-            <span>密碼</span>
+            <span>{{ t('login.password') }}</span>
             <input v-model="registerForm.password" required name="password" type="password" placeholder="********" />
           </label>
 
           <label class="form-field reg-phone">
-            <span>手機（選填）</span>
-            <input v-model="registerForm.phone_number" name="phone_number" type="text" placeholder="09xxxxxxxx" />
+            <span>{{ t('login.register.phone') }}</span>
+            <input
+              v-model="registerForm.phone_number"
+              name="phone_number"
+              type="text"
+              :placeholder="t('login.register.phonePlaceholder')"
+            />
           </label>
 
           <label class="form-field reg-address">
-            <span>地址（選填）</span>
-            <input v-model="registerForm.address" name="address" type="text" placeholder="收件地址" />
+            <span>{{ t('login.register.address') }}</span>
+            <input
+              v-model="registerForm.address"
+              name="address"
+              type="text"
+              :placeholder="t('login.register.addressPlaceholder')"
+            />
           </label>
 
           <button class="primary-btn auth-submit reg-submit" type="submit" :disabled="loading">
-            {{ loading ? '註冊中...' : '註冊' }}
+            {{ loading ? t('login.registering') : t('login.registerTab') }}
           </button>
         </form>
 
@@ -230,7 +249,7 @@ const fillTestAccount = (acct: TestAccount) => {
       </div>
 
       <div v-if="mode === 'login'" class="auth-panel auth-panel--test">
-        <p class="hint auth-test-hint">快速測試帳號（會自動填入正確密碼）</p>
+        <p class="hint auth-test-hint">{{ t('login.testHint') }}</p>
         <div class="test-account-actions" role="list">
           <button
             v-for="acct in testAccounts"
@@ -240,7 +259,7 @@ const fillTestAccount = (acct: TestAccount) => {
             role="listitem"
             @click="fillTestAccount(acct)"
           >
-            <strong>{{ acct.role }}</strong>
+            <strong>{{ t(acct.roleKey) }}</strong>
             <span class="test-account-meta">{{ acct.email }}</span>
           </button>
         </div>
