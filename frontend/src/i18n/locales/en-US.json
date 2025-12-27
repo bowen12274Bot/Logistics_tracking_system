@@ -484,6 +484,8 @@
   "driver.actions.refresh": "Refresh",
   "driver.actions.map": "Open driver map",
   "driver.loading": "Loading...",
+  "driver.errors.loadFailed": "Load failed",
+  "driver.errors.actionFailed": "Action failed",
   "driver.currentLocation": "Current node: {node} (handoff tasks only appear at HUB/REG)",
   "driver.assignedCount": "Assigned segments: {count}",
   "driver.handoffCount": "Handoff segments: {count}",

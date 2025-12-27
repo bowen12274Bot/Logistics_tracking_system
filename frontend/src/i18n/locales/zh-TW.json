@@ -484,6 +484,8 @@
   "driver.actions.refresh": "重新整理",
   "driver.actions.map": "前往司機地圖",
   "driver.loading": "載入中...",
+  "driver.errors.loadFailed": "載入失敗",
+  "driver.errors.actionFailed": "操作失敗",
   "driver.currentLocation": "目前位置：{node}（只有在 HUB/REG 節點會出現可接手任務）",
   "driver.assignedCount": "指派給我的任務段：{count}",
   "driver.handoffCount": "可接手任務段：{count}",
