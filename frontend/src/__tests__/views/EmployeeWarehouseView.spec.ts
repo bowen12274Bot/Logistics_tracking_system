@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import { i18n } from '../../i18n'
@@ -23,7 +23,10 @@ vi.mock('../../services/api', () => ({
 
 const router = createRouter({
   history: createMemoryHistory(),
-  routes: [{ path: '/', name: 'home', component: { template: '<div />' } }],
+  routes: [
+    { path: '/', name: 'home', component: { template: '<div />' } },
+    { path: '/map', name: 'map', component: { template: '<div />' } },
+  ],
 })
 
 describe('EmployeeWarehouseView', () => {
@@ -40,6 +43,8 @@ describe('EmployeeWarehouseView', () => {
         plugins: [router, createPinia(), i18n],
       },
     })
+    await flushPromises()
+    await flushPromises()
 
     expect(wrapper.text()).toContain(i18n.global.t('warehouse.page.title'))
     expect(wrapper.text()).toContain(i18n.global.t('warehouse.section.receive.title'))
