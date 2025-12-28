@@ -87,8 +87,14 @@ export class DriverTaskListV2 extends OpenAPIRoute {
         t.*,
         p.tracking_number,
         p.status AS package_status,
+        p.sender_name,
+        p.sender_phone,
         p.sender_address,
+        p.receiver_name,
+        p.receiver_phone,
         p.receiver_address,
+        p.weight,
+        p.size,
         p.delivery_time,
         p.payment_type,
         COALESCE(pmt.total_amount, p.declared_value) AS payment_amount,
@@ -109,7 +115,13 @@ export class DriverTaskListV2 extends OpenAPIRoute {
       TaskRow & {
         tracking_number?: string | null;
         sender_address?: string | null;
+        sender_name?: string | null;
+        sender_phone?: string | null;
         receiver_address?: string | null;
+        receiver_name?: string | null;
+        receiver_phone?: string | null;
+        weight?: number | null;
+        size?: string | null;
         delivery_time?: string | null;
         payment_type?: string | null;
         payment_amount?: number | null;

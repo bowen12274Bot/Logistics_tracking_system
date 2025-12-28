@@ -1,5 +1,7 @@
 ﻿<script setup lang="ts">
 import { computed, onMounted, reactive, ref } from "vue";
+import { useRoute } from "vue-router";
+import { useI18n } from "vue-i18n";
 import { api, type DeliveryTaskRecord, type MapEdge, type MapNode, type VehicleRecord } from "../services/api";
 import { useFullscreen } from "../composables/useFullscreen";
 import { selectableReasonsFor } from "../lib/exceptionReasons";
@@ -12,6 +14,9 @@ import { toastFromApiError } from "../services/errorToast";
 const truckIconUrl = new URL("../assets/truck.png", import.meta.url).href;
 
 type ViewBox = { x: number; y: number; w: number; h: number };
+
+const route = useRoute();
+const { t } = useI18n();
 
 const loading = ref(true);
 const error = ref<string | null>(null);
@@ -176,79 +181,24 @@ const hoveredNodeId = ref<string | null>(null);
 
 const assignedTasks = ref<DeliveryTaskRecord[]>([]);
 const handoffTasks = ref<DeliveryTaskRecord[]>([]);
-const arrivePanelOpen = ref(false);
-const arrivePanelTab = ref<"actions" | "handoff">("actions");
+const sidebarCollapsed = ref(false);
 const arriveError = ref<string | null>(null);
 const arriveBusy = ref(false);
+const expandedTaskKeys = ref<Set<string>>(new Set());
+const lastSyncAt = ref<string | null>(null);
 const cargo = ref<Array<{ package_id: string; tracking_number: string | null; loaded_at: string | null }>>([]);
 const cargoPackageIds = computed(() => new Set(cargo.value.map((c) => String(c.package_id))));
 
-const tasksAtCurrentNode = computed(() => {
-  const nodeId = currentNodeId.value;
-  if (!nodeId) return [];
-  return assignedTasks.value.filter((t) => {
-    const from = String(t.from_location ?? "").trim();
-    const status = String(t.status ?? "").trim().toLowerCase();
-    const pkgStatus = String(t.package_status ?? "").trim().toLowerCase();
-    return (
-      from === nodeId &&
-      (status === "pending" || status === "accepted") &&
-      pkgStatus !== "exception"
-    );
-  });
-});
-
-const tasksEndingAtCurrentNode = computed(() => {
-  const nodeId = currentNodeId.value;
-  if (!nodeId) return [];
-  return assignedTasks.value.filter((t) => String(t.to_location ?? "").trim() === nodeId);
-});
+function toggleTaskExpanded(key: string) {
+  const next = new Set(expandedTaskKeys.value);
+  if (next.has(key)) next.delete(key);
+  else next.add(key);
+  expandedTaskKeys.value = next;
+}
 
 function canDropoffTask(task: DeliveryTaskRecord) {
   if (String(task.status) !== "in_progress") return false;
   return cargoPackageIds.value.has(String(task.package_id));
-}
-
-function taskRouteLabel(task: DeliveryTaskRecord) {
-  const to = task.to_location ?? "-";
-  const status = String(task.status ?? "").trim().toLowerCase();
-  if (status === "in_progress") {
-    const from = currentNodeId.value ?? task.from_location ?? "-";
-    return `${from} → ${to}`;
-  }
-  const from = task.from_location ?? "-";
-  return `${from} → ${to}`;
-}
-
-function paymentLabel(task: DeliveryTaskRecord) {
-  const raw = String(task.payment_method ?? task.payment_type ?? "").trim();
-  const key = raw.toLowerCase();
-  const methodLabel =
-    key === "cod"
-      ? "貨到付款"
-      : key === "cash"
-        ? "現金"
-        : key === "prepaid"
-          ? "預付"
-          : key === "credit_card"
-            ? "信用卡"
-            : key === "bank_transfer"
-            ? "銀行轉帳"
-            : raw || "未設定";
-
-  // 是否已付款：僅以 paid_at 判斷，預付但未付款也顯示未付款
-  const paidFlag = Boolean(task.paid_at);
-  const paid = paidFlag ? "已付款" : "未付款";
-
-  const needCash = !paidFlag && /cash|cod|貨到|現金/i.test(key);
-  const cashHint = needCash ? " · 需收現金" : "";
-
-  const amount =
-    !paidFlag && task.payment_amount != null && !Number.isNaN(Number(task.payment_amount))
-      ? ` · 需付款 ${task.payment_amount}`
-      : "";
-
-  return `付款：${methodLabel} · ${paid}${amount}${cashHint}`;
 }
 
 function paymentDueAmount(task: DeliveryTaskRecord) {
@@ -258,24 +208,141 @@ function paymentDueAmount(task: DeliveryTaskRecord) {
   return amount;
 }
 
-function paymentDueDisplay(task: DeliveryTaskRecord) {
-  const amount = paymentDueAmount(task);
-  return amount == null ? "" : ` · 應收款：${amount}`;
+function deliveryTimeLabel(raw: unknown) {
+  const key = String(raw ?? "").trim().toLowerCase();
+  if (!key) return t("driver.map.deliveryTime.unset");
+  if (key === "standard") return t("driver.map.deliveryTime.standard");
+  if (key === "express") return t("driver.map.deliveryTime.express");
+  if (key === "economy") return t("driver.map.deliveryTime.economy");
+  return String(raw);
 }
 
-const droppableTasksEndingAtCurrentNode = computed(() => tasksEndingAtCurrentNode.value.filter(canDropoffTask));
+function taskTypeLabel(raw: unknown) {
+  const key = String(raw ?? "").trim().toLowerCase();
+  if (key === "pickup") return t("driver.map.taskType.pickup");
+  if (key === "dropoff") return t("driver.map.taskType.dropoff");
+  return String(raw ?? "");
+}
 
-const otherAssignedTasks = computed(() => {
-  const nodeId = currentNodeId.value;
+function routeLabel(task: DeliveryTaskRecord) {
+  const from = String(task.from_location ?? "-").trim() || "-";
+  const to = String(task.to_location ?? "-").trim() || "-";
+  return `${from} → ${to}`;
+}
+
+function isCashPayment(task: DeliveryTaskRecord) {
+  const method = String(task.payment_method ?? "").trim().toLowerCase();
+  const type = String(task.payment_type ?? "").trim().toLowerCase();
+  return method === "cash" || type === "cod";
+}
+
+function dimensionsLabelFromTask(task: DeliveryTaskRecord) {
+  const l = Number(task.length);
+  const w = Number(task.width);
+  const h = Number(task.height);
+  if ([l, w, h].every((n) => Number.isFinite(n) && n > 0)) return `${l}×${w}×${h} cm`;
+
+  const raw = String(task.size ?? "").trim();
+  if (!raw) return "--";
+  const match = raw.match(/(\d+(?:\.\d+)?)\s*[xX×*]\s*(\d+(?:\.\d+)?)\s*[xX×*]\s*(\d+(?:\.\d+)?)/);
+  if (!match) return raw;
+  return `${match[1]}×${match[2]}×${match[3]} cm`;
+}
+
+function weightLabelFromTask(task: DeliveryTaskRecord) {
+  const kg = Number(task.weight);
+  if (!Number.isFinite(kg) || kg <= 0) return "--";
+  return `${kg} kg`;
+}
+
+function paymentStatusLabel(task: DeliveryTaskRecord) {
+  return task.paid_at ? t("driver.map.paymentStatus.paid") : t("driver.map.paymentStatus.unpaid");
+}
+
+function cashDueHint(task: DeliveryTaskRecord) {
+  if (task.paid_at) return "";
+  const amount = paymentDueAmount(task);
+  if (amount == null) return "";
+  if (!isCashPayment(task)) return "";
+  return t("driver.map.payment.cashHint");
+}
+
+function destinationForTask(task: DeliveryTaskRecord) {
+  const nodeId = (currentNodeId.value ?? "").trim();
+  const to = String(task.to_location ?? "").trim();
+  const from = String(task.from_location ?? "").trim();
+  const status = String(task.status ?? "").trim().toLowerCase();
+  const onTruck = cargoPackageIds.value.has(String(task.package_id));
+
+  const destination =
+    nodeId && to === nodeId && !onTruck
+      ? from
+      : status === "in_progress"
+        ? to
+        : from;
+
+  return destination.trim() || null;
+}
+
+function canEnrouteTask(task: DeliveryTaskRecord) {
+  const dest = destinationForTask(task);
+  const nodeId = (currentNodeId.value ?? "").trim();
+  if (!dest) return false;
+  if (!nodeId) return true;
+  return dest !== nodeId;
+}
+
+function isCodStoreTask(task: DeliveryTaskRecord) {
+  const paymentType = String(task.payment_type ?? "").trim().toLowerCase();
+  if (paymentType !== "cod") return false;
+  const to = String(task.to_location ?? task.receiver_address ?? "").trim().toUpperCase();
+  return to.startsWith("END_STORE_");
+}
+
+function needsCashCollection(task: DeliveryTaskRecord) {
+  if (task.paid_at) return false;
+  if (paymentDueAmount(task) == null) return false;
+  if (isCodStoreTask(task)) return false;
+  const type = String(task.payment_type ?? "").trim().toLowerCase();
+  if (type !== "prepaid" && type !== "cod") return false;
+
+  const method = String(task.payment_method ?? "").trim().toLowerCase();
+  return method === "" || method === "cash";
+}
+
+function canDropoffNow(task: DeliveryTaskRecord) {
+  if (!canDropoffTask(task)) return false;
+  if (task.paid_at) return true;
+  const type = String(task.payment_type ?? "").trim().toLowerCase();
+  const to = String(task.to_location ?? "").trim().toUpperCase();
+  if (type === "cod" && to.startsWith("END_HOME_") && paymentDueAmount(task) != null) return false;
+  return true;
+}
+
+function canPickupNow(task: DeliveryTaskRecord) {
+  const status = String(task.status ?? "").trim().toLowerCase();
+  if (status !== "pending" && status !== "accepted") return false;
+  if (task.paid_at) return true;
+  const type = String(task.payment_type ?? "").trim().toLowerCase();
+  if (type === "prepaid" && paymentDueAmount(task) != null) return false;
+  return true;
+}
+
+type TaskActionKind = "pickup" | "dropoff" | "collect" | "enroute" | "takeover";
+type TaskListItem = {
+  key: string;
+  source: "assigned" | "handoff";
+  task: DeliveryTaskRecord;
+  note?: string;
+  action: { kind: TaskActionKind; label: string; disabled?: boolean; reason?: string } | null;
+};
+
+const activeAssignedTasks = computed(() => {
   return assignedTasks.value.filter((t) => {
-    const from = String(t.from_location ?? "").trim();
     const status = String(t.status ?? "").trim().toLowerCase();
     const pkgStatus = String(t.package_status ?? "").trim().toLowerCase();
     if (pkgStatus === "exception") return false;
     if (status === "completed" || status === "canceled") return false;
-    if (status === "in_progress") return true; // 取件後的持續任務要繼續顯示
-    // pending / accepted：只顯示非當前節點的待取件任務
-    if (nodeId && from === nodeId) return false;
     return true;
   });
 });
@@ -286,9 +353,85 @@ const handoffAtCurrentNode = computed(() => {
   return handoffTasks.value.filter((t) => String(t.from_location ?? "").trim() === nodeId);
 });
 
+const taskListItems = computed<TaskListItem[]>(() => {
+  const nodeId = (currentNodeId.value ?? "").trim();
+  const items: TaskListItem[] = [];
+
+  for (const task of activeAssignedTasks.value) {
+    const from = String(task.from_location ?? "").trim();
+    const to = String(task.to_location ?? "").trim();
+    const status = String(task.status ?? "").trim().toLowerCase();
+    const onTruck = cargoPackageIds.value.has(String(task.package_id));
+
+    const isAtFrom = Boolean(nodeId && from === nodeId);
+    const isAtTo = Boolean(nodeId && to === nodeId);
+
+    const shouldCollectHere = isAtFrom || isAtTo;
+    const collectable = shouldCollectHere && needsCashCollection(task) && isCashPayment(task);
+    const pickupable = isAtFrom && (status === "pending" || status === "accepted");
+    const dropoffable = isAtTo && status === "in_progress" && onTruck;
+
+    let note: string | undefined;
+    if (isAtTo && status === "in_progress" && !onTruck) note = t("driver.map.task.note.dropoffButNotOnTruck");
+
+    let action: TaskListItem["action"] = null;
+    if (collectable) {
+      action = { kind: "collect", label: t("driver.map.action.collect") };
+    } else if (pickupable) {
+      action = {
+        kind: "pickup",
+        label: t("driver.map.action.pickup"),
+        disabled: !canPickupNow(task),
+        reason: !canPickupNow(task) ? t("driver.map.action.reason.needPaidFirst") : undefined,
+      };
+    } else if (dropoffable) {
+      action = {
+        kind: "dropoff",
+        label: t("driver.map.action.dropoff"),
+        disabled: !canDropoffNow(task),
+        reason: !canDropoffNow(task) ? t("driver.map.action.reason.needPaidFirst") : undefined,
+      };
+    } else {
+      action = { kind: "enroute", label: t("driver.map.action.enroute"), disabled: !canEnrouteTask(task) };
+    }
+
+    items.push({
+      key: `assigned:${task.id}`,
+      source: "assigned",
+      task,
+      note,
+      action,
+    });
+  }
+
+  for (const task of handoffAtCurrentNode.value) {
+    items.push({
+      key: `handoff:${task.id}`,
+      source: "handoff",
+      task,
+      action: { kind: "takeover", label: t("driver.map.action.takeover") },
+    });
+  }
+
+  const rank = (item: TaskListItem) => {
+    if (!item.action) return 9;
+    if (item.action.kind === "collect") return 0;
+    if (item.action.kind === "pickup" || item.action.kind === "dropoff") return 1;
+    if (item.action.kind === "enroute") return 2;
+    if (item.action.kind === "takeover") return 3;
+    return 9;
+  };
+
+  return items.sort((a, b) => {
+    const r = rank(a) - rank(b);
+    if (r !== 0) return r;
+    return String(a.task.tracking_number ?? a.task.package_id).localeCompare(String(b.task.tracking_number ?? b.task.package_id));
+  });
+});
+
 const exceptionModalOpen = ref(false);
 const exceptionTarget = ref<{ packageId: string; taskId?: string } | null>(null);
-const exceptionReasons = selectableReasonsFor("driver").map((r) => ({ code: r.code, label: r.label }));
+const exceptionReasons = selectableReasonsFor("driver").map((r) => ({ code: r.code, label: t(r.i18nKey) }));
 const exceptionForm = reactive({ reason_code: "", description: "", location_mode: "node" as "node" | "truck" });
 
 const hoveredNode = computed(() => {
@@ -304,13 +447,6 @@ const hoveredIsNeighbor = computed(() => {
 
 const toast = useToasts();
 
-function suggestedStatus(task: DeliveryTaskRecord) {
-  if (task.task_type === "pickup") return "picked_up";
-  const to = String(task.to_location ?? "");
-  if (/^END_/i.test(to)) return "delivered";
-  return "in_transit";
-}
-
 async function refreshArriveData() {
   arriveError.value = null;
   try {
@@ -322,24 +458,46 @@ async function refreshArriveData() {
     assignedTasks.value = assignedRes.tasks ?? [];
     handoffTasks.value = handoffRes.tasks ?? [];
     cargo.value = cargoRes.cargo ?? [];
+    lastSyncAt.value = new Date().toLocaleString();
   } catch (e: any) {
     arriveError.value = String(e?.message ?? e);
     toastFromApiError(e, arriveError.value);
   }
 }
 
-function openArrivePanel(auto = false) {
-  if (auto) {
-    const hasAny = tasksAtCurrentNode.value.length > 0 || handoffAtCurrentNode.value.length > 0;
-    if (!hasAny) return;
-  }
-  arrivePanelOpen.value = true;
-  arrivePanelTab.value = tasksAtCurrentNode.value.length > 0 ? "actions" : "handoff";
+function collapseSidebar() {
+  sidebarCollapsed.value = true;
+  exceptionModalOpen.value = false;
 }
 
-function closeArrivePanel() {
-  arrivePanelOpen.value = false;
-  exceptionModalOpen.value = false;
+function openTaskList(auto = false) {
+  if (auto) {
+    const hasAny = taskListItems.value.some((i) => i.action && i.action.kind !== "enroute");
+    if (!hasAny) return;
+  }
+  sidebarCollapsed.value = false;
+}
+
+async function collectCashForTask(task: DeliveryTaskRecord) {
+  if (arriveBusy.value) return;
+  arriveBusy.value = true;
+  arriveError.value = null;
+  try {
+    if (!isCashPayment(task)) {
+      throw new Error(t("driver.map.errors.notCashPayment"));
+    }
+    const ok = window.confirm(t("driver.map.confirm.collectCash"));
+    if (!ok) return;
+    await api.arriveDriverTask(task.id);
+    await api.driverCollectCash(task.package_id);
+    toast.success(t("driver.map.toast.cashCollected"));
+    await refreshArriveData();
+  } catch (e: any) {
+    arriveError.value = String(e?.message ?? e);
+    toastFromApiError(e, arriveError.value);
+  } finally {
+    arriveBusy.value = false;
+  }
 }
 
 async function takeOverTask(taskId: string) {
@@ -348,44 +506,7 @@ async function takeOverTask(taskId: string) {
   arriveError.value = null;
   try {
     await api.acceptDriverTask(taskId);
-    await refreshArriveData();
-    arrivePanelTab.value = "actions";
-  } catch (e: any) {
-    arriveError.value = String(e?.message ?? e);
-    toastFromApiError(e, arriveError.value);
-  } finally {
-    arriveBusy.value = false;
-  }
-}
-
-async function completeTask(task: DeliveryTaskRecord) {
-  if (arriveBusy.value) return;
-  arriveBusy.value = true;
-  arriveError.value = null;
-  try {
-    await api.completeDriverTask(task.id);
-    await refreshArriveData();
-  } catch (e: any) {
-    arriveError.value = String(e?.message ?? e);
-    toastFromApiError(e, arriveError.value);
-  } finally {
-    arriveBusy.value = false;
-  }
-}
-
-async function completeAndUpdateStatus(task: DeliveryTaskRecord) {
-  // kept for backward compatibility (manual override); prefer pickup/dropoff actions below
-  if (arriveBusy.value) return;
-  arriveBusy.value = true;
-  arriveError.value = null;
-  try {
-    const status = suggestedStatus(task);
-    await api.driverUpdatePackageStatus(task.package_id, {
-      status,
-      note: `Manual from Arrive Panel (${task.task_type})`,
-      location: currentNodeId.value ?? undefined,
-    });
-    await api.completeDriverTask(task.id);
+    toast.success(t("driver.map.toast.taskAccepted"));
     await refreshArriveData();
   } catch (e: any) {
     arriveError.value = String(e?.message ?? e);
@@ -401,6 +522,7 @@ async function pickupTask(task: DeliveryTaskRecord) {
   arriveError.value = null;
   try {
     await api.pickupDriverTask(task.id);
+    toast.success(t("driver.map.toast.pickedUp"));
     await refreshArriveData();
   } catch (e: any) {
     arriveError.value = String(e?.message ?? e);
@@ -416,6 +538,7 @@ async function dropoffTask(task: DeliveryTaskRecord) {
   arriveError.value = null;
   try {
     await api.dropoffDriverTask(task.id);
+    toast.success(t("driver.map.toast.droppedOff"));
     await refreshArriveData();
   } catch (e: any) {
     arriveError.value = String(e?.message ?? e);
@@ -432,9 +555,7 @@ async function enrouteTask(task: DeliveryTaskRecord) {
   try {
     await api.enrouteDriverTask(task.id);
     await refreshArriveData();
-    const status = String(task.status ?? "").trim().toLowerCase();
-    const destination =
-      status === "in_progress" ? String(task.to_location ?? "").trim() : String(task.from_location ?? "").trim();
+    const destination = destinationForTask(task);
     if (destination) await highlightRouteTo(destination);
   } catch (e: any) {
     arriveError.value = String(e?.message ?? e);
@@ -463,12 +584,12 @@ async function submitException() {
   if (!exceptionTarget.value) return;
   if (arriveBusy.value) return;
   if (!exceptionForm.reason_code.trim()) {
-    arriveError.value = "請選擇異常原因";
+    arriveError.value = t("driver.map.exception.errors.reasonRequired");
     toast.warning(arriveError.value);
     return;
   }
   if (!exceptionForm.description.trim()) {
-    arriveError.value = "請填寫異常描述";
+    arriveError.value = t("driver.map.exception.errors.descriptionRequired");
     toast.warning(arriveError.value);
     return;
   }
@@ -763,7 +884,7 @@ async function animateMoveTo(targetId: string) {
     currentNodeId.value = targetId;
     if (vehicle.value) vehicle.value.current_node_id = targetId;
   } catch (e: any) {
-    error.value = `移動失敗，請稍後再試：${String(e?.message ?? e)}`;
+    error.value = t("driver.map.errors.moveFailed", { message: String(e?.message ?? e) });
     truckPos.x = fromX;
     truckPos.y = fromY;
   } finally {
@@ -772,7 +893,7 @@ async function animateMoveTo(targetId: string) {
 
   await refreshActiveRouteFromCurrent();
   await refreshArriveData();
-  openArrivePanel(true);
+  openTaskList(true);
 }
 
 function focusOnNode(id: string) {
@@ -784,6 +905,14 @@ function focusOnNode(id: string) {
   viewBox.h = targetH;
   viewBox.x = node.x - targetW / 2;
   viewBox.y = node.y - targetH / 2;
+}
+
+function applyDeepLinkFromQuery() {
+  const focus = String(route.query.focus ?? "").trim();
+  if (!focus) return;
+  if (!nodesById.value.get(focus)) return;
+  focusOnNode(focus);
+  void highlightRouteTo(focus);
 }
 
 onMounted(async () => {
@@ -819,6 +948,7 @@ onMounted(async () => {
     }
 
     await refreshArriveData();
+    applyDeepLinkFromQuery();
   } catch (e: any) {
     error.value = String(e?.message ?? e);
   } finally {
@@ -831,371 +961,428 @@ onMounted(async () => {
   <UiPageShell class="map-page--bleed">
     <header class="page-header section-header--split">
       <div>
-        <p class="eyebrow">員工 · 司機</p>
-        <h1>司機地圖</h1>
-        <p class="lede">顯示自己的貨車，並可在對應節點移動地圖。</p>
+        <p class="eyebrow">{{ t("driver.eyebrow") }}</p>
+        <h1>{{ t("driver.map.page.title") }}</h1>
+        <p class="lede">{{ t("driver.map.page.lede") }}</p>
       </div>
     </header>
 
     <UiCard v-if="error" class="error-card">{{ error }}</UiCard>
-    <UiCard v-else-if="loading">載入中…</UiCard>
+    <UiCard v-else-if="loading">{{ t("common.loading") }}</UiCard>
 
     <div v-else ref="stageEl" class="card map-canvas" :class="{ fullscreen: isFullscreen }">
-      <div class="map-stage">
-        <div class="map-controls">
-          <button
-            v-if="fullscreenSupported"
-            class="ghost-btn"
-            type="button"
-            @click="toggleFullscreen"
-          >
-            {{ isFullscreen ? "退出全螢幕" : "全螢幕" }}
-          </button>
-          <button class="ghost-btn" type="button" @click="openArrivePanel()">
-            抵達面板
-          </button>
-        </div>
-
-        <svg
-          ref="svgEl"
-          class="map-svg"
-          :viewBox="viewBoxAttr"
-          @wheel="onWheel"
-          @pointerdown="onPointerDown"
-          @pointermove="onPointerMove"
-          @pointerup="onPointerUp"
-        >
-          <g class="edges">
-            <line
-              v-for="e in edges"
-              :key="e.id"
-              class="edge-line"
-              :stroke="edgeStroke(e)"
-              :opacity="edgeOpacity(e)"
-              :stroke-width="edgeStrokeWidth(e)"
-              :x1="nodesById.get(e.source)?.x ?? 0"
-              :y1="nodesById.get(e.source)?.y ?? 0"
-              :x2="nodesById.get(e.target)?.x ?? 0"
-              :y2="nodesById.get(e.target)?.y ?? 0"
-            />
-          </g>
-
-          <g v-if="routeSegments.length > 0" class="route">
-            <line
-              v-for="seg in routeSegments"
-              :key="`${seg.key}::casing`"
-              class="route-casing"
-              :class="seg.tier"
-              :stroke-width="routeCasingWidths[seg.tier]"
-              :x1="seg.x1"
-              :y1="seg.y1"
-              :x2="seg.x2"
-              :y2="seg.y2"
-            />
-            <line
-              v-for="seg in routeSegments"
-              :key="`${seg.key}::core`"
-              class="route-line"
-              :class="seg.tier"
-              :stroke-width="routeEdgeWidths[seg.tier]"
-              :x1="seg.x1"
-              :y1="seg.y1"
-              :x2="seg.x2"
-              :y2="seg.y2"
-            />
-          </g>
-
-          <g class="nodes">
-            <g
-              v-for="n in nodes"
-              :key="n.id"
-              class="node"
-              :data-node-id="n.id"
-              :class="{
-                current: n.id === currentNodeId,
-                neighbor: currentNodeId ? neighborsById.get(currentNodeId)?.has(n.id) : false,
-                hovered: hoveredNodeId === n.id,
-              }"
-              @mouseenter="hoveredNodeId = n.id"
-              @mouseleave="hoveredNodeId = null"
-              @dblclick.stop="focusOnNode(n.id)"
+      <div class="map-stage" :class="{ 'sidebar-collapsed': sidebarCollapsed }">
+        <div class="map-main">
+          <div class="map-controls">
+            <button
+              v-if="fullscreenSupported"
+              class="ghost-btn"
+              type="button"
+              @click="toggleFullscreen"
             >
-              <circle
-                v-if="hoveredNodeId === n.id"
-                :cx="n.x"
-                :cy="n.y"
-                :r="nodeStyle(n).r + 24"
-                class="hover-ring"
+              {{ isFullscreen ? t("driver.map.controls.fullscreen.exit") : t("driver.map.controls.fullscreen.enter") }}
+            </button>
+            <button
+              v-if="sidebarCollapsed"
+              class="ghost-btn"
+              type="button"
+              @click="openTaskList()"
+            >
+              {{ t("driver.map.controls.sidebar.expand") }}
+            </button>
+            <button
+              v-else
+              class="ghost-btn"
+              type="button"
+              @click="collapseSidebar"
+            >
+              {{ t("driver.map.controls.sidebar.collapse") }}
+            </button>
+          </div>
+
+          <svg
+            ref="svgEl"
+            class="map-svg"
+            :viewBox="viewBoxAttr"
+            @wheel="onWheel"
+            @pointerdown="onPointerDown"
+            @pointermove="onPointerMove"
+            @pointerup="onPointerUp"
+          >
+            <g class="edges">
+              <line
+                v-for="e in edges"
+                :key="e.id"
+                class="edge-line"
+                :stroke="edgeStroke(e)"
+                :opacity="edgeOpacity(e)"
+                :stroke-width="edgeStrokeWidth(e)"
+                :x1="nodesById.get(e.source)?.x ?? 0"
+                :y1="nodesById.get(e.source)?.y ?? 0"
+                :x2="nodesById.get(e.target)?.x ?? 0"
+                :y2="nodesById.get(e.target)?.y ?? 0"
               />
-              <circle
-                v-if="hoveredNodeId === n.id"
-                :cx="n.x"
-                :cy="n.y"
-                :r="nodeStyle(n).r + 20"
-                class="hover-glow"
+            </g>
+
+            <g v-if="routeSegments.length > 0" class="route">
+              <line
+                v-for="seg in routeSegments"
+                :key="`${seg.key}::casing`"
+                class="route-casing"
+                :class="seg.tier"
+                :stroke-width="routeCasingWidths[seg.tier]"
+                :x1="seg.x1"
+                :y1="seg.y1"
+                :x2="seg.x2"
+                :y2="seg.y2"
               />
-              <circle
-                v-if="
-                  hoveredNodeId === n.id &&
-                  currentNodeId &&
-                  neighborsById.get(currentNodeId)?.has(n.id)
-                "
-                :cx="n.x"
-                :cy="n.y"
-                :r="nodeStyle(n).r + 120"
-                class="neighbor-halo"
+              <line
+                v-for="seg in routeSegments"
+                :key="`${seg.key}::core`"
+                class="route-line"
+                :class="seg.tier"
+                :stroke-width="routeEdgeWidths[seg.tier]"
+                :x1="seg.x1"
+                :y1="seg.y1"
+                :x2="seg.x2"
+                :y2="seg.y2"
               />
-              <circle
-                :cx="n.x"
-                :cy="n.y"
-                :r="nodeStyle(n).r"
-                :fill="nodeStyle(n).fill"
-                :stroke="
-                  n.id === currentNodeId
-                    ? 'rgba(59, 130, 246, 0.95)'
-                    : currentNodeId && neighborsById.get(currentNodeId)?.has(n.id)
-                      ? 'rgba(34, 197, 94, 0.85)'
-                      : 'rgba(15, 23, 42, 0.18)'
-                "
-                :stroke-width="
-                  n.id === currentNodeId
-                    ? 24
-                    : currentNodeId && neighborsById.get(currentNodeId)?.has(n.id)
-                      ? 28
-                      : 12
-                "
-              />
-              <text
-                v-if="shouldShowLabel(n)"
-                :x="labelProps(n).x"
-                :y="labelProps(n).y"
-                :text-anchor="labelProps(n).anchor"
-                class="node-label"
-                :class="labelProps(n).cls"
+            </g>
+
+            <g class="nodes">
+              <g
+                v-for="n in nodes"
+                :key="n.id"
+                class="node"
+                :data-node-id="n.id"
+                :class="{
+                  current: n.id === currentNodeId,
+                  neighbor: currentNodeId ? neighborsById.get(currentNodeId)?.has(n.id) : false,
+                  hovered: hoveredNodeId === n.id,
+                }"
+                @mouseenter="hoveredNodeId = n.id"
+                @mouseleave="hoveredNodeId = null"
+                @dblclick.stop="focusOnNode(n.id)"
               >
-                {{ n.name }}
-              </text>
-            </g>
-          </g>
-
-          <g class="truck" :transform="`translate(${truckPos.x} ${truckPos.y})`">
-            <g class="truck-icon-wrap" :transform="truckFlipX < 0 ? 'scale(-1 1)' : undefined">
-              <image
-                class="truck-icon"
-                :href="truckIconUrl"
-                :xlink:href="truckIconUrl"
-                x="-300"
-                y="-240"
-                width="600"
-                height="480"
-                preserveAspectRatio="xMidYMid meet"
-              />
-            </g>
-            <text y="-96" text-anchor="middle" class="truck-code">{{ truckCode }}</text>
-          </g>
-        </svg>
-
-        <UiCard class="map-overlay" role="complementary" aria-label="driver map panel">
-          <p class="eyebrow">司機資訊</p>
-          <div class="hint">
-            <div><strong>貨車編號：</strong>{{ vehicle?.vehicle_code ?? "未串接" }}</div>
-            <div><strong>目前位置：</strong>{{ currentNodeId ?? "-" }}</div>
-          </div>
-
-          <div v-if="activeRoutePath" class="hint">
-            <p class="eyebrow">導航路徑</p>
-            <div class="route-chip">{{ activeRoutePath.join(" → ") }}</div>
-          </div>
-        </UiCard>
-
-        <div v-if="arrivePanelOpen" class="arrive-panel" role="dialog" aria-label="arrive panel">
-          <div class="arrive-header">
-            <div>
-              <p class="eyebrow">抵達面板</p>
-              <p class="hint" style="margin: 0"><strong>節點：</strong>{{ currentNodeId ?? "-" }}</p>
-            </div>
-            <div class="arrive-header-actions">
-              <button class="ghost-btn" type="button" :disabled="arriveBusy" @click="refreshArriveData">重新整理</button>
-              <button class="ghost-btn" type="button" @click="closeArrivePanel">關閉</button>
-            </div>
-          </div>
-
-          <UiNotice v-if="arriveError" tone="error" role="alert" style="margin-top: 10px">{{ arriveError }}</UiNotice>
-
-          <div class="arrive-tabs">
-            <button
-              class="ghost-btn"
-              type="button"
-              :class="{ active: arrivePanelTab === 'actions' }"
-              @click="arrivePanelTab = 'actions'"
-            >
-              可執行（此節點） {{ tasksAtCurrentNode.length }}
-            </button>
-            <button
-              class="ghost-btn"
-              type="button"
-              :class="{ active: arrivePanelTab === 'handoff' }"
-              @click="arrivePanelTab = 'handoff'"
-            >
-              可接手（此節點） {{ handoffAtCurrentNode.length }}
-            </button>
-          </div>
-
-          <div v-if="arrivePanelTab === 'actions'" class="arrive-body">
-            <div v-if="tasksAtCurrentNode.length === 0 && tasksEndingAtCurrentNode.length === 0" class="hint">
-              此節點沒有可執行的任務。
-            </div>
-
-            <div v-if="tasksAtCurrentNode.length > 0">
-              <p class="eyebrow">起點作業（取件上車）</p>
-              <ul class="arrive-task-list">
-                <li v-for="t in tasksAtCurrentNode" :key="t.id" class="arrive-task">
-                  <div class="arrive-task-top">
-                    <strong>{{ t.tracking_number ?? t.package_id }}</strong>
-                    <span class="hint">{{ t.task_type }} · #{{ t.segment_index ?? "-" }} · {{ t.status }}</span>
-                  </div>
-                  <div class="hint">{{ taskRouteLabel(t) }}</div>
-                  <div class="hint">配送時效：{{ t.delivery_time ?? "未設定" }} · {{ paymentLabel(t) }}{{ paymentDueDisplay(t) }}</div>
-                  <div v-if="t.instructions" class="hint">客服指示：{{ t.instructions }}</div>
-                  <div class="arrive-task-actions">
-                    <button
-                      v-if="String(t.status ?? '').trim().toLowerCase() !== 'in_progress'"
-                      class="primary-btn small-btn"
-                      type="button"
-                      :disabled="arriveBusy"
-                      @click="pickupTask(t)"
-                    >
-                      取件上車
-                    </button>
-                    <button
-                      v-else
-                      class="ghost-btn small-btn"
-                      type="button"
-                      :disabled="arriveBusy"
-                      @click="enrouteTask(t)"
-                    >
-                      正在前往
-                    </button>
-                    <button class="ghost-btn small-btn" type="button" :disabled="arriveBusy" @click="startException(t)">
-                      申報異常
-                    </button>
-                  </div>
-                </li>
-              </ul>
-            </div>
-
-            <div v-if="droppableTasksEndingAtCurrentNode.length > 0" style="margin-top: 12px">
-              <p class="eyebrow">終點作業（卸貨完成）</p>
-              <ul class="arrive-task-list">
-                <li v-for="t in droppableTasksEndingAtCurrentNode" :key="t.id" class="arrive-task">
-                  <div class="arrive-task-top">
-                    <strong>{{ t.tracking_number ?? t.package_id }}</strong>
-                    <span class="hint">{{ t.task_type }} · #{{ t.segment_index ?? "-" }} · {{ t.status }}</span>
-                  </div>
-                  <div class="hint">{{ taskRouteLabel(t) }}</div>
-                  <div class="hint">配送時效：{{ t.delivery_time ?? "未設定" }} · {{ paymentLabel(t) }}{{ paymentDueDisplay(t) }}</div>
-                  <div v-if="t.instructions" class="hint">客服指示：{{ t.instructions }}</div>
-                  <div class="arrive-task-actions">
-                    <button class="primary-btn small-btn" type="button" :disabled="arriveBusy" @click="dropoffTask(t)">
-                      卸貨完成
-                    </button>
-                    <button class="ghost-btn small-btn" type="button" :disabled="arriveBusy" @click="startException(t)">
-                      申報異常
-                    </button>
-                  </div>
-                </li>
-              </ul>
-            </div>
-
-            <details v-if="otherAssignedTasks.length > 0" class="arrive-details">
-              <summary class="hint">待繼續執行任務：{{ otherAssignedTasks.length }}</summary>
-              <ul class="arrive-task-list" style="margin-top: 10px">
-                <li v-for="t in otherAssignedTasks" :key="t.id" class="arrive-task compact">
-                  <div class="arrive-task-top">
-                    <strong>{{ t.tracking_number ?? t.package_id }}</strong>
-                    <span class="hint">{{ t.task_type }} · #{{ t.segment_index ?? "-" }}</span>
-                  </div>
-                  <div class="hint">{{ taskRouteLabel(t) }}</div>
-                  <div class="hint">
-                    配送時效：{{ t.delivery_time ?? "未設定" }} · {{ paymentLabel(t) }}{{ paymentDueDisplay(t) }}
-                  </div>
-                  <div v-if="t.instructions" class="hint">客服指示：{{ t.instructions }}</div>
-                  <div class="arrive-task-actions" style="margin-top: 8px">
-                    <button class="ghost-btn small-btn" type="button" :disabled="arriveBusy" @click="enrouteTask(t)">
-                      正在前往
-                    </button>
-                  </div>
-                </li>
-              </ul>
-            </details>
-          </div>
-
-          <div v-else class="arrive-body">
-            <div v-if="handoffAtCurrentNode.length === 0" class="hint">此節點沒有可接手任務。</div>
-            <ul v-else class="arrive-task-list">
-              <li v-for="t in handoffAtCurrentNode" :key="t.id" class="arrive-task">
-                <div class="arrive-task-top">
-                  <strong>{{ t.tracking_number ?? t.package_id }}</strong>
-                  <span class="hint">{{ t.task_type }} · #{{ t.segment_index ?? "-" }}</span>
-                </div>
-                <div class="hint">{{ taskRouteLabel(t) }}</div>
-                <div class="arrive-task-actions">
-                  <button class="primary-btn small-btn" type="button" :disabled="arriveBusy" @click="takeOverTask(t.id)">
-                    接手任務
-                  </button>
-                </div>
-              </li>
-            </ul>
-          </div>
-
-          <UiModal
-            v-model="exceptionModalOpen"
-            title="申報異常"
-            aria-label="report exception"
-            :close-on-backdrop="!arriveBusy"
-            :close-on-esc="!arriveBusy"
-            @close="closeExceptionModal"
-          >
-            <template #subtitle>
-              <p class="hint" style="margin: 0">包裹：{{ exceptionTarget?.packageId ?? "-" }}</p>
-            </template>
-
-            <div class="form-grid" style="grid-template-columns: 1fr; gap: 10px">
-              <label class="form-field">
-                <span>異常原因（請選擇）</span>
-                <select v-model="exceptionForm.reason_code" :disabled="arriveBusy">
-                  <option value="" disabled>請選擇異常原因</option>
-                  <option v-for="r in exceptionReasons" :key="r.code" :value="r.code">{{ r.label }}</option>
-                </select>
-              </label>
-
-              <label class="form-field">
-                <span>發生位置（貨車 / 節點二選一）</span>
-                <select v-model="exceptionForm.location_mode" :disabled="arriveBusy">
-                  <option value="truck">車上（{{ truckCode || "-" }}）</option>
-                  <option value="node">節點（{{ currentNodeId || "-" }}）</option>
-                </select>
-              </label>
-
-              <label class="form-field">
-                <span>說明（必填，請描述狀況與處理）</span>
-                <textarea
-                  v-model="exceptionForm.description"
-                  rows="3"
-                  :disabled="arriveBusy"
-                  placeholder="例：收件人拒收，原因：貨件外箱破損；已拍照並聯絡客服。"
+                <circle
+                  v-if="hoveredNodeId === n.id"
+                  :cx="n.x"
+                  :cy="n.y"
+                  :r="nodeStyle(n).r + 24"
+                  class="hover-ring"
                 />
-              </label>
+                <circle
+                  v-if="hoveredNodeId === n.id"
+                  :cx="n.x"
+                  :cy="n.y"
+                  :r="nodeStyle(n).r + 20"
+                  class="hover-glow"
+                />
+                <circle
+                  v-if="
+                    hoveredNodeId === n.id &&
+                    currentNodeId &&
+                    neighborsById.get(currentNodeId)?.has(n.id)
+                  "
+                  :cx="n.x"
+                  :cy="n.y"
+                  :r="nodeStyle(n).r + 120"
+                  class="neighbor-halo"
+                />
+                <circle
+                  :cx="n.x"
+                  :cy="n.y"
+                  :r="nodeStyle(n).r"
+                  :fill="nodeStyle(n).fill"
+                  :stroke="
+                    n.id === currentNodeId
+                      ? 'rgba(59, 130, 246, 0.95)'
+                      : currentNodeId && neighborsById.get(currentNodeId)?.has(n.id)
+                        ? 'rgba(34, 197, 94, 0.85)'
+                        : 'rgba(15, 23, 42, 0.18)'
+                  "
+                  :stroke-width="
+                    n.id === currentNodeId
+                      ? 24
+                      : currentNodeId && neighborsById.get(currentNodeId)?.has(n.id)
+                        ? 28
+                        : 12
+                  "
+                />
+                <text
+                  v-if="shouldShowLabel(n)"
+                  :x="labelProps(n).x"
+                  :y="labelProps(n).y"
+                  :text-anchor="labelProps(n).anchor"
+                  class="node-label"
+                  :class="labelProps(n).cls"
+                >
+                  {{ n.name }}
+                </text>
+              </g>
+            </g>
+
+            <g class="truck" :transform="`translate(${truckPos.x} ${truckPos.y})`">
+              <g class="truck-icon-wrap" :transform="truckFlipX < 0 ? 'scale(-1 1)' : undefined">
+                <image
+                  class="truck-icon"
+                  :href="truckIconUrl"
+                  :xlink:href="truckIconUrl"
+                  x="-300"
+                  y="-240"
+                  width="600"
+                  height="480"
+                  preserveAspectRatio="xMidYMid meet"
+                />
+              </g>
+              <text y="-96" text-anchor="middle" class="truck-code">{{ truckCode }}</text>
+            </g>
+          </svg>
+        </div>
+
+        <aside v-if="!sidebarCollapsed" class="map-sidebar" aria-label="driver work panel">
+          <UiCard class="map-overlay driver-info-card" role="complementary" aria-label="driver map panel">
+            <p class="eyebrow">{{ t("driver.map.info.title") }}</p>
+            <div class="driver-info-grid">
+              <div class="driver-info-row">
+                <strong>{{ t("driver.map.info.vehicleCode") }}：</strong>
+                <span class="driver-info-value">{{ vehicle?.vehicle_code ?? t("driver.map.info.unlinked") }}</span>
+              </div>
+              <div class="driver-info-row">
+                <strong>{{ t("driver.map.info.currentNode") }}：</strong>
+                <span class="driver-info-value">{{ currentNodeId ?? "-" }}</span>
+                <span v-if="activeRouteTargetId" class="pill info nav-pill">
+                  {{ t("driver.map.info.navTo", { node: activeRouteTargetId }) }}
+                </span>
+              </div>
+              <div class="driver-info-row">
+                <strong>{{ t("driver.map.info.cargo") }}：</strong>
+                <span class="driver-info-value">{{ t("driver.map.info.cargoCount", { count: cargo.length }) }}</span>
+              </div>
+              <div class="driver-info-row">
+                <strong>{{ t("driver.map.info.lastSync") }}：</strong>
+                <span class="driver-info-value">{{ lastSyncAt ?? t("driver.map.info.notSynced") }}</span>
+              </div>
+            </div>
+          </UiCard>
+
+          <UiCard class="map-overlay task-panel" role="complementary" aria-label="task list">
+            <div class="task-header">
+              <div>
+                <p class="eyebrow">{{ t("driver.map.taskList.title") }}</p>
+              </div>
+              <div class="task-header-actions">
+                <button class="ghost-btn" type="button" :disabled="arriveBusy" @click="refreshArriveData">
+                  {{ t("driver.map.taskList.refresh") }}
+                </button>
+              </div>
             </div>
 
-            <template #actions>
-              <button class="primary-btn small-btn" type="button" :disabled="arriveBusy" @click="submitException">送出</button>
-              <button class="ghost-btn small-btn" type="button" :disabled="arriveBusy" @click="closeExceptionModal">取消</button>
-            </template>
-          </UiModal>
-        </div>
-      </div> <!-- map-stage -->
-    </div> <!-- map-canvas -->
+            <UiNotice v-if="arriveError" tone="error" role="alert" style="margin-top: 10px">{{ arriveError }}</UiNotice>
+
+            <div class="task-body">
+              <ul v-if="taskListItems.length > 0" class="task-list">
+                <li
+                  v-for="item in taskListItems"
+                  :key="item.key"
+                  class="task-row"
+                  :class="{ active: expandedTaskKeys.has(item.key) }"
+                >
+                  <div class="task-row-top">
+                    <button
+                      type="button"
+                      class="row-btn"
+                      :aria-expanded="expandedTaskKeys.has(item.key)"
+                      @click="toggleTaskExpanded(item.key)"
+                    >
+                      <div class="row-line row-line--top">
+                        <span class="tracking">
+                          <svg class="mini-icon" viewBox="0 0 24 24" aria-hidden="true">
+                            <path
+                              d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"
+                              fill="none"
+                              stroke="currentColor"
+                              stroke-width="1.6"
+                              stroke-linejoin="round"
+                            />
+                            <path d="M3.5 7.5 12 12l8.5-4.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" />
+                            <path d="M12 12v9.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+                          </svg>
+                          {{ item.task.tracking_number ?? item.task.package_id }}
+                        </span>
+                        <svg class="mini-icon chevron" viewBox="0 0 20 20" aria-hidden="true">
+                          <path
+                            d="M5 7l5 6 5-6"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="1.8"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                          />
+                        </svg>
+                      </div>
+                      <div class="row-line row-line--meta">
+                        <span v-if="item.source !== 'handoff'" class="pill info">
+                          <svg class="mini-icon" viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M12 7v5l3 2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+                            <path
+                              d="M21 12a9 9 0 1 1-9-9 9 9 0 0 1 9 9Z"
+                              fill="none"
+                              stroke="currentColor"
+                              stroke-width="1.6"
+                            />
+                          </svg>
+                          {{ deliveryTimeLabel(item.task.delivery_time) }}
+                        </span>
+                        <span
+                          v-if="item.source !== 'handoff'"
+                          class="pill"
+                          :class="item.task.paid_at ? 'success' : 'danger'"
+                        >
+                          <svg class="mini-icon" viewBox="0 0 24 24" aria-hidden="true">
+                            <path
+                              d="M20 7H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2Z"
+                              fill="none"
+                              stroke="currentColor"
+                              stroke-width="1.6"
+                              stroke-linejoin="round"
+                            />
+                            <path d="M16 11h.01" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" />
+                          </svg>
+                          {{ paymentStatusLabel(item.task) }}
+                        </span>
+                        <span v-else class="pill info">{{ item.action?.label ?? t("driver.map.action.takeover") }}</span>
+                      </div>
+                    </button>
+                  </div>
+
+                  <div v-if="expandedTaskKeys.has(item.key)" class="task-detail">
+                    <div class="detail-grid">
+                      <p class="meta">{{ t("driver.map.task.fields.route") }}：{{ routeLabel(item.task) }}</p>
+                      <p v-if="item.source !== 'handoff'" class="meta">
+                        {{ t("driver.map.task.fields.taskType") }}：{{ taskTypeLabel(item.task.task_type) }}
+                      </p>
+                      <p v-if="item.source !== 'handoff'" class="meta">
+                        {{ t("driver.map.task.fields.paymentStatus") }}：{{ paymentStatusLabel(item.task) }}
+                      </p>
+                      <p v-if="item.source !== 'handoff'" class="meta">
+                        {{ t("driver.map.task.fields.sender") }}：{{ item.task.sender_name ?? "-" }}
+                      </p>
+                      <p v-if="item.source !== 'handoff'" class="meta">
+                        {{ t("driver.map.task.fields.receiver") }}：{{ item.task.receiver_name ?? "-" }}
+                      </p>
+                      <p v-if="item.source !== 'handoff'" class="meta">
+                        {{ t("driver.map.task.fields.dimensions") }}：{{ dimensionsLabelFromTask(item.task) }}
+                      </p>
+                      <p v-if="item.source !== 'handoff'" class="meta">
+                        {{ t("driver.map.task.fields.weight") }}：{{ weightLabelFromTask(item.task) }}
+                      </p>
+                      <p v-if="paymentDueAmount(item.task) != null" class="meta">
+                        {{ t("driver.map.task.fields.amountDue") }}：{{ paymentDueAmount(item.task) }}
+                      </p>
+                      <p v-if="cashDueHint(item.task)" class="meta">
+                        {{ t("driver.map.task.fields.cashHint") }}：{{ cashDueHint(item.task) }}
+                      </p>
+                      <p v-if="item.task.instructions" class="meta">
+                        {{ t("driver.map.task.fields.csNotes") }}：{{ item.task.instructions }}
+                      </p>
+                      <p v-if="item.note" class="meta">{{ t("driver.map.task.fields.hint") }}：{{ item.note }}</p>
+                      <p v-if="item.action?.reason" class="meta">{{ t("driver.map.task.fields.hint") }}：{{ item.action.reason }}</p>
+                    </div>
+
+                    <div class="detail-actions">
+                      <button
+                        v-if="item.action"
+                        class="primary-btn small-btn"
+                        type="button"
+                        :disabled="arriveBusy || item.action.disabled"
+                        @click="
+                          item.action.kind === 'takeover'
+                            ? takeOverTask(item.task.id)
+                            : item.action.kind === 'collect'
+                              ? collectCashForTask(item.task)
+                              : item.action.kind === 'pickup'
+                                ? pickupTask(item.task)
+                                : item.action.kind === 'dropoff'
+                                  ? dropoffTask(item.task)
+                                  : enrouteTask(item.task)
+                        "
+                      >
+                        {{ item.action.label }}
+                      </button>
+                      <button class="ghost-btn small-btn" type="button" :disabled="arriveBusy" @click="startException(item.task)">
+                        {{ t("driver.map.exception.report") }}
+                      </button>
+                    </div>
+                  </div>
+                </li>
+              </ul>
+              <div v-else class="task-empty">
+                <p class="task-empty-title">{{ t("driver.map.taskList.empty.title") }}</p>
+                <p class="hint" style="margin: 6px 0 0">{{ t("driver.map.taskList.empty.lede") }}</p>
+                <p class="hint" style="margin: 6px 0 0">{{ t("driver.map.taskList.empty.stepsTitle") }}</p>
+                <ul class="task-empty-list">
+                  <li class="hint">{{ t("driver.map.taskList.empty.tip.refresh") }}</li>
+                  <li class="hint">{{ t("driver.map.taskList.empty.tip.move") }}</li>
+                  <li class="hint">{{ t("driver.map.taskList.empty.tip.handoff") }}</li>
+                  <li class="hint">{{ t("driver.map.taskList.empty.tip.contact") }}</li>
+                </ul>
+              </div>
+            </div>
+
+            <UiModal
+              v-model="exceptionModalOpen"
+              :title="t('driver.map.exception.title')"
+              aria-label="report exception"
+              :close-on-backdrop="!arriveBusy"
+              :close-on-esc="!arriveBusy"
+              @close="closeExceptionModal"
+            >
+              <template #subtitle>
+                <p class="hint" style="margin: 0">{{ t("driver.map.exception.package", { id: exceptionTarget?.packageId ?? '-' }) }}</p>
+              </template>
+
+              <div class="form-grid" style="grid-template-columns: 1fr; gap: 10px">
+                <label class="form-field">
+                  <span>{{ t("driver.map.exception.reasonLabel") }}</span>
+                  <select v-model="exceptionForm.reason_code" :disabled="arriveBusy">
+                    <option value="" disabled>{{ t("driver.map.exception.reasonPlaceholder") }}</option>
+                    <option v-for="r in exceptionReasons" :key="r.code" :value="r.code">{{ r.label }}</option>
+                  </select>
+                </label>
+
+                <label class="form-field">
+                  <span>{{ t("driver.map.exception.locationLabel") }}</span>
+                  <select v-model="exceptionForm.location_mode" :disabled="arriveBusy">
+                    <option value="truck">{{ t("driver.map.exception.location.truck", { code: truckCode || '-' }) }}</option>
+                    <option value="node">{{ t("driver.map.exception.location.node", { node: currentNodeId || '-' }) }}</option>
+                  </select>
+                </label>
+
+                <label class="form-field">
+                  <span>{{ t("driver.map.exception.descriptionLabel") }}</span>
+                  <textarea
+                    v-model="exceptionForm.description"
+                    rows="3"
+                    :disabled="arriveBusy"
+                    :placeholder="t('driver.map.exception.descriptionPlaceholder')"
+                  />
+                </label>
+              </div>
+
+              <template #actions>
+                <button class="primary-btn small-btn" type="button" :disabled="arriveBusy" @click="submitException">
+                  {{ t("driver.map.exception.submit") }}
+                </button>
+                <button class="ghost-btn small-btn" type="button" :disabled="arriveBusy" @click="closeExceptionModal">
+                  {{ t("common.cancel") }}
+                </button>
+              </template>
+            </UiModal>
+          </UiCard>
+        </aside>
+      </div>
+    </div>
   </UiPageShell>
 </template>
 
@@ -1242,6 +1429,21 @@ onMounted(async () => {
   position: relative;
   width: 100%;
   height: 100%;
+  display: grid;
+  grid-template-columns: 1fr 380px;
+  gap: 12px;
+}
+
+.map-stage.sidebar-collapsed {
+  grid-template-columns: 1fr;
+}
+
+.map-main {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .map-svg {
@@ -1395,14 +1597,80 @@ onMounted(async () => {
 }
 
 .map-overlay {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  width: 220px;
-  max-height: calc(100% - 24px);
-  overflow: auto;
+  width: auto;
+  max-height: none;
+  overflow: visible;
   background: rgba(255, 255, 255, 0.88);
   backdrop-filter: blur(8px);
+}
+
+.driver-info-card {
+  height: 168px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  overflow: hidden;
+}
+
+.driver-info-grid {
+  margin-top: 8px;
+  display: grid;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.driver-info-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.driver-info-value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nav-pill {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-empty {
+  border: 1px dashed rgba(15, 23, 42, 0.18);
+  background: rgba(15, 23, 42, 0.02);
+  border-radius: 14px;
+  padding: 12px;
+}
+
+.task-empty-title {
+  margin: 0;
+  font-weight: 800;
+  color: rgba(15, 23, 42, 0.92);
+}
+
+.task-empty-list {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 6px;
+}
+
+.map-sidebar {
+  height: 100%;
+  overflow: hidden;
+  padding: 12px;
+  border-left: 1px solid rgba(15, 23, 42, 0.12);
+  display: grid;
+  align-content: start;
+  grid-template-rows: auto 1fr;
+  gap: 12px;
+  background: rgba(255, 255, 255, 0.85);
 }
 
 .hint {
@@ -1424,11 +1692,6 @@ onMounted(async () => {
   background: #ffffff;
 }
 
-:fullscreen .map-overlay {
-  top: 18px;
-  right: 18px;
-}
-
 @media (max-width: 900px) {
   .map-page--bleed {
     width: auto;
@@ -1437,67 +1700,88 @@ onMounted(async () => {
     transform: none;
   }
   .map-canvas {
+    height: auto;
+    overflow: visible;
+    padding: 12px;
+  }
+  .map-stage {
+    grid-template-columns: 1fr;
+    height: auto;
+    gap: 12px;
+  }
+  .map-main {
     height: clamp(520px, 62vh, 720px);
+    border: 1px solid rgba(15, 23, 42, 0.12);
+    border-radius: 16px;
   }
-  .map-overlay {
+  .map-sidebar {
+    height: auto;
+    overflow: visible;
+    padding: 0;
+    border-left: none;
+    background: transparent;
+  }
+  .task-panel {
     position: static;
     width: auto;
     max-height: none;
-    margin: 12px;
-  }
-  .arrive-panel {
-    position: static;
-    width: auto;
-    max-height: none;
-    margin: 12px;
+    margin: 0;
   }
 }
 
-.arrive-panel {
-  position: absolute;
-  right: 12px;
-  bottom: 12px;
-  z-index: 7;
-  width: min(520px, calc(100% - 24px));
-  max-height: calc(100% - 24px);
-  overflow: auto;
-  background: rgba(255, 255, 255, 0.96);
-  border: 1px solid rgba(15, 23, 42, 0.12);
-  border-radius: 16px;
-  padding: 14px;
-  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.22);
+.task-panel {
+  position: static;
+  width: auto;
+  max-height: none;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
-.arrive-header {
+.task-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
   gap: 10px;
 }
 
-.arrive-header-actions {
+.task-header-actions {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
 }
 
-.arrive-tabs {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-top: 12px;
+.task-body {
+  margin-top: 8px;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
 }
 
-.arrive-tabs .ghost-btn.active {
-  border-color: rgba(37, 99, 235, 0.45);
+.task-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.task-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 10px;
+  border-radius: 999px;
   background: rgba(37, 99, 235, 0.08);
+  border: 1px solid rgba(37, 99, 235, 0.22);
+  color: rgba(30, 64, 175, 0.95);
+  font-weight: 800;
+  font-size: 12px;
+  white-space: nowrap;
 }
 
-.arrive-body {
-  margin-top: 12px;
-}
-
-.arrive-task-list {
+.task-list {
   list-style: none;
   padding: 0;
   margin: 0;
@@ -1505,34 +1789,137 @@ onMounted(async () => {
   gap: 10px;
 }
 
-.arrive-task {
+.task-row {
   border: 1px solid rgba(15, 23, 42, 0.1);
   background: rgba(248, 250, 252, 0.9);
   border-radius: 14px;
+  overflow: hidden;
+}
+
+.task-row.active {
+  border-color: rgba(37, 99, 235, 0.26);
+  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.12);
+}
+
+.task-row-top {
   padding: 10px;
 }
 
-.arrive-task.compact {
-  padding: 8px;
+.row-btn {
+  width: 100%;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  padding: 0;
+  display: grid;
+  gap: 8px;
 }
 
-.arrive-task-top {
+.row-line {
   display: flex;
-  justify-content: space-between;
+  align-items: center;
+  justify-content: flex-start;
   gap: 10px;
-  align-items: baseline;
+  flex-wrap: wrap;
 }
 
-.arrive-task-actions {
+.row-line--top {
+  justify-content: space-between;
+  flex-wrap: nowrap;
+}
+
+.row-line--meta {
+  justify-content: flex-start;
+}
+
+.mini-icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  color: rgba(15, 23, 42, 0.62);
+}
+
+.mini-icon.chevron {
+  transition: transform 140ms ease;
+}
+
+.task-row.active .mini-icon.chevron {
+  transform: rotate(180deg);
+}
+
+.tracking {
+  font-weight: 800;
+  color: rgba(15, 23, 42, 0.95);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(15, 23, 42, 0.14);
+  background: rgba(15, 23, 42, 0.04);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.pill.success {
+  border-color: rgba(34, 197, 94, 0.35);
+  background: rgba(34, 197, 94, 0.10);
+  color: rgba(21, 128, 61, 0.95);
+}
+
+.pill.danger {
+  border-color: rgba(239, 68, 68, 0.32);
+  background: rgba(239, 68, 68, 0.08);
+  color: rgba(185, 28, 28, 0.95);
+}
+
+.pill.info {
+  border-color: rgba(37, 99, 235, 0.28);
+  background: rgba(37, 99, 235, 0.08);
+  color: rgba(30, 64, 175, 0.95);
+}
+
+.meta {
+  font-size: 12px;
+  color: rgba(15, 23, 42, 0.64);
+}
+
+.detail-actions {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
-  margin-top: 8px;
+  align-items: center;
+  margin-top: 10px;
 }
 
-.arrive-details summary {
-  cursor: pointer;
-  user-select: none;
+.detail-actions .small-btn {
+  min-width: 96px;
+  height: 36px;
+  padding-top: 0;
+  padding-bottom: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  line-height: 1;
+}
+
+.task-detail {
+  border-top: 1px solid rgba(15, 23, 42, 0.1);
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.75);
+}
+
+.detail-grid {
+  display: grid;
+  gap: 6px;
 }
 
 </style>

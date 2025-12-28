@@ -399,8 +399,17 @@ export type DeliveryTaskRecord = {
   updated_at?: string | null;
   tracking_number?: string | null;
   package_status?: string | null;
+  sender_name?: string | null;
+  sender_phone?: string | null;
   sender_address?: string | null;
+  receiver_name?: string | null;
+  receiver_phone?: string | null;
   receiver_address?: string | null;
+  weight?: number | null;
+  size?: string | null;
+  length?: number | null;
+  width?: number | null;
+  height?: number | null;
   delivery_time?: string | null;
   payment_type?: string | null;
   payment_amount?: number | null;
@@ -744,10 +753,19 @@ export const api = {
     request<{ success: boolean; status: string; location: string | null }>(`/api/driver/tasks/${encodeURIComponent(taskId)}/enroute`, {
       method: "POST",
     }),
+  arriveDriverTask: (taskId: string) =>
+    request<{ success: boolean; status: string; location: string }>(`/api/driver/tasks/${encodeURIComponent(taskId)}/arrive`, {
+      method: "POST",
+    }),
   driverUpdatePackageStatus: (packageId: string, payload: { status: string; note?: string; location?: string }) =>
     request<{ success: boolean; message?: string; event_id?: string }>(
       `/api/driver/packages/${encodeURIComponent(packageId)}/status`,
       { method: "POST", body: JSON.stringify(payload) },
+    ),
+  driverCollectCash: (packageId: string) =>
+    request<{ success: boolean; paid_at: string; payment_method: "cash" }>(
+      `/api/driver/packages/${encodeURIComponent(packageId)}/collect-cash`,
+      { method: "POST" },
     ),
   driverReportPackageException: (
     packageId: string,

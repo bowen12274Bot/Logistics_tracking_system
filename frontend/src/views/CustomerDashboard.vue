@@ -29,8 +29,17 @@ const inTransitResult = ref<TrackingSearchResponse | null>(null)
 const historyResult = ref<TrackingSearchResponse | null>(null)
 
 const primaryLinks = computed<Link[]>(() => [
-  { title: t('customer.dashboard.links.send.title'), to: '/customer/send', description: t('customer.dashboard.links.send.desc') },
-  { title: t('customer.dashboard.links.track.title'), to: '/customer/track', description: t('customer.dashboard.links.track.desc') },
+  {
+    title: t('customer.dashboard.links.send.title'),
+    to: '/customer/send',
+    description: t('customer.dashboard.links.send.desc'),
+    featured: true,
+  },
+  {
+    title: t('customer.dashboard.links.track.title'),
+    to: '/customer/track',
+    description: t('customer.dashboard.links.track.desc'),
+  },
 ])
 
 const hasUnpaid = computed(() => packageStore.unpaidPackages.length > 0)
@@ -109,14 +118,38 @@ onMounted(() => {
         v-for="link in quickLinks"
         :key="link.to"
         :to="link.to"
-        class="card link-card"
+        class="card customer-entry"
         :class="{ featured: link.featured }"
       >
-        <div>
-          <p class="eyebrow">{{ link.title }}</p>
-          <p class="hint">{{ link.description }}</p>
+        <div class="customer-entry__head">
+          <div class="customer-entry__main">
+            <h2 class="customer-entry__title">{{ link.title }}</h2>
+            <p class="hint" style="margin: 6px 0 0">{{ link.description }}</p>
+          </div>
+          <span class="customer-entry__chevron" aria-hidden="true">
+            <svg viewBox="0 0 20 20">
+              <path
+                d="M8 5l5 5-5 5"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </span>
         </div>
-        <span aria-hidden="true">&rarr;</span>
+
+        <div v-if="link.to === '/customer/send'" class="customer-entry__bullets" aria-label="send highlights">
+          <span class="customer-entry__bullet">{{ t('customer.dashboard.entry.send.bullet.recipient') }}</span>
+          <span class="customer-entry__bullet">{{ t('customer.dashboard.entry.send.bullet.package') }}</span>
+          <span class="customer-entry__bullet">{{ t('customer.dashboard.entry.send.bullet.payment') }}</span>
+        </div>
+        <div v-else class="customer-entry__bullets" aria-label="tracking highlights">
+          <span class="customer-entry__bullet">{{ t('customer.dashboard.entry.track.bullet.search') }}</span>
+          <span class="customer-entry__bullet">{{ t('customer.dashboard.entry.track.bullet.status') }}</span>
+          <span class="customer-entry__bullet">{{ t('customer.dashboard.entry.track.bullet.timeline') }}</span>
+        </div>
       </RouterLink>
     </div>
 
@@ -198,6 +231,94 @@ onMounted(() => {
 </template>
 
 <style scoped>
+.customer-entry {
+  position: relative;
+  overflow: hidden;
+  display: grid;
+  gap: 10px;
+  transition: border-color 140ms ease, transform 140ms ease;
+}
+
+.customer-entry.featured {
+  border-color: rgba(165, 122, 99, 0.28);
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.customer-entry.featured::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: rgba(165, 122, 99, 0.28);
+}
+
+.customer-entry:hover {
+  border-color: rgba(165, 122, 99, 0.32);
+  transform: translateY(-1px);
+}
+
+.customer-entry:focus-visible {
+  outline: 2px solid rgba(165, 122, 99, 0.35);
+  outline-offset: 2px;
+}
+
+.customer-entry__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-width: 0;
+}
+
+.customer-entry__main {
+  min-width: 0;
+}
+
+.customer-entry__title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: rgba(63, 38, 32, 0.95);
+}
+
+.customer-entry__chevron {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(165, 122, 99, 0.16);
+  color: rgba(63, 38, 32, 0.62);
+}
+
+.customer-entry__chevron svg {
+  width: 18px;
+  height: 18px;
+}
+
+.customer-entry__bullets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.customer-entry__bullet {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(165, 122, 99, 0.16);
+  font-weight: 700;
+  font-size: 12px;
+  color: rgba(63, 38, 32, 0.92);
+  white-space: nowrap;
+}
+
 .dashboard-summary {
   margin-top: 16px;
   display: grid;
