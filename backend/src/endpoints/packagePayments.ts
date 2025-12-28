@@ -77,26 +77,32 @@ async function computePayableNow(db: D1Database, pkg: any, paymentMethod: Packag
 
   // Monthly billing is confirmed by customer click (mock pay) and is always payable for prepaid.
   if (paymentMethod === "monthly_billing") {
-    if (String(paymentType).toLowerCase() !== "prepaid") {
-      return { ok: true as const, payable_now: false, reason: "monthly_billing is only available for prepaid" };
+    const pt = String(paymentType).toLowerCase();
+    if (pt !== "prepaid" && pt !== "cod") {
+      return { ok: true as const, payable_now: false, reason: "monthly_billing is only available for prepaid/cod" };
     }
     return { ok: true as const, payable_now: true, reason: null };
   }
 
   if (paymentType === "cod") {
+    // COD:
+    // - Non-cash (and monthly_billing) can be paid immediately after order creation (receiver can pre-pay).
+    // - Cash remains gated by driver arrival / delivery completion events.
+    if (paymentMethod !== "cash") return { ok: true as const, payable_now: true, reason: null };
+
     const receiverSubtype = await getNodeSubtype(db, pkg?.receiver_address ?? null);
     if (receiverSubtype === "store") {
       const delivered = await hasEvent(db, packageId, "delivered");
       return delivered
         ? { ok: true as const, payable_now: true, reason: null }
-        : { ok: true as const, payable_now: false, reason: "COD at store is payable after delivered at END_STORE_*" };
+        : { ok: true as const, payable_now: false, reason: "COD cash at store is payable after delivered at END_STORE_*" };
     }
 
     // home (or unknown): payable when driver arrives at destination (before unloading/handing over).
     const arrived = await hasEvent(db, packageId, "arrived_delivery");
     return arrived
       ? { ok: true as const, payable_now: true, reason: null }
-      : { ok: true as const, payable_now: false, reason: "COD at home is payable after arrived_delivery" };
+      : { ok: true as const, payable_now: false, reason: "COD cash at home is payable after arrived_delivery" };
   }
 
   if (paymentType === "prepaid") {
@@ -271,7 +277,9 @@ export class PackagePaymentPay extends OpenAPIRoute {
 
     const paymentType = String(row.payment_type ?? "").trim().toLowerCase();
     if (normalizedMethod === "monthly_billing") {
-      if (paymentType !== "prepaid") return c.json({ error: "monthly_billing is only available for prepaid" }, 409);
+      if (paymentType !== "prepaid" && paymentType !== "cod") {
+        return c.json({ error: "monthly_billing is only available for prepaid/cod" }, 409);
+      }
       if (auth.user.user_class !== "contract_customer") return c.json({ error: "monthly_billing requires contract_customer" }, 403);
     }
 
@@ -396,7 +404,9 @@ export class PackagePaymentUpdateMethod extends OpenAPIRoute {
 
     const paymentType = String(row.payment_type ?? "").trim().toLowerCase();
     if (nextMethod === "monthly_billing") {
-      if (paymentType !== "prepaid") return c.json({ error: "monthly_billing is only available for prepaid" }, 409);
+      if (paymentType !== "prepaid" && paymentType !== "cod") {
+        return c.json({ error: "monthly_billing is only available for prepaid/cod" }, 409);
+      }
       if (auth.user.user_class !== "contract_customer") return c.json({ error: "monthly_billing requires contract_customer" }, 403);
     }
 
