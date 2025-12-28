@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { reactive, ref, watchEffect } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '../stores/auth'
 import { api, type UpdateCustomerPayload } from '../services/api'
 import UiCard from '../components/ui/UiCard.vue'
@@ -10,6 +11,7 @@ import { toastFromApiError } from '../services/errorToast'
 
 const auth = useAuthStore()
 const toast = useToasts()
+const { t } = useI18n()
 
 const form = reactive<UpdateCustomerPayload>({
   user_id: auth.user?.id ?? '',
@@ -38,7 +40,7 @@ const submitProfile = async () => {
   successMessage.value = ''
 
   if (!auth.user) {
-    errorMessage.value = '請先登入後再修改資料。'
+    errorMessage.value = t('profile.errors.notLoggedIn')
     toast.warning(errorMessage.value)
     return
   }
@@ -49,9 +51,9 @@ const submitProfile = async () => {
   try {
     const res = await api.updateCustomerMe(form)
     auth.setUser(res.user)
-    successMessage.value = '個人資料已更新。'
+    successMessage.value = t('profile.success')
   } catch (err: any) {
-    errorMessage.value = err?.message || '更新失敗，請稍後再試。'
+    errorMessage.value = err?.message || t('profile.errors.updateFailed')
     toastFromApiError(err, errorMessage.value)
   } finally {
     isSubmitting.value = false
@@ -60,37 +62,37 @@ const submitProfile = async () => {
 </script>
 
 <template>
-  <UiPageShell eyebrow="客戶" title="更新個人資料" lede="修改你的姓名、電話、地址與支付偏好。">
+  <UiPageShell :eyebrow="t('profile.eyebrow')" :title="t('profile.title')" :lede="t('profile.lede')">
     <UiCard>
       <form class="form-grid" @submit.prevent="submitProfile">
         <label class="form-field">
-          <span>姓名</span>
+          <span>{{ t('profile.fields.name') }}</span>
           <input v-model="form.user_name" name="user_name" type="text" required />
         </label>
 
         <label class="form-field">
-          <span>電話</span>
+          <span>{{ t('profile.fields.phone') }}</span>
           <input v-model="form.phone_number" name="phone_number" type="tel" required />
         </label>
 
         <label class="form-field span-2">
-          <span>地址</span>
+          <span>{{ t('profile.fields.address') }}</span>
           <input v-model="form.address" name="address" type="text" required />
         </label>
 
         <label class="form-field">
-          <span>支付偏好</span>
+          <span>{{ t('profile.fields.billing') }}</span>
           <select v-model="form.billing_preference" name="billing_preference">
-            <option value="cash">現金支付</option>
-            <option value="credit_card">信用卡</option>
-            <option value="bank_transfer">網路銀行</option>
-            <option value="monthly">月結帳單（合約客戶）</option>
-            <option value="third_party_payment">第三方支付</option>
+            <option value="cash">{{ t('profile.billing.cash') }}</option>
+            <option value="credit_card">{{ t('profile.billing.credit') }}</option>
+            <option value="bank_transfer">{{ t('profile.billing.bank') }}</option>
+            <option value="monthly">{{ t('profile.billing.monthly') }}</option>
+            <option value="third_party_payment">{{ t('profile.billing.third') }}</option>
           </select>
         </label>
 
         <button class="primary-btn" type="submit" :disabled="isSubmitting">
-          {{ isSubmitting ? '儲存中…' : '儲存變更' }}
+          {{ isSubmitting ? t('profile.saving') : t('profile.save') }}
         </button>
       </form>
 
