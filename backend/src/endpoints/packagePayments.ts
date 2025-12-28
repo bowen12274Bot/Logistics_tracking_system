@@ -48,6 +48,28 @@ async function hasEvent(db: D1Database, packageId: string, status: string) {
   return !!row;
 }
 
+async function hasDriverVehicleAtPickupNode(db: D1Database, packageId: string, pickupNodeId: string | null) {
+  const nodeId = String(pickupNodeId ?? "").trim();
+  if (!nodeId) return false;
+  const row = await db
+    .prepare(
+      `
+      SELECT 1 AS ok
+      FROM delivery_tasks t
+      JOIN vehicles v ON v.driver_user_id = t.assigned_driver_id
+      WHERE t.package_id = ?
+        AND LOWER(TRIM(t.task_type)) = 'pickup'
+        AND t.status IN ('pending','accepted','in_progress')
+        AND LOWER(TRIM(COALESCE(t.from_location,''))) = LOWER(TRIM(?))
+        AND LOWER(TRIM(COALESCE(v.current_node_id,''))) = LOWER(TRIM(COALESCE(t.from_location,'')))
+      LIMIT 1
+      `,
+    )
+    .bind(packageId, nodeId)
+    .first();
+  return !!row;
+}
+
 async function computePayableNow(db: D1Database, pkg: any, paymentMethod: PackagePaymentMethod | null) {
   const paymentType = String(pkg?.payment_type ?? "").trim();
   const packageId = String(pkg?.id ?? "").trim();
@@ -55,26 +77,32 @@ async function computePayableNow(db: D1Database, pkg: any, paymentMethod: Packag
 
   // Monthly billing is confirmed by customer click (mock pay) and is always payable for prepaid.
   if (paymentMethod === "monthly_billing") {
-    if (String(paymentType).toLowerCase() !== "prepaid") {
-      return { ok: true as const, payable_now: false, reason: "monthly_billing is only available for prepaid" };
+    const pt = String(paymentType).toLowerCase();
+    if (pt !== "prepaid" && pt !== "cod") {
+      return { ok: true as const, payable_now: false, reason: "monthly_billing is only available for prepaid/cod" };
     }
     return { ok: true as const, payable_now: true, reason: null };
   }
 
   if (paymentType === "cod") {
+    // COD:
+    // - Non-cash (and monthly_billing) can be paid immediately after order creation (receiver can pre-pay).
+    // - Cash remains gated by driver arrival / delivery completion events.
+    if (paymentMethod !== "cash") return { ok: true as const, payable_now: true, reason: null };
+
     const receiverSubtype = await getNodeSubtype(db, pkg?.receiver_address ?? null);
     if (receiverSubtype === "store") {
       const delivered = await hasEvent(db, packageId, "delivered");
       return delivered
         ? { ok: true as const, payable_now: true, reason: null }
-        : { ok: true as const, payable_now: false, reason: "COD at store is payable after delivered at END_STORE_*" };
+        : { ok: true as const, payable_now: false, reason: "COD cash at store is payable after delivered at END_STORE_*" };
     }
 
     // home (or unknown): payable when driver arrives at destination (before unloading/handing over).
     const arrived = await hasEvent(db, packageId, "arrived_delivery");
     return arrived
       ? { ok: true as const, payable_now: true, reason: null }
-      : { ok: true as const, payable_now: false, reason: "COD at home is payable after arrived_delivery" };
+      : { ok: true as const, payable_now: false, reason: "COD cash at home is payable after arrived_delivery" };
   }
 
   if (paymentType === "prepaid") {
@@ -85,7 +113,12 @@ async function computePayableNow(db: D1Database, pkg: any, paymentMethod: Packag
 
     // home: cash is collected when driver arrives (before pickup).
     const arrived = await hasEvent(db, packageId, "arrived_pickup");
-    return arrived
+    if (arrived) return { ok: true as const, payable_now: true, reason: null };
+
+    // Fallback: if driver vehicle is already at pickup node, allow pay even if arrived_pickup event wasn't recorded.
+    // This keeps customer payment unblocked when the driver app forgets to call /arrive.
+    const atPickup = await hasDriverVehicleAtPickupNode(db, packageId, pkg?.sender_address ?? null);
+    return atPickup
       ? { ok: true as const, payable_now: true, reason: null }
       : { ok: true as const, payable_now: false, reason: "Cash prepaid at home is payable after arrived_pickup" };
   }
@@ -244,7 +277,9 @@ export class PackagePaymentPay extends OpenAPIRoute {
 
     const paymentType = String(row.payment_type ?? "").trim().toLowerCase();
     if (normalizedMethod === "monthly_billing") {
-      if (paymentType !== "prepaid") return c.json({ error: "monthly_billing is only available for prepaid" }, 409);
+      if (paymentType !== "prepaid" && paymentType !== "cod") {
+        return c.json({ error: "monthly_billing is only available for prepaid/cod" }, 409);
+      }
       if (auth.user.user_class !== "contract_customer") return c.json({ error: "monthly_billing requires contract_customer" }, 403);
     }
 
@@ -369,7 +404,9 @@ export class PackagePaymentUpdateMethod extends OpenAPIRoute {
 
     const paymentType = String(row.payment_type ?? "").trim().toLowerCase();
     if (nextMethod === "monthly_billing") {
-      if (paymentType !== "prepaid") return c.json({ error: "monthly_billing is only available for prepaid" }, 409);
+      if (paymentType !== "prepaid" && paymentType !== "cod") {
+        return c.json({ error: "monthly_billing is only available for prepaid/cod" }, 409);
+      }
       if (auth.user.user_class !== "contract_customer") return c.json({ error: "monthly_billing requires contract_customer" }, 403);
     }
 

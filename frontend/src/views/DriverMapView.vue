@@ -230,10 +230,17 @@ function routeLabel(task: DeliveryTaskRecord) {
   return `${from} → ${to}`;
 }
 
-function isCashPayment(task: DeliveryTaskRecord) {
-  const method = String(task.payment_method ?? "").trim().toLowerCase();
-  const type = String(task.payment_type ?? "").trim().toLowerCase();
-  return method === "cash" || type === "cod";
+function paymentTypeKey(task: DeliveryTaskRecord) {
+  return String(task.payment_type ?? "").trim().toLowerCase();
+}
+
+function paymentMethodKey(task: DeliveryTaskRecord) {
+  return String(task.payment_method ?? "").trim().toLowerCase();
+}
+
+function isCashLikeMethod(task: DeliveryTaskRecord) {
+  const method = paymentMethodKey(task);
+  return method === "" || method === "cash";
 }
 
 function dimensionsLabelFromTask(task: DeliveryTaskRecord) {
@@ -263,7 +270,7 @@ function cashDueHint(task: DeliveryTaskRecord) {
   if (task.paid_at) return "";
   const amount = paymentDueAmount(task);
   if (amount == null) return "";
-  if (!isCashPayment(task)) return "";
+  if (!isCashLikeMethod(task)) return "";
   return t("driver.map.payment.cashHint");
 }
 
@@ -299,15 +306,32 @@ function isCodStoreTask(task: DeliveryTaskRecord) {
   return to.startsWith("END_STORE_");
 }
 
-function needsCashCollection(task: DeliveryTaskRecord) {
+function canCollectCashHere(args: {
+  task: DeliveryTaskRecord;
+  nodeId: string;
+  isAtFrom: boolean;
+  isAtTo: boolean;
+  onTruck: boolean;
+  status: string;
+}) {
+  const { task, isAtFrom, isAtTo, onTruck, status } = args;
   if (task.paid_at) return false;
   if (paymentDueAmount(task) == null) return false;
-  if (isCodStoreTask(task)) return false;
-  const type = String(task.payment_type ?? "").trim().toLowerCase();
-  if (type !== "prepaid" && type !== "cod") return false;
+  if (!isCashLikeMethod(task)) return false;
 
-  const method = String(task.payment_method ?? "").trim().toLowerCase();
-  return method === "" || method === "cash";
+  const type = paymentTypeKey(task);
+  if (type === "prepaid") {
+    const taskType = String(task.task_type ?? "").trim().toLowerCase();
+    return taskType === "pickup" && isAtFrom && (status === "pending" || status === "accepted");
+  }
+
+  if (type === "cod") {
+    if (isCodStoreTask(task)) return false;
+    const taskType = String(task.task_type ?? "").trim().toLowerCase();
+    return taskType !== "pickup" && isAtTo && status === "in_progress" && onTruck;
+  }
+
+  return false;
 }
 
 function canDropoffNow(task: DeliveryTaskRecord) {
@@ -366,8 +390,7 @@ const taskListItems = computed<TaskListItem[]>(() => {
     const isAtFrom = Boolean(nodeId && from === nodeId);
     const isAtTo = Boolean(nodeId && to === nodeId);
 
-    const shouldCollectHere = isAtFrom || isAtTo;
-    const collectable = shouldCollectHere && needsCashCollection(task) && isCashPayment(task);
+    const collectable = canCollectCashHere({ task, nodeId, isAtFrom, isAtTo, onTruck, status });
     const pickupable = isAtFrom && (status === "pending" || status === "accepted");
     const dropoffable = isAtTo && status === "in_progress" && onTruck;
 
@@ -465,6 +488,26 @@ async function refreshArriveData() {
   }
 }
 
+async function markArrivalForCashPayWindow() {
+  const nodeId = String(currentNodeId.value ?? "").trim();
+  if (!nodeId) return;
+
+  const targets = activeAssignedTasks.value.filter((task) => {
+    if (task.paid_at) return false;
+    if (paymentDueAmount(task) == null) return false;
+    if (!isCashLikeMethod(task)) return false;
+    if (isCodStoreTask(task)) return false;
+    const taskType = String(task.task_type ?? "").trim().toLowerCase();
+    const from = String(task.from_location ?? "").trim();
+    const to = String(task.to_location ?? "").trim();
+    if (taskType === "pickup") return from === nodeId;
+    return to === nodeId;
+  });
+  if (targets.length === 0) return;
+
+  await Promise.allSettled(targets.map((task) => api.arriveDriverTask(task.id)));
+}
+
 function collapseSidebar() {
   sidebarCollapsed.value = true;
   exceptionModalOpen.value = false;
@@ -483,7 +526,7 @@ async function collectCashForTask(task: DeliveryTaskRecord) {
   arriveBusy.value = true;
   arriveError.value = null;
   try {
-    if (!isCashPayment(task)) {
+    if (!isCashLikeMethod(task)) {
       throw new Error(t("driver.map.errors.notCashPayment"));
     }
     const ok = window.confirm(t("driver.map.confirm.collectCash"));
@@ -893,6 +936,7 @@ async function animateMoveTo(targetId: string) {
 
   await refreshActiveRouteFromCurrent();
   await refreshArriveData();
+  await markArrivalForCashPayWindow();
   openTaskList(true);
 }
 
@@ -948,6 +992,7 @@ onMounted(async () => {
     }
 
     await refreshArriveData();
+    await markArrivalForCashPayWindow();
     applyDeepLinkFromQuery();
   } catch (e: any) {
     error.value = String(e?.message ?? e);

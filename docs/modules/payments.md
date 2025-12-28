@@ -6,7 +6,7 @@
 
 - 本專案的支付皆為模擬：除現金有「到場/到站」條件外，其餘方式按下即成功。
 - 付款方式是 5 選 1（`cash` / `credit_card` / `bank_transfer` / `third_party_payment` / `monthly_billing`）。
-- 月結帳單不是自動「配送完就加入」：它是付款方式之一，由寄件者在付款時主動選擇 `monthly_billing`，才會被納入帳期。
+- 月結帳單不是自動「配送完就加入」：它是付款方式之一，由**付款人**在付款時主動選擇 `monthly_billing`，才會被納入帳期（預付＝寄件者，到付＝收件者）。
 - 合約客戶仍可選擇現金/信用卡/網銀/第三方等方式直接付清，不一定要用月結。
 
 ## Data（資料落點）
@@ -28,7 +28,7 @@
 ### 2) 付款方式（怎麼付）
 
 - 五種付款方式：`cash` / `credit_card` / `bank_transfer` / `third_party_payment` / `monthly_billing`
-- `monthly_billing` 僅限合約客戶選擇，且代表「入帳期、非立即付清」：
+- `monthly_billing` 僅限合約客戶選擇（預付/到付皆可），且代表「入帳期、非立即付清」：
   - 客戶在待付清單「確認付款」後，包裹視為已付款（不再出現在待付清單）
   - 同時會加入當期「未出帳」區（`monthly_billing_items`）等待帳期結算
   - 帳單到期後，必須以另外四種方式之一付清（不可再用 `monthly_billing` 付帳單）
@@ -72,8 +72,11 @@
     - 超商：建單後即可付（視為交件時付款）
   - `monthly_billing`：建單後即可「確認月結付款」（入帳期，視為已付款並納入本期未出帳區）
 - 到付（收件者付）：
-  - 住家：司機到達送件點後可付（以 `arrived_delivery` 事件作為門檻；現金/非現金皆同）
-  - 超商：司機在 `END_STORE_*` 卸貨後可付（以 `delivered` 到 `END_STORE_*` 作為門檻）
+  - `credit_card` / `bank_transfer` / `third_party_payment`：建單後即可付
+  - `monthly_billing`：建單後即可「確認月結付款」（限合約客戶，入帳期）
+  - `cash`：
+    - 住家：司機到達送件點後可付（以 `arrived_delivery` 事件作為門檻）
+    - 超商：司機在 `END_STORE_*` 卸貨後可付（以 `delivered` 到 `END_STORE_*` 作為門檻）
 
 ### 4.1 Gate Summary（付款門檻總表：事件 ↔ 端點）
 
@@ -85,8 +88,9 @@
 | 預付現金到府（收件前收款） | `prepaid` | `cash` | 住家 | `arrived_pickup`（到場） | 司機到場：`POST /api/driver/tasks/:taskId/arrive`；司機收款：`POST /api/driver/packages/:packageId/collect-cash` |
 | 預付現金門市（交件時收款） | `prepaid` | `cash` | 超商 | 無（建單後即可） | 客戶確認付款：`POST /api/payments/packages/:packageId`（現金意圖）；實際收款在站點處理（非司機到場收款） |
 | 合約月結（入帳期） | `prepaid` | `monthly_billing` | 住家/超商 | 無（建單後即可） | 客戶確認付款（入帳期）：`POST /api/payments/packages/:packageId`（會寫 `payments.paid_at` 並加入 `monthly_billing_items`） |
-| 到付（收件者付）- 到府 | `cod` | `cash`/非現金 | 住家 | `arrived_delivery`（到場） | 司機到場：`POST /api/driver/tasks/:taskId/arrive`；若現金由司機收：`POST /api/driver/packages/:packageId/collect-cash` |
-| 到付（收件者付）- 超商 | `cod` | `cash`/非現金 | 超商 | `delivered` 到 `END_STORE_*`（到站卸貨完成） | 司機卸貨：`POST /api/driver/tasks/:taskId/dropoff`（寫入 `delivered`） |
+| 到付（收件者付）- 到府（現金） | `cod` | `cash` | 住家 | `arrived_delivery`（到場） | 司機到場：`POST /api/driver/tasks/:taskId/arrive`；若現金由司機收：`POST /api/driver/packages/:packageId/collect-cash` |
+| 到付（收件者付）- 超商（現金） | `cod` | `cash` | 超商 | `delivered` 到 `END_STORE_*`（到站卸貨完成） | 司機卸貨：`POST /api/driver/tasks/:taskId/dropoff`（寫入 `delivered`） |
+| 到付（收件者付）- 非現金/月結 | `cod` | `credit_card`/`bank_transfer`/`third_party_payment`/`monthly_billing` | 住家/超商 | 無（建單後即可） | 客戶確認付款：`POST /api/payments/packages/:packageId`（`monthly_billing` 會加入 `monthly_billing_items`） |
 
 > 備註：
 > - `arrived_*`/`enroute_*` 屬於可選通知事件，但在付款門檻上常被當作 gate。
@@ -99,7 +103,7 @@
 | 預付 | `credit_card` / `bank_transfer` / `third_party_payment` | 建單後可付清 | 建單後可付清 |
 | 預付 | `cash` | `arrived_pickup` 後可付清 | 建單後可付清 |
 | 預付 | `monthly_billing` | 建單後可選擇月結（入帳期） | 建單後可選擇月結（入帳期） |
-| 到付 | `credit_card` / `bank_transfer` / `third_party_payment` | `arrived_delivery` 後可付清 | `delivered` 到 `END_STORE_*` 後可付清 |
+| 到付 | `credit_card` / `bank_transfer` / `third_party_payment` / `monthly_billing` | 建單後可付清（`monthly_billing` 為入帳期） | 建單後可付清（`monthly_billing` 為入帳期） |
 | 到付 | `cash` | `arrived_delivery` 後可付清 | `delivered` 到 `END_STORE_*` 後可付清 |
 
 ### 6) 到付收件者（必備欄位）

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { authenticatedRequest, createTestUser, getAdminToken } from "./helpers";
 
 describe("Package charge payments (prepaid/COD)", () => {
-  it("PAY-PKG-001: COD package payable by receiver after arrived_delivery", async () => {
+  it("PAY-PKG-001: COD package payable by receiver immediately after creation", async () => {
     const adminToken = await getAdminToken();
     const sender = await createTestUser({ user_name: "sender_user" });
     const receiver = await createTestUser({ user_name: "receiver_user" });
@@ -40,6 +40,93 @@ describe("Package charge payments (prepaid/COD)", () => {
       method: "POST",
       body: JSON.stringify({ payment_method: "credit_card" }),
     });
+    expect(payTooEarly.status).toBe(200);
+    expect(payTooEarly.data.success).toBe(true);
+
+    const listAfter = await authenticatedRequest<any>("/api/payments/packages?include_paid=true", receiver.token);
+    const paidItem = (listAfter.data.items ?? []).find((i: any) => i.package?.id === packageId);
+    expect(paidItem).toBeTruthy();
+    expect(paidItem.paid_at).toBeTruthy();
+  });
+
+  it("PAY-PKG-002: COD package can be paid via monthly_billing for contract customer receiver", async () => {
+    const adminToken = await getAdminToken();
+    const sender = await createTestUser({ user_name: "sender_user2" });
+    const receiver = await createTestUser({ user_name: "receiver_user2" });
+
+    await authenticatedRequest<any>(`/api/admin/users/${encodeURIComponent(receiver.user.id)}`, adminToken, {
+      method: "PUT",
+      body: JSON.stringify({ user_class: "contract_customer" }),
+    });
+
+    // Ensure token resolves updated user_class in auth middleware.
+    const receiverToken = receiver.token;
+
+    const meSender = await authenticatedRequest<{ user: { id: string } }>("/api/auth/me", sender.token);
+    const senderId = meSender.data.user.id;
+
+    const create = await authenticatedRequest<any>("/api/packages", sender.token, {
+      method: "POST",
+      body: JSON.stringify({
+        customer_id: senderId,
+        sender_name: "Sender",
+        sender_phone: sender.user.phone_number,
+        sender_address: "END_HOME_1",
+        receiver_name: receiver.user.user_name,
+        receiver_phone: receiver.user.phone_number,
+        receiver_address: "END_HOME_2",
+        weight: 5,
+        size: "medium",
+        delivery_time: "standard",
+        payment_type: "cod",
+        payment_method: "monthly_billing",
+      }),
+    });
+    expect(create.status).toBe(200);
+    expect(create.data.success).toBe(true);
+    const packageId = create.data.package.id as string;
+
+    const payOk = await authenticatedRequest<any>(`/api/payments/packages/${encodeURIComponent(packageId)}`, receiverToken, {
+      method: "POST",
+      body: JSON.stringify({ payment_method: "monthly_billing" }),
+    });
+    expect(payOk.status).toBe(200);
+    expect(payOk.data.success).toBe(true);
+  });
+
+  it("PAY-PKG-003: COD cash is payable only after arrived_delivery", async () => {
+    const adminToken = await getAdminToken();
+    const sender = await createTestUser({ user_name: "sender_user3" });
+    const receiver = await createTestUser({ user_name: "receiver_user3" });
+
+    const meSender = await authenticatedRequest<{ user: { id: string } }>("/api/auth/me", sender.token);
+    const senderId = meSender.data.user.id;
+
+    const create = await authenticatedRequest<any>("/api/packages", sender.token, {
+      method: "POST",
+      body: JSON.stringify({
+        customer_id: senderId,
+        sender_name: "Sender",
+        sender_phone: sender.user.phone_number,
+        sender_address: "END_HOME_1",
+        receiver_name: receiver.user.user_name,
+        receiver_phone: receiver.user.phone_number,
+        receiver_address: "END_HOME_2",
+        weight: 5,
+        size: "medium",
+        delivery_time: "standard",
+        payment_type: "cod",
+        payment_method: "cash",
+      }),
+    });
+    expect(create.status).toBe(200);
+    expect(create.data.success).toBe(true);
+    const packageId = create.data.package.id as string;
+
+    const payTooEarly = await authenticatedRequest<any>(`/api/payments/packages/${encodeURIComponent(packageId)}`, receiver.token, {
+      method: "POST",
+      body: JSON.stringify({ payment_method: "cash" }),
+    });
     expect(payTooEarly.status).toBe(409);
 
     const arrived = await authenticatedRequest<any>(`/api/packages/${encodeURIComponent(packageId)}/events`, adminToken, {
@@ -50,15 +137,10 @@ describe("Package charge payments (prepaid/COD)", () => {
 
     const payOk = await authenticatedRequest<any>(`/api/payments/packages/${encodeURIComponent(packageId)}`, receiver.token, {
       method: "POST",
-      body: JSON.stringify({ payment_method: "credit_card" }),
+      body: JSON.stringify({ payment_method: "cash" }),
     });
     expect(payOk.status).toBe(200);
     expect(payOk.data.success).toBe(true);
-
-    const listAfter = await authenticatedRequest<any>("/api/payments/packages?include_paid=true", receiver.token);
-    const paidItem = (listAfter.data.items ?? []).find((i: any) => i.package?.id === packageId);
-    expect(paidItem).toBeTruthy();
-    expect(paidItem.paid_at).toBeTruthy();
   });
 });
 
