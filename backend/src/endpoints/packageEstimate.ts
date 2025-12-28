@@ -6,12 +6,10 @@ import {
   type DeliveryType,
   type SpecialMark,
   type BoxType,
-  ROUTE_COST_K,
-  ROUTE_COST_NORM_MIN,
-  ROUTE_COST_NORM_MAX,
   clamp,
   computeVolumetricWeightKg,
-  determineBoxType
+  determineBoxType,
+  DEFAULT_PRICING_RULES
 } from "../utils/pricing";
 
 type NodeData = { id: string };
@@ -223,12 +221,46 @@ export class PackageEstimate extends OpenAPIRoute {
       );
     }
 
+    // P1 Improvement: Fetch Service Rules (with fallback)
+    let rules = DEFAULT_PRICING_RULES;
+    try {
+      if (c.env.DB) {
+        const results = await c.env.DB.prepare("SELECT rule_key, value FROM service_rules").all<{rule_key: string, value: string}>();
+        if (results.results && results.results.length > 0) {
+          // Merge DB rules into default (naive merge)
+          const dbRules = { ...DEFAULT_PRICING_RULES };
+          for (const row of results.results) {
+             try {
+                const val = JSON.parse(row.value);
+                if (row.rule_key === "const.route_cost_k") dbRules.const.route_cost_k = Number(val);
+                if (row.rule_key === "const.route_cost_norm_min") dbRules.const.route_cost_norm_min = Number(val);
+                if (row.rule_key === "const.route_cost_norm_max") dbRules.const.route_cost_norm_max = Number(val);
+                if (row.rule_key === "const.international_multiplier") dbRules.const.international_multiplier = Number(val);
+                if (row.rule_key === "multipliers.service") dbRules.multipliers.service = val;
+                if (row.rule_key === "delivery_days") dbRules.delivery_days = val;
+                if (row.rule_key === "box_params") dbRules.box_params = val;
+                if (row.rule_key === "weight_surcharge") dbRules.weight_surcharge = val;
+                if (row.rule_key === "min_price") dbRules.min_price = val;
+                if (row.rule_key === "max_price") dbRules.max_price = val;
+                if (row.rule_key === "mark_fees") dbRules.mark_fees = val;
+             } catch (e) {
+                console.error(`Failed to parse rule ${row.rule_key}`, e);
+             }
+          }
+          rules = dbRules;
+        }
+      }
+    } catch (e) {
+      console.error("Failed to fetch service rules", e);
+    }
+
     const pricing = calculatePackagePrice(
       route.totalCost,
       body.weightKg,
       body.dimensionsCm,
       body.deliveryType,
-      specialMarks
+      specialMarks,
+      rules
     );
 
     if ("error" in pricing) {
