@@ -1,0 +1,352 @@
+@startuml 包裹追蹤與計費系統_完整序列圖
+
+!theme plain
+skinparam backgroundColor #FEFEFE
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow true
+skinparam maxMessageSize 200
+
+title 包裹追蹤與計費系統 - 使用者情境序列圖
+
+' =============================================
+' 參與者定義
+' =============================================
+actor "一般客戶\n(非合約/預付)" as Customer #LightBlue
+actor "合約客戶\n(月結帳戶)" as ContractCustomer #LightGreen
+actor "倉儲人員" as WarehouseStaff #Orange
+actor "駕駛員" as Driver #Yellow
+actor "客戶服務人員" as CSR #Pink
+actor "管理人員/\n系統管理員" as Admin #Red
+
+participant "前端介面\n(Web/App)" as Frontend #LightGray
+participant "API Gateway" as API #Cyan
+participant "身份驗證服務" as AuthService #Violet
+participant "客戶管理服務" as CustomerService #LightCoral
+participant "包裹管理服務" as PackageService #LightSalmon
+participant "追蹤服務" as TrackingService #LightSeaGreen
+participant "計費服務" as BillingService #Gold
+database "資料庫" as DB #Silver
+
+' =============================================
+' 情境1: 客戶註冊與登入
+' =============================================
+== 情境1: 客戶註冊與身份驗證 ==
+
+Customer -> Frontend : 訪問系統
+Frontend -> API : POST /auth/register\n(姓名、地址、電話、Email)
+API -> AuthService : 驗證註冊資料
+AuthService -> CustomerService : 建立客戶檔案
+CustomerService -> DB : INSERT customer\n(客戶類型: 非合約)
+DB --> CustomerService : 客戶ID
+CustomerService --> AuthService : 註冊成功
+AuthService --> API : JWT Token
+API --> Frontend : 註冊成功回應
+Frontend --> Customer : 顯示註冊成功
+
+...稍後登入...
+
+Customer -> Frontend : 輸入帳密登入
+Frontend -> API : POST /auth/login
+API -> AuthService : 驗證憑證
+AuthService -> DB : 查詢使用者
+DB --> AuthService : 使用者資料 + 角色
+AuthService --> API : JWT Token + 角色權限
+API --> Frontend : 登入成功
+Frontend --> Customer : 導向客戶儀表板
+
+' =============================================
+' 情境2: 包裹寄件流程 (一般客戶)
+' =============================================
+== 情境2: 一般客戶寄件 ==
+
+Customer -> Frontend : 填寫寄件資訊
+note right of Customer
+  包含:
+  - 收件人資料
+  - 包裹尺寸類型
+  - 重量
+  - 配送時效
+  - 特殊標示(易碎/危險品)
+end note
+
+Frontend -> API : POST /packages\n(寄件資料)
+API -> AuthService : 驗證Token
+AuthService --> API : 驗證通過
+
+API -> PackageService : 建立包裹
+PackageService -> PackageService : 產生唯一追蹤編號
+PackageService -> DB : INSERT package\n(追蹤號、尺寸、重量、申報價值)
+DB --> PackageService : 包裹ID
+
+PackageService -> BillingService : 計算費用
+note right of BillingService
+  費用計算依據:
+  - 服務類型
+  - 距離
+  - 重量與體積
+  - 特殊處理費
+end note
+BillingService -> DB : 查詢定價規則
+DB --> BillingService : 價格規則
+BillingService --> PackageService : 費用明細
+
+PackageService -> TrackingService : 初始化追蹤
+TrackingService -> DB : INSERT tracking_event\n(狀態: 已建立, 時間戳記)
+DB --> TrackingService : 事件ID
+TrackingService --> PackageService : 追蹤已初始化
+
+PackageService --> API : 包裹資訊 + 追蹤號 + 費用
+API --> Frontend : 寄件成功回應
+Frontend --> Customer : 顯示追蹤編號\n與付款資訊
+
+Customer -> Frontend : 選擇付款方式\n(現金/信用卡/行動支付)
+Frontend -> API : POST /payments
+API -> BillingService : 處理付款
+BillingService -> DB : INSERT payment_record
+DB --> BillingService : 付款成功
+BillingService --> API : 付款確認
+API --> Frontend : 付款成功
+Frontend --> Customer : 顯示付款收據
+
+' =============================================
+' 情境3: 合約客戶月結寄件
+' =============================================
+== 情境3: 合約客戶月結寄件 ==
+
+ContractCustomer -> Frontend : 登入系統
+Frontend -> API : POST /auth/login
+API -> AuthService : 驗證
+AuthService -> DB : 確認客戶類型
+DB --> AuthService : 合約客戶 + 月結帳戶
+AuthService --> API : Token + 月結權限
+API --> Frontend : 登入成功
+Frontend --> ContractCustomer : 顯示月結儀表板
+
+ContractCustomer -> Frontend : 批次建立寄件
+Frontend -> API : POST /packages/batch
+API -> PackageService : 批次建立包裹
+loop 每個包裹
+    PackageService -> DB : INSERT package
+    PackageService -> TrackingService : 初始化追蹤
+end
+PackageService -> BillingService : 記錄待結算費用
+BillingService -> DB : INSERT pending_charge\n(月結帳戶)
+DB --> BillingService : 成功
+BillingService --> PackageService : 費用已記錄
+PackageService --> API : 批次結果
+API --> Frontend : 寄件成功\n(本月待結算)
+Frontend --> ContractCustomer : 顯示追蹤編號清單
+
+' =============================================
+' 情境4: 倉儲人員收件處理
+' =============================================
+== 情境4: 倉儲收件與分揀 ==
+
+WarehouseStaff -> Frontend : 掃描包裹條碼
+Frontend -> API : POST /warehouse/receive\n(追蹤號、倉儲ID)
+API -> AuthService : 驗證倉儲人員權限
+AuthService --> API : 權限確認
+
+API -> TrackingService : 記錄收件事件
+TrackingService -> DB : INSERT tracking_event\n(狀態: 倉儲收件, 位置, 時間)
+DB --> TrackingService : 事件ID
+
+TrackingService -> PackageService : 更新包裹狀態
+PackageService -> DB : UPDATE package SET status='IN_WAREHOUSE'
+DB --> PackageService : 更新成功
+PackageService --> TrackingService : 狀態已更新
+
+TrackingService --> API : 收件確認
+API --> Frontend : 收件成功
+Frontend --> WarehouseStaff : 顯示收件確認
+
+...分揀處理...
+
+WarehouseStaff -> Frontend : 執行分揀作業
+Frontend -> API : POST /warehouse/sort\n(追蹤號、目的地倉儲)
+API -> TrackingService : 記錄分揀事件
+TrackingService -> DB : INSERT tracking_event\n(狀態: 分揀完成, 下一站)
+DB --> TrackingService : 事件ID
+TrackingService --> API : 分揀確認
+API --> Frontend : 分揀成功
+Frontend --> WarehouseStaff : 顯示下一站資訊
+
+' =============================================
+' 情境5: 駕駛員配送流程
+' =============================================
+== 情境5: 駕駛員配送作業 ==
+
+Driver -> Frontend : 登入取得任務清單
+Frontend -> API : GET /driver/tasks
+API -> AuthService : 驗證駕駛員權限
+AuthService --> API : 權限確認
+API -> PackageService : 查詢待配送包裹
+PackageService -> DB : SELECT packages WHERE driver=? AND status='READY_DELIVERY'
+DB --> PackageService : 包裹清單
+PackageService --> API : 任務清單
+API --> Frontend : 今日配送任務
+Frontend --> Driver : 顯示配送清單
+
+Driver -> Frontend : 開始配送\n(裝車確認)
+Frontend -> API : POST /driver/start-route\n(車輛ID、包裹清單)
+API -> TrackingService : 批次更新狀態
+loop 每個包裹
+    TrackingService -> DB : INSERT tracking_event\n(狀態: 配送中, 車輛ID)
+end
+TrackingService --> API : 配送開始確認
+API --> Frontend : 開始配送
+Frontend --> Driver : 顯示導航 + 配送順序
+
+...配送途中...
+
+Driver -> Frontend : 包裹送達\n(掃描 + 簽收)
+Frontend -> API : POST /driver/deliver\n(追蹤號、簽收資訊)
+API -> TrackingService : 記錄送達事件
+TrackingService -> DB : INSERT tracking_event\n(狀態: 已送達, 簽收人, 時間)
+DB --> TrackingService : 事件ID
+TrackingService -> PackageService : 完成包裹狀態
+PackageService -> DB : UPDATE package SET status='DELIVERED'
+DB --> PackageService : 更新成功
+PackageService --> TrackingService : 狀態已完成
+TrackingService --> API : 送達確認
+API --> Frontend : 送達成功
+Frontend --> Driver : 顯示下一個配送點
+
+' =============================================
+' 情境6: 客戶追蹤包裹
+' =============================================
+== 情境6: 客戶查詢包裹追蹤 ==
+
+Customer -> Frontend : 輸入追蹤編號
+Frontend -> API : GET /tracking/{trackingNumber}
+API -> TrackingService : 查詢追蹤記錄
+TrackingService -> DB : SELECT tracking_events\nWHERE tracking_number=?\nORDER BY timestamp
+DB --> TrackingService : 所有追蹤事件
+TrackingService --> API : 追蹤歷史
+API --> Frontend : 追蹤資訊
+Frontend --> Customer : 顯示追蹤時間軸
+
+note right of Customer
+  顯示內容:
+  - 當前狀態
+  - 完整追蹤歷史
+  - 各站點時間戳記
+  - 預計送達時間
+end note
+
+' =============================================
+' 情境7: 客服處理異常
+' =============================================
+== 情境7: 客服處理異常包裹 ==
+
+Customer -> Frontend : 回報包裹問題\n(遺失/延誤/損毀)
+Frontend -> API : POST /support/issues
+API -> PackageService : 建立問題單
+PackageService -> DB : INSERT issue\n(類型、描述、追蹤號)
+DB --> PackageService : 問題單ID
+PackageService --> API : 問題單建立
+API --> Frontend : 回報成功
+Frontend --> Customer : 顯示問題單編號
+
+...客服處理...
+
+CSR -> Frontend : 查詢問題單
+Frontend -> API : GET /support/issues/{issueId}
+API -> AuthService : 驗證客服權限
+AuthService --> API : 權限確認
+API -> PackageService : 查詢問題詳情
+PackageService -> DB : SELECT issue + package + tracking
+DB --> PackageService : 完整資料
+PackageService --> API : 問題詳情
+API --> Frontend : 問題資料
+Frontend --> CSR : 顯示問題處理介面
+
+CSR -> Frontend : 更新處理狀態 + 備註
+Frontend -> API : PATCH /support/issues/{issueId}
+API -> TrackingService : 記錄異常事件
+TrackingService -> DB : INSERT tracking_event\n(狀態: 異常處理中)
+DB --> TrackingService : 事件ID
+TrackingService --> API : 更新成功
+API --> Frontend : 處理成功
+Frontend --> CSR : 顯示更新結果
+
+' =============================================
+' 情境8: 管理員月結帳單處理
+' =============================================
+== 情境8: 管理員月結結算 ==
+
+Admin -> Frontend : 執行月結結算
+Frontend -> API : POST /admin/billing/settle\n(年月)
+API -> AuthService : 驗證管理員權限
+AuthService --> API : 權限確認
+API -> BillingService : 產生月結帳單
+BillingService -> DB : SELECT pending_charges\nWHERE period=? GROUP BY customer
+DB --> BillingService : 待結算資料
+loop 每個合約客戶
+    BillingService -> DB : INSERT bill\n(客戶、期間、總金額)
+    BillingService -> DB : UPDATE pending_charges SET billed=true
+end
+BillingService --> API : 結算結果
+API --> Frontend : 月結完成
+Frontend --> Admin : 顯示結算報告
+
+Admin -> Frontend : 查看歷史帳單
+Frontend -> API : GET /admin/billing/history
+API -> BillingService : 查詢帳單
+BillingService -> DB : SELECT bills ORDER BY date DESC
+DB --> BillingService : 帳單列表
+BillingService --> API : 歷史帳單
+API --> Frontend : 帳單資料
+Frontend --> Admin : 顯示帳單清單
+
+' =============================================
+' 情境9: 管理員系統管理
+' =============================================
+== 情境9: 系統管理與權限控制 ==
+
+Admin -> Frontend : 管理使用者權限
+Frontend -> API : GET /admin/users
+API -> AuthService : 驗證管理員權限
+AuthService --> API : 權限確認
+API -> CustomerService : 查詢使用者清單
+CustomerService -> DB : SELECT users + roles
+DB --> CustomerService : 使用者資料
+CustomerService --> API : 使用者清單
+API --> Frontend : 使用者資料
+Frontend --> Admin : 顯示使用者管理介面
+
+Admin -> Frontend : 修改使用者角色
+Frontend -> API : PATCH /admin/users/{userId}\n(新角色)
+API -> CustomerService : 更新角色
+CustomerService -> DB : UPDATE user SET role=?
+DB --> CustomerService : 更新成功
+CustomerService --> API : 角色已更新
+API --> Frontend : 更新成功
+Frontend --> Admin : 顯示更新結果
+
+' =============================================
+' 情境10: 進階搜尋功能
+' =============================================
+== 情境10: 進階搜尋 ==
+
+CSR -> Frontend : 執行進階搜尋
+note right of CSR
+  搜尋條件:
+  - 追蹤編號
+  - 客戶帳號
+  - 運送日期範圍
+  - 車輛ID
+  - 倉儲地點
+end note
+
+Frontend -> API : GET /search/packages?...filters
+API -> AuthService : 驗證權限
+AuthService --> API : 權限確認
+API -> PackageService : 複合條件搜尋
+PackageService -> DB : SELECT packages\nWHERE (filters)\nJOIN tracking_events
+DB --> PackageService : 搜尋結果
+PackageService --> API : 包裹清單
+API --> Frontend : 搜尋結果
+Frontend --> CSR : 顯示結果列表
+
+@enduml
