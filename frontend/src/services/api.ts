@@ -744,10 +744,19 @@ export const api = {
     request<{ success: boolean; status: string; location: string | null }>(`/api/driver/tasks/${encodeURIComponent(taskId)}/enroute`, {
       method: "POST",
     }),
+  arriveDriverTask: (taskId: string) =>
+    request<{ success: boolean; status: string; location: string }>(`/api/driver/tasks/${encodeURIComponent(taskId)}/arrive`, {
+      method: "POST",
+    }),
   driverUpdatePackageStatus: (packageId: string, payload: { status: string; note?: string; location?: string }) =>
     request<{ success: boolean; message?: string; event_id?: string }>(
       `/api/driver/packages/${encodeURIComponent(packageId)}/status`,
       { method: "POST", body: JSON.stringify(payload) },
+    ),
+  driverCollectCash: (packageId: string) =>
+    request<{ success: boolean; paid_at: string; payment_method: "cash" }>(
+      `/api/driver/packages/${encodeURIComponent(packageId)}/collect-cash`,
+      { method: "POST" },
     ),
   driverReportPackageException: (
     packageId: string,
