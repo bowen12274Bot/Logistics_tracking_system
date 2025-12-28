@@ -4,7 +4,8 @@ import {
   determineBoxType,
   computeVolumetricWeightKg,
   guessDimensionsFromBoxType,
-  mapDeliveryTimeToType
+  mapDeliveryTimeToType,
+  DEFAULT_PRICING_RULES
 } from "../utils/pricing";
 
 describe("Pricing Logic Utils", () => {
@@ -59,7 +60,9 @@ describe("Pricing Logic Utils", () => {
         5200, 
         12, 
         { length: 60, width: 40, height: 40 },
-        "standard"
+        "standard",
+        [],
+        DEFAULT_PRICING_RULES
       );
       
       expect(res).not.toHaveProperty("error");
