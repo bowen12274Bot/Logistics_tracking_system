@@ -1,5 +1,6 @@
 ﻿<script setup lang="ts">
 import { computed, reactive, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { api } from '../services/api'
 import type { PackageEstimatePayload, PackageEstimateResponse, SpecialMark } from '../services/api'
 import UiCard from '../components/ui/UiCard.vue'
@@ -76,6 +77,7 @@ const volumetricWeightKg = computed(() => {
 const billableWeightKg = computed(() => Math.max(form.weightKg || 0, volumetricWeightKg.value))
 
 const boxType = computed<BoxType | null>(() => pickBoxType(form.lengthCm, form.widthCm, form.heightCm, billableWeightKg.value))
+const { t } = useI18n()
 
 function pickBoxType(l: number, w: number, h: number, billableWeight: number): BoxType | null {
   const dims = [l, w, h].sort((a, b) => b - a) // d1 >= d2 >= d3
@@ -172,12 +174,12 @@ async function handleSubmit() {
   lastSnapshot.boxType = boxType.value
 
   if (!form.fromNodeId || !form.toNodeId) {
-    error.value = '請輸入起訖節點 ID（fromNodeId / toNodeId）。'
+    error.value = t('estimate.error.missingNodes')
     toast.warning(error.value)
     return
   }
   if (!boxType.value) {
-    error.value = '尺寸或重量超出可服務範圍，無法判定箱型。'
+    error.value = t('estimate.error.boxType')
     toast.warning(error.value)
     return
   }
@@ -200,7 +202,7 @@ async function handleSubmit() {
     result.value = res.estimate
     lastSpecialMarks.value = payload.specialMarks ?? []
   } catch (e: any) {
-    error.value = e?.message ?? '試算失敗，請稍後再試。改用 fallback 試算。'
+    error.value = e?.message ?? t('estimate.error.failed')
     try {
       const { cost, fallback } = await fetchRouteCost(form.fromNodeId, form.toNodeId)
       routeCost.value = cost
@@ -219,7 +221,7 @@ async function handleSubmit() {
         toNodeId: form.toNodeId,
       })
       if (fallbackUsed.value) {
-        error.value = 'API 失敗，已暫用 mock 5200 試算。'
+        error.value = t('estimate.fallback')
       }
     } catch (_fallbackErr) {
       toastFromApiError(e, error.value)
@@ -232,123 +234,122 @@ async function handleSubmit() {
 
 <template>
   <UiPageShell
-    eyebrow="運費"
-    title="計算運費"
-    lede="依地圖 routeCost 估價，含箱型判定、時效係數、重量加價、特殊標記、floor/cap。"
+    :eyebrow="t('estimate.title')"
+    :title="t('estimate.title')"
+    :lede="t('estimate.lede')"
   >
     <UiCard class="estimator">
       <div class="form-grid">
         <div class="field">
-          <label>起點 fromNodeId</label>
-          <input v-model="form.fromNodeId" placeholder="例：HUB_0" />
+          <label>{{ t('estimate.from') }}</label>
+          <input v-model="form.fromNodeId" :placeholder="t('estimate.fromPlaceholder')" />
         </div>
         <div class="field">
-          <label>終點 toNodeId</label>
-          <input v-model="form.toNodeId" placeholder="例：END_12" />
+          <label>{{ t('estimate.to') }}</label>
+          <input v-model="form.toNodeId" :placeholder="t('estimate.toPlaceholder')" />
         </div>
 
         <div class="field">
-          <label>實重 (kg)</label>
+          <label>{{ t('estimate.weight') }}</label>
           <input v-model.number="form.weightKg" type="number" min="0" step="0.1" />
-          <p class="hint">billable = max(實重, 材積重)</p>
+          <p class="hint">{{ t('estimate.billableHint') }}</p>
         </div>
         <div class="field">
-          <label>長 × 寬 × 高 (cm)</label>
+          <label>{{ t('estimate.dimensions') }}</label>
           <div class="triple">
-            <input v-model.number="form.lengthCm" type="number" min="0" step="1" placeholder="長" />
-            <input v-model.number="form.widthCm" type="number" min="0" step="1" placeholder="寬" />
-            <input v-model.number="form.heightCm" type="number" min="0" step="1" placeholder="高" />
+            <input v-model.number="form.lengthCm" type="number" min="0" step="1" :placeholder="t('estimate.lengthPlaceholder')" />
+            <input v-model.number="form.widthCm" type="number" min="0" step="1" :placeholder="t('estimate.widthPlaceholder')" />
+            <input v-model.number="form.heightCm" type="number" min="0" step="1" :placeholder="t('estimate.heightPlaceholder')" />
           </div>
-          <p class="hint">材積重 = L×W×H / 6000</p>
+          <p class="hint">{{ t('estimate.volumeHint') }}</p>
         </div>
 
         <div class="field">
-          <label>配送型態</label>
+          <label>{{ t('estimate.deliveryType') }}</label>
           <select v-model="form.deliveryType">
-            <option value="economy">economy (1.00)</option>
-            <option value="standard">standard (1.25)</option>
-            <option value="two_day">two_day (1.55)</option>
-            <option value="overnight">overnight (2.00)</option>
+            <option value="economy">{{ t('estimate.deliveryTypeOptions.economy') }}</option>
+            <option value="standard">{{ t('estimate.deliveryTypeOptions.standard') }}</option>
+            <option value="two_day">{{ t('estimate.deliveryTypeOptions.twoDay') }}</option>
+            <option value="overnight">{{ t('estimate.deliveryTypeOptions.overnight') }}</option>
           </select>
         </div>
 
         <div class="field">
-          <label>特殊標記（可複選）</label>
+          <label>{{ t('estimate.marks') }}</label>
           <div class="chips">
             <label class="chip">
               <input v-model="form.specialMarks.dangerous" type="checkbox" />
-              <span>dangerous +120</span>
+              <span>{{ t('estimate.mark.dangerous') }}</span>
             </label>
             <label class="chip">
               <input v-model="form.specialMarks.fragile" type="checkbox" />
-              <span>fragile +60</span>
+              <span>{{ t('estimate.mark.fragile') }}</span>
             </label>
             <label class="chip">
               <input v-model="form.specialMarks.international" type="checkbox" />
-              <span>international ×1.8</span>
+              <span>{{ t('estimate.mark.international') }}</span>
             </label>
           </div>
         </div>
       </div>
 
       <div class="derived">
-        <div class="pill">材積重：{{ volumetricWeightKg.toFixed(2) }} kg</div>
-        <div class="pill">計費重量：{{ billableWeightKg.toFixed(2) }} kg</div>
+        <div class="pill">{{ t('estimate.volumePill', { weight: volumetricWeightKg.toFixed(2) }) }}</div>
+        <div class="pill">{{ t('estimate.billablePill', { weight: billableWeightKg.toFixed(2) }) }}</div>
         <div class="pill">
-          箱型：{{ boxType || '超出規格' }}
-          <span v-if="!boxType" class="hint">請調整尺寸/重量</span>
+          {{ t('estimate.boxLabel', { box: boxType || t('estimate.boxOutOfRange') }) }}
+          <span v-if="!boxType" class="hint">{{ t('estimate.boxAdjustHint') }}</span>
         </div>
       </div>
 
       <div class="actions">
         <button class="primary-btn" type="button" :disabled="loading" @click="handleSubmit">
-          {{ loading ? '計算中…' : '估算運費' }}
+          {{ loading ? t('estimate.loading') : t('estimate.cta') }}
         </button>
-        <span v-if="fallbackUsed" class="hint">連線失敗，暫用 routeCost=5200 mock。</span>
+        <span v-if="fallbackUsed" class="hint">{{ t('estimate.error.apiFallback') }}</span>
       </div>
 
       <p v-if="error" class="error">{{ error }}</p>
 
       <div v-if="result" class="result card">
         <header class="result-head">
-          <h3>試算結果</h3>
-          <span class="pill">應收：{{ result.total_cost }} 元</span>
+          <h3>{{ t('estimate.result.title') }}</h3>
+          <span class="pill">{{ t('estimate.result.total', { amount: result.total_cost }) }}</span>
         </header>
         <div class="grid">
           <div>
-            <p class="eyebrow">路線成本</p>
-            <p>routeCost: {{ result.route_cost }}</p>
-            <p>routeCostNorm (clamp 0.3~1.6): {{ result.route_cost_norm.toFixed(2) }}</p>
+            <p class="eyebrow">{{ t('estimate.section.route') }}</p>
+            <p>{{ t('estimate.routeCost', { cost: result.route_cost }) }}</p>
+            <p>{{ t('estimate.routeCostNorm', { value: result.route_cost_norm.toFixed(2) }) }}</p>
           </div>
           <div>
-            <p class="eyebrow">箱型與重量</p>
-            <p>箱型: {{ lastSnapshot.boxType ?? result.box_type }}</p>
+            <p class="eyebrow">{{ t('estimate.section.box') }}</p>
+            <p>{{ t('estimate.boxLabel', { box: lastSnapshot.boxType ?? result.box_type }) }}</p>
             <p>
-              billable 重量: {{ lastSnapshot.billableWeightKg.toFixed(2) }} kg
-              (材積 {{ lastSnapshot.volumetricWeightKg.toFixed(2) }} kg)
+              {{ t('estimate.billableLabel', { billable: lastSnapshot.billableWeightKg.toFixed(2), volumetric: lastSnapshot.volumetricWeightKg.toFixed(2) }) }}
             </p>
           </div>
           <div>
-            <p class="eyebrow">基礎與時效</p>
-            <p>base: {{ result.base.toFixed(2) }}</p>
-            <p>配送型態: {{ form.deliveryType }}</p>
-            <p>shipping 基礎: {{ result.shipping }}</p>
+            <p class="eyebrow">{{ t('estimate.section.service') }}</p>
+            <p>{{ t('estimate.base', { value: result.base.toFixed(2) }) }}</p>
+            <p>{{ t('estimate.deliveryTypeLabel', { level: form.deliveryType }) }}</p>
+            <p>{{ t('estimate.shippingBase', { value: result.shipping }) }}</p>
           </div>
           <div>
-            <p class="eyebrow">加價</p>
-            <p>重量加價: {{ result.weight_surcharge }}</p>
-            <p>國際件×1.8: {{ result.international_multiplier_applied > 1 ? '是' : '否' }}</p>
-            <p>標記加價 (危/碎): {{ result.mark_fee }}</p>
+            <p class="eyebrow">{{ t('estimate.section.surcharge') }}</p>
+            <p>{{ t('estimate.weightSurcharge', { value: result.weight_surcharge }) }}</p>
+            <p>{{ t('estimate.international', { value: result.international_multiplier_applied > 1 ? t('estimate.boolean.yes') : t('estimate.boolean.no') }) }}</p>
+            <p>{{ t('estimate.markFee', { value: result.mark_fee }) }}</p>
           </div>
           <div>
-            <p class="eyebrow">floor / cap</p>
-            <p>subtotal: {{ result.calculated_price }}</p>
-            <p>floor: {{ result.min_price }}，cap: {{ result.max_price }}</p>
-            <p>final: {{ result.total_cost }}</p>
+            <p class="eyebrow">{{ t('estimate.section.floorcap') }}</p>
+            <p>{{ t('estimate.subtotal', { value: result.calculated_price }) }}</p>
+            <p>{{ t('estimate.floorcapValues', { floor: result.min_price, cap: result.max_price }) }}</p>
+            <p>{{ t('estimate.final', { value: result.total_cost }) }}</p>
           </div>
           <div>
-            <p class="eyebrow">特殊標記</p>
-            <p>{{ lastSpecialMarks.length ? lastSpecialMarks.join(', ') : '無' }}</p>
+            <p class="eyebrow">{{ t('estimate.section.marks') }}</p>
+            <p>{{ lastSpecialMarks.length ? lastSpecialMarks.join(', ') : t('estimate.marksNone') }}</p>
           </div>
         </div>
       </div>
