@@ -1,6 +1,5 @@
 /**
  * EmployeeWarehouseView Tests
- * 測試倉儲人員頁面
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest'
@@ -11,7 +10,6 @@ import EmployeeWarehouseView from '../../views/EmployeeWarehouseView.vue'
 import { useAuthStore } from '../../stores/auth'
 import { mockWarehouseUser, createMockAuthResponse } from '../helpers'
 
-// Mock API
 vi.mock('../../services/api', () => ({
   api: {
     getWarehousePackages: vi.fn().mockResolvedValue({
@@ -20,8 +18,13 @@ vi.mock('../../services/api', () => ({
       neighbors: ['REG_0', 'REG_1'],
       packages: [],
     }),
+    getWarehouseExceptionReports: vi.fn().mockResolvedValue({
+      success: true,
+      exceptions: [],
+    }),
     receiveWarehousePackages: vi.fn(),
     dispatchWarehouseNext: vi.fn(),
+    reportWarehouseException: vi.fn(),
   },
 }))
 
@@ -45,58 +48,34 @@ describe('EmployeeWarehouseView', () => {
     vi.clearAllMocks()
   })
 
-  describe('渲染', () => {
-    it('應該渲染倉儲頁面', async () => {
-      const wrapper = mount(EmployeeWarehouseView, {
-        global: {
-          plugins: [router, createPinia()],
-        },
-      })
-
-      await flushPromises()
-      expect(wrapper.exists()).toBe(true)
+  it('renders station header and tabs', async () => {
+    const wrapper = mount(EmployeeWarehouseView, {
+      global: {
+        plugins: [router, createPinia()],
+      },
     })
 
-    it('應該顯示倉儲相關標題', async () => {
-      const wrapper = mount(EmployeeWarehouseView, {
-        global: {
-          plugins: [router, createPinia()],
-        },
-      })
-
-      await flushPromises()
-      const text = wrapper.text()
-      expect(text.includes('倉儲') || text.includes('站內') || text.includes('包裹')).toBe(true)
-    })
+    await flushPromises()
+    const text = wrapper.text()
+    expect(text).toContain('本站')
+    expect(text).toContain('HUB_0')
+    expect(text).toContain('待點收')
+    expect(text).toContain('分揀中')
+    expect(text).toContain('已派發')
   })
 
-  describe('API 呼叫', () => {
-    it('應該載入時呼叫 getWarehousePackages', async () => {
-      const { api } = await import('../../services/api')
+  it('calls warehouse APIs on mount', async () => {
+    const { api } = await import('../../services/api')
 
-      mount(EmployeeWarehouseView, {
-        global: {
-          plugins: [router, createPinia()],
-        },
-      })
-
-      await flushPromises()
-      expect(api.getWarehousePackages).toHaveBeenCalled()
+    mount(EmployeeWarehouseView, {
+      global: {
+        plugins: [router, createPinia()],
+      },
     })
-  })
 
-  describe('批次操作', () => {
-    it('頁面應該有操作按鈕區域', async () => {
-      const wrapper = mount(EmployeeWarehouseView, {
-        global: {
-          plugins: [router, createPinia()],
-        },
-      })
-
-      await flushPromises()
-      const buttons = wrapper.findAll('button')
-      // 應該至少有一些操作按鈕
-      expect(buttons.length).toBeGreaterThanOrEqual(0)
-    })
+    await flushPromises()
+    expect(api.getWarehousePackages).toHaveBeenCalled()
+    expect(api.getWarehouseExceptionReports).toHaveBeenCalled()
   })
 })
+
