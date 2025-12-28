@@ -239,9 +239,9 @@ const ensureBillDetail = async (billId: string) => {
     const res = await api.getBillingBillDetail(billId)
     billDetails.value = { ...billDetails.value, [billId]: res.bill }
   } catch (err: any) {
-    billDetailError.value = { ...billDetailError.value, [billId]: err?.message || '載入帳單明細失敗' }
+    billDetailError.value = { ...billDetailError.value, [billId]: err?.message || t('payment.records.loadFailed') }
     billDetails.value = { ...billDetails.value, [billId]: null }
-    toastFromApiError(err, billDetailError.value[billId] ?? '載入帳單明細失敗')
+    toastFromApiError(err, billDetailError.value[billId] ?? t('payment.records.loadFailed'))
   } finally {
     billDetailLoading.value = { ...billDetailLoading.value, [billId]: false }
   }

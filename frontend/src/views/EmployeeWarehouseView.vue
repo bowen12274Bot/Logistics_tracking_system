@@ -1,369 +1,449 @@
-﻿
+git status
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from "vue";
+import { computed, reactive, ref } from "vue";
 import { RouterLink } from "vue-router";
 import { useI18n } from "vue-i18n";
-import { api, type WarehouseExceptionRecord, type WarehousePackageRecord } from "../services/api";
-import { exceptionReasonLabel, selectableReasonsFor } from "../lib/exceptionReasons";
 import UiCard from "../components/ui/UiCard.vue";
-import UiList from "../components/ui/UiList.vue";
 import UiModal from "../components/ui/UiModal.vue";
-import UiNotice from "../components/ui/UiNotice.vue";
 import UiPageShell from "../components/ui/UiPageShell.vue";
-import { useToasts } from "../components/ui/toast";
+import { useAuthStore } from "../stores/auth";
+import { api, type PackageStatus, type Package } from "../services/api";
+import { exceptionReasonLabel, selectableReasonsFor } from "../lib/exceptionReasons";
 import { toastFromApiError } from "../services/errorToast";
+import { useToasts } from "../components/ui/toast";
 
-const loading = ref(true);
-const busy = ref(false);
-const error = ref<string | null>(null);
+const auth = useAuthStore();
 const toast = useToasts();
 const { t } = useI18n();
 
-const warehouseNodeId = ref<string | null>(null);
-const neighbors = ref<string[]>([]);
-const packages = ref<WarehousePackageRecord[]>([]);
-const exceptionReports = ref<WarehouseExceptionRecord[]>([]);
+const loading = ref(false);
+const busy = ref(false);
+const packages = ref<Package[]>([]);
+const exceptionReports = ref<
+  { id: string; tracking_number?: string | null; handled?: number | null; reported_at?: string | null; reason_code?: string | null }[]
+>([]);
 
-const receiveSelection = reactive<Record<string, boolean>>({});
-const nextHopByPackageId = reactive<Record<string, string>>({});
+const selectedNode = ref("");
+const adjacentNodes = ref<string[]>([]);
+const awaitingReceive = computed(() => packages.value.filter((p) => p.status === "warehouse_in"));
+const sorting = computed(() => packages.value.filter((p) => p.status === "warehouse_sorting"));
+const dispatched = computed(() => packages.value.filter((p) => p.status === "route_decided"));
 
-const awaitingReceive = computed(() => packages.value.filter((p) => p.ui_state === "await_receive"));
-const sorting = computed(() => packages.value.filter((p) => p.ui_state === "sorting"));
-const dispatched = computed(() => packages.value.filter((p) => p.ui_state === "dispatched"));
+const receiveChecked = reactive<Record<string, boolean>>({});
+const nextHopFor = reactive<Record<string, string>>({});
 
-const exceptionModalOpen = ref(false);
-const exceptionTarget = ref<WarehousePackageRecord | null>(null);
-const exceptionReasons = computed(() =>
-  selectableReasonsFor("warehouse_staff").map((r) => ({ code: r.code, label: exceptionReasonLabel(r.code, t) })),
-);
-const exceptionForm = reactive({ reason_code: "", description: "" });
-const exceptionSubmitError = ref<string | null>(null);
-
-const selectedReceiveIds = computed(() =>
-  awaitingReceive.value.map((p) => p.id).filter((id) => receiveSelection[id]),
+const allReceiveChecked = computed(() =>
+  awaitingReceive.value.length > 0 &&
+  awaitingReceive.value.every((p) => receiveChecked[p.id] === true),
 );
 
-const allReceiveChecked = computed(() => {
-  const list = awaitingReceive.value;
-  if (list.length === 0) return false;
-  return list.every((p) => Boolean(receiveSelection[p.id]));
-});
+const toggleAllReceive = () => {
+  const next = !allReceiveChecked.value;
+  for (const p of awaitingReceive.value) receiveChecked[p.id] = next;
+};
 
-function toggleReceiveAll() {
-  const value = !allReceiveChecked.value;
-  for (const p of awaitingReceive.value) receiveSelection[p.id] = value;
-}
-
-function ensureNextHopDefaults(pkgs: WarehousePackageRecord[], neighborIds: string[]) {
-  const fallbackNeighbor = neighborIds[0];
-  if (!fallbackNeighbor) return;
-  for (const p of pkgs) {
-    if (p.ui_state !== "sorting") continue;
-    if (nextHopByPackageId[p.id]) continue;
-    nextHopByPackageId[p.id] = p.suggested_to_node_id ?? fallbackNeighbor;
-  }
-}
-
-function groupPackagesByNextHop(list: WarehousePackageRecord[]) {
-  const groups = new Map<string, WarehousePackageRecord[]>();
-  for (const n of neighbors.value) groups.set(n, []);
-  for (const p of list) {
-    const hop = nextHopByPackageId[p.id];
-    if (!hop) continue;
-    if (!groups.has(hop)) groups.set(hop, []);
-    groups.get(hop)!.push(p);
-  }
-  return groups;
-}
-
-const sortingGroups = computed(() => groupPackagesByNextHop(sorting.value));
-
-async function refresh() {
+const refresh = async () => {
   loading.value = true;
-  error.value = null;
   try {
-    const [res, exceptionRes] = await Promise.all([api.getWarehousePackages(300), api.getWarehouseExceptionReports(100)]);
-    warehouseNodeId.value = res.warehouse_node_id ?? null;
-    neighbors.value = res.neighbors ?? [];
+    const res = await api.getWarehousePackages();
     packages.value = res.packages ?? [];
-    ensureNextHopDefaults(res.packages ?? [], res.neighbors ?? []);
-    exceptionReports.value = exceptionRes.exceptions ?? [];
-  } catch (e: any) {
-    error.value = String(e?.message ?? e);
-    toastFromApiError(e, error.value);
+    selectedNode.value = res.node_id ?? "";
+    adjacentNodes.value = res.adjacent_nodes ?? [];
+  } catch (err) {
+    toastFromApiError(err, t("warehouse.errors.loadFailed"));
   } finally {
     loading.value = false;
   }
-}
+};
 
-async function receiveSelected() {
-  const ids = selectedReceiveIds.value;
-  if (ids.length === 0) {
-    toast.warning("請先勾選要點收的包裹。");
+const receiveSelected = async () => {
+  const targets = awaitingReceive.value.filter((p) => receiveChecked[p.id]);
+  if (targets.length === 0) {
+    toast.warning(t("warehouse.hints.selectToReceive"));
     return;
   }
   busy.value = true;
-  error.value = null;
   try {
-    const res = await api.receiveWarehousePackages(ids);
-    const failed = res.details?.failed?.length ?? 0;
+    const res = await api.warehouseReceive(targets.map((p) => p.id));
+    const failed = res.failed_ids?.length ?? 0;
     toast.success(
-      failed > 0 ? `點收完成（成功 ${res.processed}，失敗 ${failed}）` : `點收完成（共 ${res.processed} 件）`,
+      failed > 0
+        ? t("warehouse.receive.doneWithFailed", { success: res.processed, failed })
+        : t("warehouse.receive.done", { count: res.processed }),
     );
-    for (const id of ids) delete receiveSelection[id];
     await refresh();
-  } catch (e: any) {
-    error.value = String(e?.message ?? e);
-    toastFromApiError(e, error.value);
+  } catch (err) {
+    toastFromApiError(err, t("warehouse.errors.receiveFailed"));
   } finally {
     busy.value = false;
   }
-}
+};
 
-async function dispatchOne(p: WarehousePackageRecord) {
-  const toNodeId = String(nextHopByPackageId[p.id] ?? "").trim();
-  if (!toNodeId) {
-    toast.warning("請先選擇下一跳節點。");
+const setNextHop = (pkg: Package, node: string) => {
+  nextHopFor[pkg.id] = node;
+};
+
+const dispatchOne = async (pkg: Package) => {
+  const nextHop = nextHopFor[pkg.id];
+  if (!nextHop) {
+    toast.warning(t("warehouse.hints.selectNextHop"));
     return;
   }
   busy.value = true;
-  error.value = null;
   try {
-    await api.dispatchWarehouseNext(p.id, { toNodeId });
-    toast.success(`已派發：${p.tracking_number ?? p.id}`);
+    await api.warehouseDispatch(pkg.id, { next_hop: nextHop });
+    toast.success(t("warehouse.dispatch.done", { tracking: pkg.tracking_number ?? pkg.id }));
     await refresh();
-  } catch (e: any) {
-    error.value = String(e?.message ?? e);
-    toastFromApiError(e, error.value);
+  } catch (err) {
+    toastFromApiError(err, t("warehouse.errors.dispatchFailed"));
   } finally {
     busy.value = false;
   }
-}
+};
 
-function startException(p: WarehousePackageRecord) {
-  exceptionTarget.value = p;
-  exceptionForm.reason_code = "";
-  exceptionForm.description = "";
-  exceptionSubmitError.value = null;
+const exceptionModalOpen = ref(false);
+const exceptionTarget = ref<Package | null>(null);
+const exceptionReason = ref("");
+const exceptionNote = ref("");
+const exceptionSubmitError = ref("");
+
+const startException = (pkg: Package) => {
+  exceptionTarget.value = pkg;
+  exceptionReason.value = "";
+  exceptionNote.value = "";
+  exceptionSubmitError.value = "";
   exceptionModalOpen.value = true;
-}
+};
 
-async function submitException() {
-  const target = exceptionTarget.value;
-  if (!target) return;
+const closeExceptionModal = () => {
+  exceptionModalOpen.value = false;
+};
 
-  const reason = String(exceptionForm.reason_code ?? "").trim();
-  const description = String(exceptionForm.description ?? "").trim();
-  if (!reason) {
-    exceptionSubmitError.value = "請先選擇異常原因。";
+const submitException = async () => {
+  exceptionSubmitError.value = "";
+  if (!exceptionReason.value) {
+    exceptionSubmitError.value = t("warehouse.errors.exceptionReasonRequired");
     return;
   }
-  if (!description) {
-    exceptionSubmitError.value = "請填寫說明（必填）。";
+  if (!exceptionNote.value.trim()) {
+    exceptionSubmitError.value = t("warehouse.errors.exceptionNoteRequired");
     return;
   }
+  if (!exceptionTarget.value) return;
 
   busy.value = true;
-  exceptionSubmitError.value = null;
-  error.value = null;
   try {
-    await api.reportWarehouseException(target.id, { reason_code: reason, description });
-    toast.success(`已申報異常：${target.tracking_number ?? target.id}`);
-    exceptionModalOpen.value = false;
-    exceptionTarget.value = null;
+    await api.reportException({
+      package_id: exceptionTarget.value.id,
+      reason_code: exceptionReason.value,
+      reported_by: auth.user?.id ?? "warehouse",
+      handling_report: exceptionNote.value.trim(),
+    });
+    toast.success(t("warehouse.exception.done", { tracking: exceptionTarget.value.tracking_number ?? exceptionTarget.value.id }));
     await refresh();
-  } catch (e: any) {
-    exceptionSubmitError.value = String(e?.message ?? e);
-    toastFromApiError(e, exceptionSubmitError.value);
+    await loadExceptions();
+    closeExceptionModal();
+  } catch (err) {
+    toastFromApiError(err, t("warehouse.errors.exceptionFailed"));
   } finally {
     busy.value = false;
   }
-}
+};
 
-function closeExceptionModal() {
-  exceptionModalOpen.value = false;
-  exceptionTarget.value = null;
-  exceptionSubmitError.value = null;
-}
+const loadExceptions = async () => {
+  try {
+    const res = await api.getExceptions({ scope: "mine" });
+    exceptionReports.value = res.records ?? [];
+  } catch (err) {
+    // ignore silently; optional
+  }
+};
 
-onMounted(() => {
-  void refresh();
-});
+refresh();
+loadExceptions();
 </script>
 
 <template>
-  <UiPageShell eyebrow="員工 · 倉儲" title="站點與中心作業" lede="點收本站包裹、分揀並決定下一跳，派發司機轉運任務。">
-    <UiCard style="margin-top: 16px">
-      <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center; justify-content: space-between">
-        <div>
-          <p class="eyebrow">本站</p>
-          <p class="hint" style="margin-top: 6px">{{ warehouseNodeId ?? "-" }}</p>
-        </div>
-        <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center">
-          <button class="ghost-btn" type="button" :disabled="loading || busy" @click="refresh">重新整理</button>
-          <RouterLink class="ghost-btn" to="/map">查看地圖</RouterLink>
-        </div>
-      </div>
-
-      <UiNotice v-if="error" tone="error" role="alert" style="margin-top: 10px">{{ error }}</UiNotice>
-      <p v-else-if="loading" class="hint" style="margin-top: 10px">載入中…</p>
-    </UiCard>
-
-    <UiCard style="margin-top: 16px">
-      <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap">
-        <div>
-          <p class="eyebrow">點收清單</p>
-          <p class="hint" style="margin: 6px 0 0">此區顯示本站已到站（warehouse_in）但尚未點收的包裹。</p>
-        </div>
-        <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center">
-          <button class="ghost-btn" type="button" :disabled="busy || awaitingReceive.length === 0" @click="toggleReceiveAll">
-            {{ allReceiveChecked ? "取消全選" : "全選" }}
-          </button>
-          <button class="primary-btn" type="button" :disabled="busy || selectedReceiveIds.length === 0" @click="receiveSelected">
-            點收（{{ selectedReceiveIds.length }}）
-          </button>
-        </div>
-      </div>
-
-      <div v-if="loading" class="hint" style="margin-top: 12px">載入中…</div>
-      <div v-else-if="awaitingReceive.length === 0" class="hint" style="margin-top: 12px">目前沒有待點收包裹。</div>
-
-      <UiList v-else style="margin-top: 12px">
-        <li v-for="p in awaitingReceive" :key="p.id" style="display: grid; gap: 6px">
-          <div style="display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; align-items: center">
-            <label style="display: flex; align-items: center; gap: 10px">
-              <input v-model="receiveSelection[p.id]" type="checkbox" :disabled="busy" />
-              <strong>{{ p.tracking_number ?? p.id }}</strong>
-            </label>
-            <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center; justify-content: flex-end">
-              <span class="hint">{{ p.latest_event.delivery_status ?? "-" }} · {{ p.latest_event.events_at ?? "-" }}</span>
-              <button class="ghost-btn small-btn" type="button" :disabled="busy" @click="startException(p)">申報異常</button>
-            </div>
+  <UiPageShell :eyebrow="t('warehouse.page.eyebrow')" :title="t('warehouse.page.title')" :lede="t('warehouse.page.lede')">
+    <div class="layout">
+      <UiCard class="card">
+        <div class="header-row">
+          <div>
+            <p class="eyebrow">{{ t('warehouse.section.current.title') }}</p>
+            <p class="hint">
+              {{ t('warehouse.section.current.hint', { node: selectedNode || t('warehouse.section.current.unknown') }) }}
+            </p>
           </div>
-          <div class="hint">{{ p.sender_address ?? "-" }} → {{ p.receiver_address ?? "-" }}</div>
-        </li>
-      </UiList>
-    </UiCard>
-
-    <UiCard style="margin-top: 16px">
-      <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap">
-        <div>
-          <p class="eyebrow">分揀工作區</p>
-          <p class="hint" style="margin: 6px 0 0">點收後會進入此區，可決定下一跳並派發下一段任務。</p>
+          <div class="actions">
+            <button class="ghost-btn" type="button" :disabled="loading || busy" @click="refresh">
+              {{ t('warehouse.actions.refresh') }}
+            </button>
+            <RouterLink class="ghost-btn" to="/map">{{ t('warehouse.actions.map') }}</RouterLink>
+          </div>
         </div>
-        <span class="hint">待分揀 {{ sorting.length }} · 已派發 {{ dispatched.length }}</span>
-      </div>
 
-      <div v-if="neighbors.length === 0" class="hint" style="margin-top: 12px">
-        找不到本站相鄰節點（edges）。請確認地圖資料。
-      </div>
+        <p v-if="loading" class="hint">{{ t('common.loading') }}</p>
 
-      <div v-else style="margin-top: 12px; display: grid; gap: 14px">
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 12px">
-          <div v-for="n in neighbors" :key="n" style="border: 1px solid #e5e7eb; border-radius: 12px; padding: 12px">
-            <div style="display: flex; justify-content: space-between; gap: 10px; align-items: baseline">
-              <strong>{{ n }}</strong>
-              <span class="hint">{{ sortingGroups.get(n)?.length ?? 0 }} 件</span>
+        <template v-else>
+          <section class="section">
+            <p class="eyebrow">{{ t('warehouse.section.receive.title') }}</p>
+            <p class="hint" style="margin: 6px 0 0">{{ t('warehouse.section.receive.hint') }}</p>
+
+            <div class="toolbar">
+              <label class="checkbox">
+                <input type="checkbox" :checked="allReceiveChecked" @change="toggleAllReceive" />
+                <span>{{ allReceiveChecked ? t('warehouse.receive.uncheckAll') : t('warehouse.receive.checkAll') }}</span>
+              </label>
+              <button class="primary-btn small-btn" type="button" :disabled="busy" @click="receiveSelected">
+                {{ t('warehouse.receive.cta', { count: awaitingReceive.length }) }}
+              </button>
             </div>
 
-            <div v-if="(sortingGroups.get(n)?.length ?? 0) === 0" class="hint" style="margin-top: 10px">
-              暫無包裹
-            </div>
+            <p v-if="loading" class="hint" style="margin-top: 12px">{{ t('common.loading') }}</p>
+            <p v-else-if="awaitingReceive.length === 0" class="hint" style="margin-top: 12px">
+              {{ t('warehouse.section.receive.empty') }}
+            </p>
 
-            <UiList v-else style="margin-top: 10px">
-              <li v-for="p in (sortingGroups.get(n) ?? [])" :key="p.id" style="display: grid; gap: 8px">
-                <div style="display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap">
-                  <strong>{{ p.tracking_number ?? p.id }}</strong>
-                  <span class="hint">{{ p.latest_event.delivery_status ?? "-" }}</span>
+            <ul v-else class="package-list">
+              <li v-for="p in awaitingReceive" :key="p.id" class="package-row">
+                <label class="checkbox">
+                  <input v-model="receiveChecked[p.id]" type="checkbox" />
+                  <span>{{ p.tracking_number ?? p.id }}</span>
+                </label>
+              </li>
+            </ul>
+          </section>
+
+          <section class="section">
+            <p class="eyebrow">{{ t('warehouse.section.sorting.title') }}</p>
+            <p class="hint" style="margin: 6px 0 0">{{ t('warehouse.section.sorting.hint') }}</p>
+            <span class="hint">{{ t('warehouse.section.sorting.counts', { sorting: sorting.length, dispatched: dispatched.length }) }}</span>
+
+            <p v-if="adjacentNodes.length === 0" class="hint error">{{ t('warehouse.section.sorting.noAdjacent') }}</p>
+
+            <div class="grid">
+              <UiCard v-for="n in adjacentNodes" :key="n" class="adjacent-card">
+                <p class="eyebrow">{{ n }}</p>
+                <p class="hint">{{ t('warehouse.section.sorting.countPerNode', { count: sorting.filter((p) => nextHopFor[p.id] === n).length }) }}</p>
+
+                <div class="list">
+                  <p v-if="sorting.length === 0" class="hint">{{ t('warehouse.section.sorting.empty') }}</p>
+                  <template v-else>
+                    <div v-for="p in sorting" :key="p.id" class="sorting-row">
+                      <span>{{ p.tracking_number ?? p.id }}</span>
+                      <div class="row-actions">
+                        <select v-model="nextHopFor[p.id]" @change="setNextHop(p, nextHopFor[p.id])">
+                          <option value="" disabled>{{ t('warehouse.section.sorting.pickNext') }}</option>
+                          <option v-for="node in adjacentNodes" :key="node" :value="node">{{ node }}</option>
+                        </select>
+                        <button class="primary-btn small-btn" type="button" :disabled="busy" @click="dispatchOne(p)">
+                          {{ t('warehouse.actions.dispatch') }}
+                        </button>
+                        <button class="ghost-btn small-btn" type="button" :disabled="busy" @click="startException(p)">
+                          {{ t('warehouse.actions.exception') }}
+                        </button>
+                      </div>
+                    </div>
+                  </template>
                 </div>
-                <div class="hint">{{ p.receiver_address ?? "-" }}</div>
-                <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center">
-                  <select v-model="nextHopByPackageId[p.id]" :disabled="busy" class="ghost-btn" style="padding: 8px 10px">
-                    <option v-for="opt in neighbors" :key="opt" :value="opt">{{ opt }}</option>
-                  </select>
-                  <button class="primary-btn small-btn" type="button" :disabled="busy" @click="dispatchOne(p)">派發</button>
-                  <button class="ghost-btn small-btn" type="button" :disabled="busy" @click="startException(p)">申報異常</button>
+              </UiCard>
+            </div>
+          </section>
+
+          <section class="section">
+            <p class="eyebrow">{{ t('warehouse.section.dispatched.title') }}</p>
+            <p class="hint" style="margin-top: 6px">{{ t('warehouse.section.dispatched.hint') }}</p>
+
+            <p v-if="dispatched.length === 0" class="hint">{{ t('warehouse.section.dispatched.empty') }}</p>
+            <ul v-else class="package-list">
+              <li v-for="p in dispatched" :key="p.id" class="package-row">
+                <div class="row-actions">
+                  <span>{{ p.tracking_number ?? p.id }}</span>
+                  <button class="ghost-btn small-btn" type="button" :disabled="busy" @click="startException(p)">
+                    {{ t('warehouse.actions.exception') }}
+                  </button>
                 </div>
               </li>
-            </UiList>
-          </div>
-        </div>
+            </ul>
+          </section>
 
-        <div v-if="dispatched.length > 0" style="border-top: 1px solid #e5e7eb; padding-top: 12px">
-          <p class="eyebrow">已派發（route_decided）</p>
-          <p class="hint" style="margin-top: 6px">已建立下一段任務，等待司機接手。</p>
-          <UiList style="margin-top: 10px">
-            <li v-for="p in dispatched" :key="p.id" style="display: grid; gap: 6px">
-              <div style="display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap">
-                <strong>{{ p.tracking_number ?? p.id }}</strong>
-                <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center; justify-content: flex-end">
-                  <span class="hint">{{ p.latest_event.events_at ?? "-" }}</span>
-                  <button class="ghost-btn small-btn" type="button" :disabled="busy" @click="startException(p)">申報異常</button>
+          <section class="section">
+            <p class="eyebrow">{{ t('warehouse.section.exceptions.title') }}</p>
+            <p class="hint" style="margin: 6px 0 0">{{ t('warehouse.section.exceptions.hint') }}</p>
+            <span class="hint">{{ t('warehouse.section.exceptions.count', { count: exceptionReports.length }) }}</span>
+
+            <p v-if="loading" class="hint" style="margin-top: 12px">{{ t('common.loading') }}</p>
+            <p v-else-if="exceptionReports.length === 0" class="hint" style="margin-top: 12px">
+              {{ t('warehouse.section.exceptions.empty') }}
+            </p>
+
+            <ul v-else class="package-list">
+              <li v-for="r in exceptionReports" :key="r.id" class="package-row">
+                <div class="row-actions">
+                  <div>
+                    <div class="tracking">{{ r.tracking_number ?? r.id }}</div>
+                    <div class="hint">
+                      {{ t('warehouse.section.exceptions.status', { status: (r.handled ?? 0) === 1 ? t('warehouse.exceptions.handled') : t('warehouse.exceptions.unhandled') }) }}
+                      · {{ r.reported_at ?? "-" }}
+                    </div>
+                  </div>
+                  <div class="hint">{{ exceptionReasonLabel(r.reason_code, t) }}</div>
                 </div>
-              </div>
-              <div class="hint">{{ p.latest_event.delivery_details ?? "-" }}</div>
-            </li>
-          </UiList>
-        </div>
-      </div>
-    </UiCard>
+              </li>
+            </ul>
+          </section>
+        </template>
+      </UiCard>
+    </div>
 
-    <UiCard style="margin-top: 16px">
-      <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap">
-        <div>
-          <p class="eyebrow">異常申報紀錄</p>
-          <p class="hint" style="margin: 6px 0 0">僅顯示你提交的倉儲異常申報（是否已處理由客服結案）。</p>
-        </div>
-        <span class="hint">共 {{ exceptionReports.length }} 筆</span>
-      </div>
-
-      <div v-if="loading" class="hint" style="margin-top: 12px">載入中…</div>
-      <div v-else-if="exceptionReports.length === 0" class="hint" style="margin-top: 12px">目前沒有異常申報紀錄。</div>
-      <UiList v-else style="margin-top: 12px">
-        <li v-for="r in exceptionReports" :key="r.id" style="display: grid; gap: 6px">
-          <div style="display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; align-items: baseline">
-            <strong>{{ r.tracking_number ?? r.package_id }}</strong>
-            <span class="hint">{{ (r.handled ?? 0) === 1 ? "已處理" : "未處理" }} · {{ r.reported_at ?? "-" }}</span>
-          </div>
-          <div class="hint">{{ exceptionReasonLabel(r.reason_code, t) }}</div>
-          <div class="hint">{{ r.description ?? "-" }}</div>
-        </li>
-      </UiList>
-    </UiCard>
-
-    <UiModal v-model="exceptionModalOpen" title="申報異常" aria-label="report exception" @close="closeExceptionModal">
-      <template #subtitle>
-        <p class="hint" style="margin: 0">
-          包裹：{{ exceptionTarget?.tracking_number ?? exceptionTarget?.id ?? "-" }}
+    <UiModal v-model="exceptionModalOpen" :title="t('warehouse.modal.title')" aria-label="report exception" @close="closeExceptionModal">
+      <div class="modal-body">
+        <p class="muted">
+          {{ t('warehouse.modal.tracking', { tracking: exceptionTarget?.tracking_number ?? exceptionTarget?.id ?? "-" }) }}
         </p>
-      </template>
 
-      <div class="form-grid" style="grid-template-columns: 1fr; gap: 10px">
         <label class="form-field">
-          <span>異常原因（必選）</span>
-          <select v-model="exceptionForm.reason_code" :disabled="busy">
-            <option value="" disabled>請選擇異常原因</option>
-            <option v-for="r in exceptionReasons" :key="r.code" :value="r.code">{{ r.label }}</option>
+          <span>{{ t('warehouse.modal.reasonLabel') }}</span>
+          <select v-model="exceptionReason" required>
+            <option value="" disabled>{{ t('warehouse.modal.reasonPlaceholder') }}</option>
+            <option v-for="r in selectableReasonsFor('warehouse_staff')" :key="r.code" :value="r.code">
+              {{ exceptionReasonLabel(r.code, t) }}
+            </option>
           </select>
         </label>
 
         <label class="form-field">
-          <span>說明（必填）</span>
+          <span>{{ t('warehouse.modal.noteLabel') }}</span>
           <textarea
-            v-model="exceptionForm.description"
+            v-model="exceptionNote"
             rows="3"
-            :disabled="busy"
-            placeholder="例：站內找不到包裹；已確認交接清單與貨架區域，請客服協助追查。"
-          />
+            :placeholder="t('warehouse.modal.notePlaceholder')"
+            required
+          ></textarea>
         </label>
 
-        <UiNotice v-if="exceptionSubmitError" tone="error" role="alert">{{ exceptionSubmitError }}</UiNotice>
+        <p v-if="exceptionSubmitError" class="error">{{ exceptionSubmitError }}</p>
       </div>
 
-      <template #actions>
-        <button class="primary-btn" type="button" :disabled="busy" @click="submitException">送出</button>
-        <button class="ghost-btn" type="button" :disabled="busy" @click="closeExceptionModal">取消</button>
+      <template #footer>
+        <div class="modal-actions">
+          <button class="primary-btn" type="button" :disabled="busy" @click="submitException">{{ t('warehouse.modal.submit') }}</button>
+          <button class="ghost-btn" type="button" :disabled="busy" @click="closeExceptionModal">{{ t('common.cancel') }}</button>
+        </div>
       </template>
     </UiModal>
   </UiPageShell>
 </template>
+
+<style scoped>
+.layout {
+  display: grid;
+  gap: 16px;
+}
+
+.card {
+  padding: 16px;
+}
+
+.header-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.section {
+  margin-top: 20px;
+  display: grid;
+  gap: 8px;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.checkbox {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 14px;
+}
+
+.package-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.package-row {
+  border: 1px solid var(--surface-stroke);
+  padding: 10px;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.row-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.adjacent-card {
+  border: 1px dashed var(--surface-stroke);
+}
+
+.list {
+  display: grid;
+  gap: 10px;
+}
+
+.sorting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.sorting-row select {
+  min-width: 120px;
+}
+
+.hint.error {
+  color: #c0392b;
+}
+
+.modal-body {
+  display: grid;
+  gap: 10px;
+}
+
+.error {
+  color: #c0392b;
+  font-weight: 600;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+</style>
