@@ -78,8 +78,16 @@ const publicUser = (user: UserRecord) => ({
   billing_preference: user.billing_preference,
 });
 
+import { accessLogger } from "./middlewares/logger";
+import { rateLimiter } from "./middlewares/rateLimiter";
+
 // Start a Hono app
 const app = new Hono<{ Bindings: Bindings }>();
+
+// Access logging middleware (Security requirement)
+app.use("*", accessLogger);
+// Rate limiting middleware (Stability requirement)
+app.use("*", rateLimiter);
 
 // Setup OpenAPI registry
 const openapi = fromHono(app, {
