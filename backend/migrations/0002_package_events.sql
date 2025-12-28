@@ -22,7 +22,10 @@ CREATE TABLE IF NOT EXISTS package_events (
     'payment_collected_prepaid',
     'enroute_delivery',
     'arrived_delivery',
-    'payment_collected_cod'
+    'payment_collected_cod',
+    'customs_hold',
+    'customs_cleared',
+    'cross_border'
   )),
   delivery_details TEXT,
   events_at TEXT,
