@@ -87,8 +87,8 @@ INSERT OR IGNORE INTO package_events (id, package_id, delivery_status, delivery_
     ('evt-e4', 'pkg-demo-exception', 'exception', '異常 - 外包裝破損，需確認內容物', 'HUB_0', datetime('now', '-1 day', '+8 hours'));
 
 -- Exception record for Package 3
-INSERT OR IGNORE INTO package_exceptions (id, package_id, reported_role, reason_code, description, location, handled, reported_at) VALUES
-    ('exc-demo-1', 'pkg-demo-exception', 'warehouse_staff', 'damaged', '外包裝明顯破損，角落有撕裂痕跡，需聯繫客戶確認是否繼續配送。', 'HUB_0', 0, datetime('now', '-1 day', '+8 hours'));
+INSERT OR IGNORE INTO package_exceptions (id, package_id, reported_role, reason_code, description, handled, reported_at) VALUES
+    ('exc-demo-1', 'pkg-demo-exception', 'warehouse_staff', 'damaged', '外包裝明顯破損，角落有撕裂痕跡，需聯繫客戶確認是否繼續配送。', 0, datetime('now', '-1 day', '+8 hours'));
 
 -- Create a pending delivery task for the in-transit package
 INSERT OR IGNORE INTO delivery_tasks (id, package_id, task_type, from_location, to_location, assigned_driver_id, status, segment_index, created_at) VALUES
