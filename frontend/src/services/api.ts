@@ -399,8 +399,17 @@ export type DeliveryTaskRecord = {
   updated_at?: string | null;
   tracking_number?: string | null;
   package_status?: string | null;
+  sender_name?: string | null;
+  sender_phone?: string | null;
   sender_address?: string | null;
+  receiver_name?: string | null;
+  receiver_phone?: string | null;
   receiver_address?: string | null;
+  weight?: number | null;
+  size?: string | null;
+  length?: number | null;
+  width?: number | null;
+  height?: number | null;
   delivery_time?: string | null;
   payment_type?: string | null;
   payment_amount?: number | null;

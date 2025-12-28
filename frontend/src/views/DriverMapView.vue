@@ -1,6 +1,7 @@
 ﻿<script setup lang="ts">
 import { computed, onMounted, reactive, ref } from "vue";
 import { useRoute } from "vue-router";
+import { useI18n } from "vue-i18n";
 import { api, type DeliveryTaskRecord, type MapEdge, type MapNode, type VehicleRecord } from "../services/api";
 import { useFullscreen } from "../composables/useFullscreen";
 import { selectableReasonsFor } from "../lib/exceptionReasons";
@@ -15,6 +16,7 @@ const truckIconUrl = new URL("../assets/truck.png", import.meta.url).href;
 type ViewBox = { x: number; y: number; w: number; h: number };
 
 const route = useRoute();
+const { t } = useI18n();
 
 const loading = ref(true);
 const error = ref<string | null>(null);
@@ -179,47 +181,24 @@ const hoveredNodeId = ref<string | null>(null);
 
 const assignedTasks = ref<DeliveryTaskRecord[]>([]);
 const handoffTasks = ref<DeliveryTaskRecord[]>([]);
-const arrivePanelOpen = ref(false);
 const sidebarCollapsed = ref(false);
 const arriveError = ref<string | null>(null);
 const arriveBusy = ref(false);
+const expandedTaskKeys = ref<Set<string>>(new Set());
+const lastSyncAt = ref<string | null>(null);
 const cargo = ref<Array<{ package_id: string; tracking_number: string | null; loaded_at: string | null }>>([]);
 const cargoPackageIds = computed(() => new Set(cargo.value.map((c) => String(c.package_id))));
+
+function toggleTaskExpanded(key: string) {
+  const next = new Set(expandedTaskKeys.value);
+  if (next.has(key)) next.delete(key);
+  else next.add(key);
+  expandedTaskKeys.value = next;
+}
 
 function canDropoffTask(task: DeliveryTaskRecord) {
   if (String(task.status) !== "in_progress") return false;
   return cargoPackageIds.value.has(String(task.package_id));
-}
-
-function paymentLabel(task: DeliveryTaskRecord) {
-  const raw = String(task.payment_method ?? task.payment_type ?? "").trim();
-  const key = raw.toLowerCase();
-  const methodLabel =
-    key === "cod"
-      ? "貨到付款"
-      : key === "cash"
-        ? "現金"
-        : key === "prepaid"
-          ? "預付"
-          : key === "credit_card"
-            ? "信用卡"
-            : key === "bank_transfer"
-            ? "銀行轉帳"
-            : raw || "未設定";
-
-  // 是否已付款：僅以 paid_at 判斷，預付但未付款也顯示未付款
-  const paidFlag = Boolean(task.paid_at);
-  const paid = paidFlag ? "已付款" : "未付款";
-
-  const needCash = !paidFlag && /cash|cod|貨到|現金/i.test(key);
-  const cashHint = needCash ? " · 需收現金" : "";
-
-  const amount =
-    !paidFlag && task.payment_amount != null && !Number.isNaN(Number(task.payment_amount))
-      ? ` · 需付款 ${task.payment_amount}`
-      : "";
-
-  return `付款：${methodLabel} · ${paid}${amount}${cashHint}`;
 }
 
 function paymentDueAmount(task: DeliveryTaskRecord) {
@@ -229,9 +208,20 @@ function paymentDueAmount(task: DeliveryTaskRecord) {
   return amount;
 }
 
-function paymentDueDisplay(task: DeliveryTaskRecord) {
-  const amount = paymentDueAmount(task);
-  return amount == null ? "" : ` · 應收款：${amount}`;
+function deliveryTimeLabel(raw: unknown) {
+  const key = String(raw ?? "").trim().toLowerCase();
+  if (!key) return t("driver.map.deliveryTime.unset");
+  if (key === "standard") return t("driver.map.deliveryTime.standard");
+  if (key === "express") return t("driver.map.deliveryTime.express");
+  if (key === "economy") return t("driver.map.deliveryTime.economy");
+  return String(raw);
+}
+
+function taskTypeLabel(raw: unknown) {
+  const key = String(raw ?? "").trim().toLowerCase();
+  if (key === "pickup") return t("driver.map.taskType.pickup");
+  if (key === "dropoff") return t("driver.map.taskType.dropoff");
+  return String(raw ?? "");
 }
 
 function routeLabel(task: DeliveryTaskRecord) {
@@ -244,6 +234,37 @@ function isCashPayment(task: DeliveryTaskRecord) {
   const method = String(task.payment_method ?? "").trim().toLowerCase();
   const type = String(task.payment_type ?? "").trim().toLowerCase();
   return method === "cash" || type === "cod";
+}
+
+function dimensionsLabelFromTask(task: DeliveryTaskRecord) {
+  const l = Number(task.length);
+  const w = Number(task.width);
+  const h = Number(task.height);
+  if ([l, w, h].every((n) => Number.isFinite(n) && n > 0)) return `${l}×${w}×${h} cm`;
+
+  const raw = String(task.size ?? "").trim();
+  if (!raw) return "--";
+  const match = raw.match(/(\d+(?:\.\d+)?)\s*[xX×*]\s*(\d+(?:\.\d+)?)\s*[xX×*]\s*(\d+(?:\.\d+)?)/);
+  if (!match) return raw;
+  return `${match[1]}×${match[2]}×${match[3]} cm`;
+}
+
+function weightLabelFromTask(task: DeliveryTaskRecord) {
+  const kg = Number(task.weight);
+  if (!Number.isFinite(kg) || kg <= 0) return "--";
+  return `${kg} kg`;
+}
+
+function paymentStatusLabel(task: DeliveryTaskRecord) {
+  return task.paid_at ? t("driver.map.paymentStatus.paid") : t("driver.map.paymentStatus.unpaid");
+}
+
+function cashDueHint(task: DeliveryTaskRecord) {
+  if (task.paid_at) return "";
+  const amount = paymentDueAmount(task);
+  if (amount == null) return "";
+  if (!isCashPayment(task)) return "";
+  return t("driver.map.payment.cashHint");
 }
 
 function destinationForTask(task: DeliveryTaskRecord) {
@@ -351,17 +372,27 @@ const taskListItems = computed<TaskListItem[]>(() => {
     const dropoffable = isAtTo && status === "in_progress" && onTruck;
 
     let note: string | undefined;
-    if (isAtTo && status === "in_progress" && !onTruck) note = "目的地在目前位置，但包裹不在車上";
+    if (isAtTo && status === "in_progress" && !onTruck) note = t("driver.map.task.note.dropoffButNotOnTruck");
 
     let action: TaskListItem["action"] = null;
     if (collectable) {
-      action = { kind: "collect", label: "收款" };
+      action = { kind: "collect", label: t("driver.map.action.collect") };
     } else if (pickupable) {
-      action = { kind: "pickup", label: "取貨", disabled: !canPickupNow(task), reason: !canPickupNow(task) ? "需先完成付款" : undefined };
+      action = {
+        kind: "pickup",
+        label: t("driver.map.action.pickup"),
+        disabled: !canPickupNow(task),
+        reason: !canPickupNow(task) ? t("driver.map.action.reason.needPaidFirst") : undefined,
+      };
     } else if (dropoffable) {
-      action = { kind: "dropoff", label: "卸貨", disabled: !canDropoffNow(task), reason: !canDropoffNow(task) ? "需先完成付款" : undefined };
+      action = {
+        kind: "dropoff",
+        label: t("driver.map.action.dropoff"),
+        disabled: !canDropoffNow(task),
+        reason: !canDropoffNow(task) ? t("driver.map.action.reason.needPaidFirst") : undefined,
+      };
     } else {
-      action = { kind: "enroute", label: "正在前往", disabled: !canEnrouteTask(task) };
+      action = { kind: "enroute", label: t("driver.map.action.enroute"), disabled: !canEnrouteTask(task) };
     }
 
     items.push({
@@ -378,7 +409,7 @@ const taskListItems = computed<TaskListItem[]>(() => {
       key: `handoff:${task.id}`,
       source: "handoff",
       task,
-      action: { kind: "takeover", label: "搶單" },
+      action: { kind: "takeover", label: t("driver.map.action.takeover") },
     });
   }
 
@@ -400,7 +431,7 @@ const taskListItems = computed<TaskListItem[]>(() => {
 
 const exceptionModalOpen = ref(false);
 const exceptionTarget = ref<{ packageId: string; taskId?: string } | null>(null);
-const exceptionReasons = selectableReasonsFor("driver").map((r) => ({ code: r.code, label: r.label }));
+const exceptionReasons = selectableReasonsFor("driver").map((r) => ({ code: r.code, label: t(r.i18nKey) }));
 const exceptionForm = reactive({ reason_code: "", description: "", location_mode: "node" as "node" | "truck" });
 
 const hoveredNode = computed(() => {
@@ -427,34 +458,24 @@ async function refreshArriveData() {
     assignedTasks.value = assignedRes.tasks ?? [];
     handoffTasks.value = handoffRes.tasks ?? [];
     cargo.value = cargoRes.cargo ?? [];
+    lastSyncAt.value = new Date().toLocaleString();
   } catch (e: any) {
     arriveError.value = String(e?.message ?? e);
     toastFromApiError(e, arriveError.value);
   }
 }
 
-function openArrivePanel(auto = false) {
-  if (sidebarCollapsed.value) sidebarCollapsed.value = false;
+function collapseSidebar() {
+  sidebarCollapsed.value = true;
+  exceptionModalOpen.value = false;
+}
+
+function openTaskList(auto = false) {
   if (auto) {
     const hasAny = taskListItems.value.some((i) => i.action && i.action.kind !== "enroute");
     if (!hasAny) return;
   }
-  arrivePanelOpen.value = true;
-}
-
-function closeArrivePanel() {
-  arrivePanelOpen.value = false;
-}
-
-function collapseSidebar() {
-  sidebarCollapsed.value = true;
-  arrivePanelOpen.value = false;
-  exceptionModalOpen.value = false;
-}
-
-function openTaskList() {
   sidebarCollapsed.value = false;
-  openArrivePanel();
 }
 
 async function collectCashForTask(task: DeliveryTaskRecord) {
@@ -463,13 +484,13 @@ async function collectCashForTask(task: DeliveryTaskRecord) {
   arriveError.value = null;
   try {
     if (!isCashPayment(task)) {
-      throw new Error("此任務非現金付款，無法使用收款功能");
+      throw new Error(t("driver.map.errors.notCashPayment"));
     }
-    const ok = window.confirm("確認已向客戶收取現金並完成付款？");
+    const ok = window.confirm(t("driver.map.confirm.collectCash"));
     if (!ok) return;
     await api.arriveDriverTask(task.id);
     await api.driverCollectCash(task.package_id);
-    toast.success("收現完成");
+    toast.success(t("driver.map.toast.cashCollected"));
     await refreshArriveData();
   } catch (e: any) {
     arriveError.value = String(e?.message ?? e);
@@ -485,7 +506,7 @@ async function takeOverTask(taskId: string) {
   arriveError.value = null;
   try {
     await api.acceptDriverTask(taskId);
-    toast.success("已接手任務");
+    toast.success(t("driver.map.toast.taskAccepted"));
     await refreshArriveData();
   } catch (e: any) {
     arriveError.value = String(e?.message ?? e);
@@ -501,7 +522,7 @@ async function pickupTask(task: DeliveryTaskRecord) {
   arriveError.value = null;
   try {
     await api.pickupDriverTask(task.id);
-    toast.success("取件完成");
+    toast.success(t("driver.map.toast.pickedUp"));
     await refreshArriveData();
   } catch (e: any) {
     arriveError.value = String(e?.message ?? e);
@@ -517,7 +538,7 @@ async function dropoffTask(task: DeliveryTaskRecord) {
   arriveError.value = null;
   try {
     await api.dropoffDriverTask(task.id);
-    toast.success("卸貨完成");
+    toast.success(t("driver.map.toast.droppedOff"));
     await refreshArriveData();
   } catch (e: any) {
     arriveError.value = String(e?.message ?? e);
@@ -563,12 +584,12 @@ async function submitException() {
   if (!exceptionTarget.value) return;
   if (arriveBusy.value) return;
   if (!exceptionForm.reason_code.trim()) {
-    arriveError.value = "請選擇異常原因";
+    arriveError.value = t("driver.map.exception.errors.reasonRequired");
     toast.warning(arriveError.value);
     return;
   }
   if (!exceptionForm.description.trim()) {
-    arriveError.value = "請填寫異常描述";
+    arriveError.value = t("driver.map.exception.errors.descriptionRequired");
     toast.warning(arriveError.value);
     return;
   }
@@ -863,7 +884,7 @@ async function animateMoveTo(targetId: string) {
     currentNodeId.value = targetId;
     if (vehicle.value) vehicle.value.current_node_id = targetId;
   } catch (e: any) {
-    error.value = `移動失敗，請稍後再試：${String(e?.message ?? e)}`;
+    error.value = t("driver.map.errors.moveFailed", { message: String(e?.message ?? e) });
     truckPos.x = fromX;
     truckPos.y = fromY;
   } finally {
@@ -872,7 +893,7 @@ async function animateMoveTo(targetId: string) {
 
   await refreshActiveRouteFromCurrent();
   await refreshArriveData();
-  openArrivePanel(true);
+  openTaskList(true);
 }
 
 function focusOnNode(id: string) {
@@ -940,14 +961,14 @@ onMounted(async () => {
   <UiPageShell class="map-page--bleed">
     <header class="page-header section-header--split">
       <div>
-        <p class="eyebrow">員工 · 司機</p>
-        <h1>司機地圖</h1>
-        <p class="lede">顯示自己的貨車，並可在對應節點移動地圖。</p>
+        <p class="eyebrow">{{ t("driver.eyebrow") }}</p>
+        <h1>{{ t("driver.map.page.title") }}</h1>
+        <p class="lede">{{ t("driver.map.page.lede") }}</p>
       </div>
     </header>
 
     <UiCard v-if="error" class="error-card">{{ error }}</UiCard>
-    <UiCard v-else-if="loading">載入中…</UiCard>
+    <UiCard v-else-if="loading">{{ t("common.loading") }}</UiCard>
 
     <div v-else ref="stageEl" class="card map-canvas" :class="{ fullscreen: isFullscreen }">
       <div class="map-stage" :class="{ 'sidebar-collapsed': sidebarCollapsed }">
@@ -959,7 +980,7 @@ onMounted(async () => {
               type="button"
               @click="toggleFullscreen"
             >
-              {{ isFullscreen ? "退出全螢幕" : "全螢幕" }}
+              {{ isFullscreen ? t("driver.map.controls.fullscreen.exit") : t("driver.map.controls.fullscreen.enter") }}
             </button>
             <button
               v-if="sidebarCollapsed"
@@ -967,7 +988,7 @@ onMounted(async () => {
               type="button"
               @click="openTaskList()"
             >
-              展開側欄
+              {{ t("driver.map.controls.sidebar.expand") }}
             </button>
             <button
               v-else
@@ -975,7 +996,7 @@ onMounted(async () => {
               type="button"
               @click="collapseSidebar"
             >
-              收合側欄
+              {{ t("driver.map.controls.sidebar.collapse") }}
             </button>
           </div>
 
@@ -1120,127 +1141,245 @@ onMounted(async () => {
         </div>
 
         <aside v-if="!sidebarCollapsed" class="map-sidebar" aria-label="driver work panel">
-          <UiCard class="map-overlay" role="complementary" aria-label="driver map panel">
-            <p class="eyebrow">司機資訊</p>
-            <div class="hint">
-              <div><strong>貨車編號：</strong>{{ vehicle?.vehicle_code ?? "未串接" }}</div>
-              <div><strong>目前位置：</strong>{{ currentNodeId ?? "-" }}</div>
-            </div>
-
-            <div v-if="activeRoutePath" class="hint">
-              <p class="eyebrow">導航路徑</p>
-              <div class="route-chip">{{ activeRoutePath.join(" → ") }}</div>
+          <UiCard class="map-overlay driver-info-card" role="complementary" aria-label="driver map panel">
+            <p class="eyebrow">{{ t("driver.map.info.title") }}</p>
+            <div class="driver-info-grid">
+              <div class="driver-info-row">
+                <strong>{{ t("driver.map.info.vehicleCode") }}：</strong>
+                <span class="driver-info-value">{{ vehicle?.vehicle_code ?? t("driver.map.info.unlinked") }}</span>
+              </div>
+              <div class="driver-info-row">
+                <strong>{{ t("driver.map.info.currentNode") }}：</strong>
+                <span class="driver-info-value">{{ currentNodeId ?? "-" }}</span>
+                <span v-if="activeRouteTargetId" class="pill info nav-pill">
+                  {{ t("driver.map.info.navTo", { node: activeRouteTargetId }) }}
+                </span>
+              </div>
+              <div class="driver-info-row">
+                <strong>{{ t("driver.map.info.cargo") }}：</strong>
+                <span class="driver-info-value">{{ t("driver.map.info.cargoCount", { count: cargo.length }) }}</span>
+              </div>
+              <div class="driver-info-row">
+                <strong>{{ t("driver.map.info.lastSync") }}：</strong>
+                <span class="driver-info-value">{{ lastSyncAt ?? t("driver.map.info.notSynced") }}</span>
+              </div>
             </div>
           </UiCard>
 
-          <UiCard v-if="!arrivePanelOpen" class="task-panel closed-panel" role="complementary" aria-label="task list closed">
-            <p class="eyebrow">任務清單</p>
-            <p class="hint" style="margin: 6px 0 0">查看任務是否出現在此節點（取件/卸貨/可接手），並依清單提示移動。</p>
-            <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px">
-              <button class="primary-btn small-btn" type="button" @click="openArrivePanel()">打開任務清單</button>
-            </div>
-          </UiCard>
-
-          <div v-else class="task-panel" role="complementary" aria-label="task list">
+          <UiCard class="map-overlay task-panel" role="complementary" aria-label="task list">
             <div class="task-header">
               <div>
-                <p class="eyebrow">任務清單</p>
-                <p class="hint" style="margin: 0"><strong>位置：</strong>{{ currentNodeId ?? "-" }}</p>
+                <p class="eyebrow">{{ t("driver.map.taskList.title") }}</p>
               </div>
               <div class="task-header-actions">
-                <button class="ghost-btn" type="button" :disabled="arriveBusy" @click="refreshArriveData">重新整理</button>
+                <button class="ghost-btn" type="button" :disabled="arriveBusy" @click="refreshArriveData">
+                  {{ t("driver.map.taskList.refresh") }}
+                </button>
               </div>
             </div>
 
             <UiNotice v-if="arriveError" tone="error" role="alert" style="margin-top: 10px">{{ arriveError }}</UiNotice>
 
             <div class="task-body">
-              <ul v-if="taskListItems.length > 0" class="task-list" style="margin-top: 10px">
-                <li v-for="item in taskListItems" :key="item.key" class="task-item">
-                  <div class="task-item-top">
-                    <strong>{{ item.task.tracking_number ?? item.task.package_id }}</strong>
-                    <span class="hint">{{ item.source === "handoff" ? "可搶單" : item.task.status }}</span>
-                  </div>
-                  <div class="hint">{{ routeLabel(item.task) }}</div>
-                  <div v-if="item.source !== 'handoff'" class="hint">
-                    配送時效：{{ item.task.delivery_time ?? "未設定" }} · {{ paymentLabel(item.task) }}{{ paymentDueDisplay(item.task) }}
-                  </div>
-                  <div v-if="item.task.instructions" class="hint">客服指示：{{ item.task.instructions }}</div>
-                  <div v-if="item.note" class="hint">{{ item.note }}</div>
-                  <div class="task-item-actions">
+              <ul v-if="taskListItems.length > 0" class="task-list">
+                <li
+                  v-for="item in taskListItems"
+                  :key="item.key"
+                  class="task-row"
+                  :class="{ active: expandedTaskKeys.has(item.key) }"
+                >
+                  <div class="task-row-top">
                     <button
-                      v-if="item.action"
-                      class="primary-btn small-btn"
                       type="button"
-                      :disabled="arriveBusy || item.action.disabled"
-                      @click="
-                        item.action.kind === 'takeover'
-                          ? takeOverTask(item.task.id)
-                          : item.action.kind === 'collect'
-                            ? collectCashForTask(item.task)
-                            : item.action.kind === 'pickup'
-                              ? pickupTask(item.task)
-                              : item.action.kind === 'dropoff'
-                                ? dropoffTask(item.task)
-                                : enrouteTask(item.task)
-                      "
+                      class="row-btn"
+                      :aria-expanded="expandedTaskKeys.has(item.key)"
+                      @click="toggleTaskExpanded(item.key)"
                     >
-                      {{ item.action.label }}
+                      <div class="row-line row-line--top">
+                        <span class="tracking">
+                          <svg class="mini-icon" viewBox="0 0 24 24" aria-hidden="true">
+                            <path
+                              d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"
+                              fill="none"
+                              stroke="currentColor"
+                              stroke-width="1.6"
+                              stroke-linejoin="round"
+                            />
+                            <path d="M3.5 7.5 12 12l8.5-4.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" />
+                            <path d="M12 12v9.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+                          </svg>
+                          {{ item.task.tracking_number ?? item.task.package_id }}
+                        </span>
+                        <svg class="mini-icon chevron" viewBox="0 0 20 20" aria-hidden="true">
+                          <path
+                            d="M5 7l5 6 5-6"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="1.8"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                          />
+                        </svg>
+                      </div>
+                      <div class="row-line row-line--meta">
+                        <span v-if="item.source !== 'handoff'" class="pill info">
+                          <svg class="mini-icon" viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M12 7v5l3 2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+                            <path
+                              d="M21 12a9 9 0 1 1-9-9 9 9 0 0 1 9 9Z"
+                              fill="none"
+                              stroke="currentColor"
+                              stroke-width="1.6"
+                            />
+                          </svg>
+                          {{ deliveryTimeLabel(item.task.delivery_time) }}
+                        </span>
+                        <span
+                          v-if="item.source !== 'handoff'"
+                          class="pill"
+                          :class="item.task.paid_at ? 'success' : 'danger'"
+                        >
+                          <svg class="mini-icon" viewBox="0 0 24 24" aria-hidden="true">
+                            <path
+                              d="M20 7H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2Z"
+                              fill="none"
+                              stroke="currentColor"
+                              stroke-width="1.6"
+                              stroke-linejoin="round"
+                            />
+                            <path d="M16 11h.01" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" />
+                          </svg>
+                          {{ paymentStatusLabel(item.task) }}
+                        </span>
+                        <span v-else class="pill info">{{ item.action?.label ?? t("driver.map.action.takeover") }}</span>
+                      </div>
                     </button>
-                    <button class="ghost-btn small-btn" type="button" :disabled="arriveBusy" @click="startException(item.task)">申報</button>
                   </div>
-                  <div v-if="item.action?.reason" class="hint">{{ item.action.reason }}</div>
+
+                  <div v-if="expandedTaskKeys.has(item.key)" class="task-detail">
+                    <div class="detail-grid">
+                      <p class="meta">{{ t("driver.map.task.fields.route") }}：{{ routeLabel(item.task) }}</p>
+                      <p v-if="item.source !== 'handoff'" class="meta">
+                        {{ t("driver.map.task.fields.taskType") }}：{{ taskTypeLabel(item.task.task_type) }}
+                      </p>
+                      <p v-if="item.source !== 'handoff'" class="meta">
+                        {{ t("driver.map.task.fields.paymentStatus") }}：{{ paymentStatusLabel(item.task) }}
+                      </p>
+                      <p v-if="item.source !== 'handoff'" class="meta">
+                        {{ t("driver.map.task.fields.sender") }}：{{ item.task.sender_name ?? "-" }}
+                      </p>
+                      <p v-if="item.source !== 'handoff'" class="meta">
+                        {{ t("driver.map.task.fields.receiver") }}：{{ item.task.receiver_name ?? "-" }}
+                      </p>
+                      <p v-if="item.source !== 'handoff'" class="meta">
+                        {{ t("driver.map.task.fields.dimensions") }}：{{ dimensionsLabelFromTask(item.task) }}
+                      </p>
+                      <p v-if="item.source !== 'handoff'" class="meta">
+                        {{ t("driver.map.task.fields.weight") }}：{{ weightLabelFromTask(item.task) }}
+                      </p>
+                      <p v-if="paymentDueAmount(item.task) != null" class="meta">
+                        {{ t("driver.map.task.fields.amountDue") }}：{{ paymentDueAmount(item.task) }}
+                      </p>
+                      <p v-if="cashDueHint(item.task)" class="meta">
+                        {{ t("driver.map.task.fields.cashHint") }}：{{ cashDueHint(item.task) }}
+                      </p>
+                      <p v-if="item.task.instructions" class="meta">
+                        {{ t("driver.map.task.fields.csNotes") }}：{{ item.task.instructions }}
+                      </p>
+                      <p v-if="item.note" class="meta">{{ t("driver.map.task.fields.hint") }}：{{ item.note }}</p>
+                      <p v-if="item.action?.reason" class="meta">{{ t("driver.map.task.fields.hint") }}：{{ item.action.reason }}</p>
+                    </div>
+
+                    <div class="detail-actions">
+                      <button
+                        v-if="item.action"
+                        class="primary-btn small-btn"
+                        type="button"
+                        :disabled="arriveBusy || item.action.disabled"
+                        @click="
+                          item.action.kind === 'takeover'
+                            ? takeOverTask(item.task.id)
+                            : item.action.kind === 'collect'
+                              ? collectCashForTask(item.task)
+                              : item.action.kind === 'pickup'
+                                ? pickupTask(item.task)
+                                : item.action.kind === 'dropoff'
+                                  ? dropoffTask(item.task)
+                                  : enrouteTask(item.task)
+                        "
+                      >
+                        {{ item.action.label }}
+                      </button>
+                      <button class="ghost-btn small-btn" type="button" :disabled="arriveBusy" @click="startException(item.task)">
+                        {{ t("driver.map.exception.report") }}
+                      </button>
+                    </div>
+                  </div>
                 </li>
               </ul>
-              <div v-else class="hint" style="margin-top: 10px">目前沒有任務。</div>
+              <div v-else class="task-empty">
+                <p class="task-empty-title">{{ t("driver.map.taskList.empty.title") }}</p>
+                <p class="hint" style="margin: 6px 0 0">{{ t("driver.map.taskList.empty.lede") }}</p>
+                <p class="hint" style="margin: 6px 0 0">{{ t("driver.map.taskList.empty.stepsTitle") }}</p>
+                <ul class="task-empty-list">
+                  <li class="hint">{{ t("driver.map.taskList.empty.tip.refresh") }}</li>
+                  <li class="hint">{{ t("driver.map.taskList.empty.tip.move") }}</li>
+                  <li class="hint">{{ t("driver.map.taskList.empty.tip.handoff") }}</li>
+                  <li class="hint">{{ t("driver.map.taskList.empty.tip.contact") }}</li>
+                </ul>
+              </div>
             </div>
 
             <UiModal
               v-model="exceptionModalOpen"
-              title="申報異常"
+              :title="t('driver.map.exception.title')"
               aria-label="report exception"
               :close-on-backdrop="!arriveBusy"
               :close-on-esc="!arriveBusy"
               @close="closeExceptionModal"
             >
               <template #subtitle>
-                <p class="hint" style="margin: 0">包裹：{{ exceptionTarget?.packageId ?? "-" }}</p>
+                <p class="hint" style="margin: 0">{{ t("driver.map.exception.package", { id: exceptionTarget?.packageId ?? '-' }) }}</p>
               </template>
 
               <div class="form-grid" style="grid-template-columns: 1fr; gap: 10px">
                 <label class="form-field">
-                  <span>異常原因（請選擇）</span>
+                  <span>{{ t("driver.map.exception.reasonLabel") }}</span>
                   <select v-model="exceptionForm.reason_code" :disabled="arriveBusy">
-                    <option value="" disabled>請選擇異常原因</option>
+                    <option value="" disabled>{{ t("driver.map.exception.reasonPlaceholder") }}</option>
                     <option v-for="r in exceptionReasons" :key="r.code" :value="r.code">{{ r.label }}</option>
-                  </select>-
-                </label>
-
-                <label class="form-field">
-                  <span>發生位置（貨車 / 節點二選一）</span>
-                  <select v-model="exceptionForm.location_mode" :disabled="arriveBusy">
-                    <option value="truck">車上（{{ truckCode || "-" }}）</option>
-                    <option value="node">節點（{{ currentNodeId || "-" }}）</option>
                   </select>
                 </label>
 
                 <label class="form-field">
-                  <span>說明（必填，請描述狀況與處理）</span>
+                  <span>{{ t("driver.map.exception.locationLabel") }}</span>
+                  <select v-model="exceptionForm.location_mode" :disabled="arriveBusy">
+                    <option value="truck">{{ t("driver.map.exception.location.truck", { code: truckCode || '-' }) }}</option>
+                    <option value="node">{{ t("driver.map.exception.location.node", { node: currentNodeId || '-' }) }}</option>
+                  </select>
+                </label>
+
+                <label class="form-field">
+                  <span>{{ t("driver.map.exception.descriptionLabel") }}</span>
                   <textarea
                     v-model="exceptionForm.description"
                     rows="3"
                     :disabled="arriveBusy"
-                    placeholder="例：收件人拒收，原因：貨件外箱破損；已拍照並聯絡客服。"
+                    :placeholder="t('driver.map.exception.descriptionPlaceholder')"
                   />
                 </label>
               </div>
 
               <template #actions>
-                <button class="primary-btn small-btn" type="button" :disabled="arriveBusy" @click="submitException">送出</button>
-                <button class="ghost-btn small-btn" type="button" :disabled="arriveBusy" @click="closeExceptionModal">取消</button>
+                <button class="primary-btn small-btn" type="button" :disabled="arriveBusy" @click="submitException">
+                  {{ t("driver.map.exception.submit") }}
+                </button>
+                <button class="ghost-btn small-btn" type="button" :disabled="arriveBusy" @click="closeExceptionModal">
+                  {{ t("common.cancel") }}
+                </button>
               </template>
             </UiModal>
-          </div>
+          </UiCard>
         </aside>
       </div>
     </div>
@@ -1465,12 +1604,71 @@ onMounted(async () => {
   backdrop-filter: blur(8px);
 }
 
+.driver-info-card {
+  height: 168px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  overflow: hidden;
+}
+
+.driver-info-grid {
+  margin-top: 8px;
+  display: grid;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.driver-info-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.driver-info-value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nav-pill {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-empty {
+  border: 1px dashed rgba(15, 23, 42, 0.18);
+  background: rgba(15, 23, 42, 0.02);
+  border-radius: 14px;
+  padding: 12px;
+}
+
+.task-empty-title {
+  margin: 0;
+  font-weight: 800;
+  color: rgba(15, 23, 42, 0.92);
+}
+
+.task-empty-list {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 6px;
+}
+
 .map-sidebar {
   height: 100%;
-  overflow: auto;
+  overflow: hidden;
   padding: 12px;
   border-left: 1px solid rgba(15, 23, 42, 0.12);
   display: grid;
+  align-content: start;
+  grid-template-rows: auto 1fr;
   gap: 12px;
   background: rgba(255, 255, 255, 0.85);
 }
@@ -1535,12 +1733,11 @@ onMounted(async () => {
   position: static;
   width: auto;
   max-height: none;
-  overflow: auto;
-  background: rgba(255, 255, 255, 0.96);
-  border: 1px solid rgba(15, 23, 42, 0.12);
-  border-radius: 16px;
-  padding: 14px;
-  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.22);
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .task-header {
@@ -1557,7 +1754,10 @@ onMounted(async () => {
 }
 
 .task-body {
-  margin-top: 12px;
+  margin-top: 8px;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
 }
 
 .task-summary {
@@ -1589,25 +1789,137 @@ onMounted(async () => {
   gap: 10px;
 }
 
-.task-item {
+.task-row {
   border: 1px solid rgba(15, 23, 42, 0.1);
   background: rgba(248, 250, 252, 0.9);
   border-radius: 14px;
+  overflow: hidden;
+}
+
+.task-row.active {
+  border-color: rgba(37, 99, 235, 0.26);
+  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.12);
+}
+
+.task-row-top {
   padding: 10px;
 }
 
-.task-item-top {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  align-items: baseline;
+.row-btn {
+  width: 100%;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  padding: 0;
+  display: grid;
+  gap: 8px;
 }
 
-.task-item-actions {
+.row-line {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.row-line--top {
+  justify-content: space-between;
+  flex-wrap: nowrap;
+}
+
+.row-line--meta {
+  justify-content: flex-start;
+}
+
+.mini-icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  color: rgba(15, 23, 42, 0.62);
+}
+
+.mini-icon.chevron {
+  transition: transform 140ms ease;
+}
+
+.task-row.active .mini-icon.chevron {
+  transform: rotate(180deg);
+}
+
+.tracking {
+  font-weight: 800;
+  color: rgba(15, 23, 42, 0.95);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(15, 23, 42, 0.14);
+  background: rgba(15, 23, 42, 0.04);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.pill.success {
+  border-color: rgba(34, 197, 94, 0.35);
+  background: rgba(34, 197, 94, 0.10);
+  color: rgba(21, 128, 61, 0.95);
+}
+
+.pill.danger {
+  border-color: rgba(239, 68, 68, 0.32);
+  background: rgba(239, 68, 68, 0.08);
+  color: rgba(185, 28, 28, 0.95);
+}
+
+.pill.info {
+  border-color: rgba(37, 99, 235, 0.28);
+  background: rgba(37, 99, 235, 0.08);
+  color: rgba(30, 64, 175, 0.95);
+}
+
+.meta {
+  font-size: 12px;
+  color: rgba(15, 23, 42, 0.64);
+}
+
+.detail-actions {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
-  margin-top: 8px;
+  align-items: center;
+  margin-top: 10px;
+}
+
+.detail-actions .small-btn {
+  min-width: 96px;
+  height: 36px;
+  padding-top: 0;
+  padding-bottom: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  line-height: 1;
+}
+
+.task-detail {
+  border-top: 1px solid rgba(15, 23, 42, 0.1);
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.75);
+}
+
+.detail-grid {
+  display: grid;
+  gap: 6px;
 }
 
 </style>
