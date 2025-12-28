@@ -337,6 +337,7 @@
   "publicTrack.progress.delivered": "配送完成",
   "publicTrack.progress.inTransit": "配送中",
   "publicTrack.updatedAt": "包裹更新時間：{time}",
+  "publicTrack.error.searchFailed": "查詢失敗",
   "estimate.title": "計算運費",
   "estimate.lede": "依地圖 routeCost 估價，含箱型判定、時效係數、重量加價、特殊標記、floor/cap。",
   "estimate.from": "起點 fromNodeId",

@@ -1,6 +1,5 @@
 /**
  * PublicTrackView Tests
- * 測試公開追蹤頁面功能
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest'
@@ -19,9 +18,7 @@ vi.mock('../../services/api', () => ({
 
 const router = createRouter({
   history: createMemoryHistory(),
-  routes: [
-    { path: '/track', name: 'public-track', component: PublicTrackView },
-  ],
+  routes: [{ path: '/track', name: 'public-track', component: PublicTrackView }],
 })
 
 describe('PublicTrackView', () => {
@@ -29,11 +26,12 @@ describe('PublicTrackView', () => {
     setActivePinia(createPinia())
     router.push('/track')
     await router.isReady()
+    i18n.global.locale.value = 'en-US'
     vi.clearAllMocks()
   })
 
-  describe('渲染', () => {
-    it('應該渲染追蹤輸入欄位', () => {
+  describe('rendering', () => {
+    it('should render tracking input with localized placeholder', () => {
       const wrapper = mount(PublicTrackView, {
         global: {
           plugins: [router, createPinia(), i18n],
@@ -42,9 +40,10 @@ describe('PublicTrackView', () => {
 
       const input = wrapper.find('input')
       expect(input.exists()).toBe(true)
+      expect(input.attributes('placeholder')).toBe(i18n.global.t('publicTrack.placeholder'))
     })
 
-    it('應該有查詢按鈕', () => {
+    it('should render search button with localized text', () => {
       const wrapper = mount(PublicTrackView, {
         global: {
           plugins: [router, createPinia(), i18n],
@@ -53,11 +52,12 @@ describe('PublicTrackView', () => {
 
       const button = wrapper.find('button')
       expect(button.exists()).toBe(true)
+      expect(button.text()).toBe(i18n.global.t('publicTrack.submit'))
     })
   })
 
-  describe('查詢功能', () => {
-    it('輸入追蹤號碼後點擊查詢應呼叫 API', async () => {
+  describe('search flow', () => {
+    it('should call API after submitting tracking number and render status tag', async () => {
       const { api } = await import('../../services/api')
       vi.mocked(api.getTrackingPublic).mockResolvedValue({
         success: true,
@@ -87,6 +87,9 @@ describe('PublicTrackView', () => {
       await flushPromises()
 
       expect(api.getTrackingPublic).toHaveBeenCalledWith('TRK12345')
+
+      const tag = wrapper.find('.tag')
+      expect(tag.text()).toBe(i18n.global.t('publicTrack.progress.inTransit'))
     })
   })
 })

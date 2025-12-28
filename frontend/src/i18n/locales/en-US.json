@@ -337,6 +337,7 @@
   "publicTrack.progress.delivered": "Delivered",
   "publicTrack.progress.inTransit": "In transit",
   "publicTrack.updatedAt": "Package updated: {time}",
+  "publicTrack.error.searchFailed": "Search failed",
   "estimate.title": "Shipping Estimate",
   "estimate.lede": "Uses map routeCost for pricing, with box sizing, service levels, surcharges, and floor/cap.",
   "estimate.from": "Origin fromNodeId",

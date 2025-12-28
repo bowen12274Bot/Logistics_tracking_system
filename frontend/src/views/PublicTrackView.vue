@@ -1,16 +1,20 @@
 <script setup lang="ts">
 import { ref } from "vue";
+import { useI18n } from "vue-i18n";
 import { api, type TrackingPublicResponse } from "../services/api";
 import UiCard from "../components/ui/UiCard.vue";
 import UiPageShell from "../components/ui/UiPageShell.vue";
 import { toastFromApiError } from "../services/errorToast";
+
+const { t } = useI18n();
 
 const trackingNumber = ref("");
 const isLoading = ref(false);
 const error = ref<string | null>(null);
 const result = ref<TrackingPublicResponse | null>(null);
 
-const simplifiedProgress = (status?: string | null) => (status === "delivered" ? "配送完成" : "配送中");
+const simplifiedProgress = (status?: string | null) =>
+  status === "delivered" ? t("publicTrack.progress.delivered") : t("publicTrack.progress.inTransit");
 
 const formatDateTime = (value?: string | null) => {
   if (!value) return "-";
@@ -29,7 +33,7 @@ const lookup = async () => {
     result.value = await api.getTrackingPublic(trackingNumber.value.trim());
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err);
-    toastFromApiError(err, error.value ?? "查詢失敗");
+    toastFromApiError(err, error.value ?? t("publicTrack.error.searchFailed"));
   } finally {
     isLoading.value = false;
   }
@@ -37,16 +41,21 @@ const lookup = async () => {
 </script>
 
 <template>
-  <UiPageShell eyebrow="追蹤" title="包裹追蹤（公開）" lede="未登入可用追蹤編號查詢單一包裹。">
+  <UiPageShell :eyebrow="t('publicTrack.eyebrow')" :title="t('publicTrack.title')" :lede="t('publicTrack.lede')">
     <UiCard>
       <form class="form-grid" @submit.prevent="lookup">
         <label class="form-field span-2">
-          <span>追蹤編號</span>
-          <input v-model="trackingNumber" name="trackingNumber" type="text" placeholder="例如 TRK-xxxx" />
+          <span>{{ t("publicTrack.trackingLabel") }}</span>
+          <input
+            v-model="trackingNumber"
+            name="trackingNumber"
+            type="text"
+            :placeholder="t('publicTrack.placeholder')"
+          />
         </label>
 
         <button class="primary-btn" type="submit" :disabled="isLoading || !trackingNumber.trim()">
-          {{ isLoading ? "查詢中..." : "查詢" }}
+          {{ isLoading ? t("publicTrack.submitting") : t("publicTrack.submit") }}
         </button>
       </form>
 
@@ -58,7 +67,7 @@ const lookup = async () => {
           <span class="tag">{{ simplifiedProgress(result.current_status) }}</span>
         </div>
         <div class="result-meta">
-          <span>包裹更新時間：{{ formatDateTime(result.updated_at) }}</span>
+          <span>{{ t("publicTrack.updatedAt", { time: formatDateTime(result.updated_at) }) }}</span>
         </div>
       </div>
     </UiCard>
@@ -92,5 +101,4 @@ const lookup = async () => {
   font-size: 13px;
   opacity: 0.9;
 }
-
 </style>
