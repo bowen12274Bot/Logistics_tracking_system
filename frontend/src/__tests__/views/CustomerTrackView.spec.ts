@@ -109,4 +109,53 @@ describe('CustomerTrackView', () => {
     await flushPromises()
     expect((wrapper.get('input[name="tracking_number"]').element as HTMLInputElement).value).toBe('TRK-QUERY-1')
   })
+
+  it('renders current segment as ok when driver is enroute', async () => {
+    const { api } = await import('../../services/api')
+
+    const pkg = {
+      id: 'PKG-1',
+      tracking_number: 'TRK-1',
+      status: 'in_transit',
+      current_location: null,
+      current_updated_at: new Date().toISOString(),
+      created_at: new Date(Date.now() - 60_000).toISOString(),
+      route_path: 'HUB_0,REG_1',
+      delivery_time: 'standard',
+    }
+
+    vi.mocked(api.searchTracking).mockImplementation(async (query: any) => {
+      if (query?.status_group === 'in_transit') return { success: true, packages: [pkg], total: 1 }
+      return { success: true, packages: [], total: 0 }
+    })
+
+    vi.mocked(api.getPackageStatus).mockResolvedValue({
+      success: true,
+      package: pkg as any,
+      events: [
+        {
+          id: 'EVT-1',
+          package_id: pkg.id,
+          delivery_status: 'in_transit',
+          delivery_details: '前往 HUB_0',
+          events_at: new Date().toISOString(),
+          location: 'TRUCK_0',
+        },
+      ],
+      active_exception: null,
+      vehicle: { id: 'V-1', vehicle_code: 'TRUCK_0' },
+    } as any)
+
+    const wrapper = mount(CustomerTrackView, {
+      global: {
+        plugins: [router, createPinia(), i18n],
+      },
+    })
+
+    await flushPromises()
+    await wrapper.get('.package-row .row-btn').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('button.route-seg.ok').exists()).toBe(true)
+  })
 })

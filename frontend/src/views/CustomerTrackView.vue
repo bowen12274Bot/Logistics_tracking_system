@@ -289,9 +289,30 @@ const routeModel = (pkg: any) => {
   const details = detailByPackageId.value[pkg.id]
   const events = details?.events ?? []
 
-  const extractDestination = (text: string) => {
-    const m = String(text ?? '').match(/(?:next|to)\s*([A-Z0-9_]+)/i)
-    return m?.[1] ? String(m[1]).trim() : ''
+  const extractDestination = (text: string, candidates: string[]) => {
+    const raw = String(text ?? '').trim()
+    if (!raw) return ''
+
+    const patterns: RegExp[] = [
+      /(?:next|to)\s*([A-Z0-9_]+)/i,
+      /destination\s*[:=]\s*([A-Z0-9_]+)/i,
+      /(?:目的地|下一站)\s*[:：]?\s*([A-Z0-9_]+)/i,
+      /前往\s*([A-Z0-9_]+)/i,
+    ]
+
+    for (const p of patterns) {
+      const m = raw.match(p)
+      if (m?.[1]) return String(m[1]).trim()
+    }
+
+    const upper = raw.toUpperCase()
+    for (let i = candidates.length - 1; i >= 0; i -= 1) {
+      const id = String(candidates[i] ?? '').trim()
+      if (!id) continue
+      if (upper.includes(id.toUpperCase())) return id
+    }
+
+    return ''
   }
 
   const nodeTimeById = new Map<string, string>()
@@ -372,7 +393,7 @@ const routeModel = (pkg: any) => {
       const truckId = String(evt.location ?? '').trim()
       if (!truckId) continue
       const details = String(evt.delivery_details ?? '').trim()
-      const destination = extractDestination(details)
+      const destination = extractDestination(details, nodes)
       if (!destination) continue
       const destIndex = nodes.findIndex((n) => n === destination)
       if (destIndex <= 0) continue
@@ -429,7 +450,7 @@ const routeModel = (pkg: any) => {
 
       if (isFailure) continue
 
-      const destination = extractDestination(details)
+      const destination = extractDestination(details, nodes)
       if (!destination) continue
       const destIndex = nodes.findIndex((n) => n === destination)
       if (destIndex <= 0) continue

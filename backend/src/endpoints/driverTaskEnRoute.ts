@@ -2,8 +2,7 @@ import { OpenAPIRoute } from "chanfana";
 import { z } from "zod";
 import type { AppContext } from "../types";
 import { getTerminalStatus, hasActiveException } from "../lib/packageGuards";
-import { requireDriver, type AuthUser } from "../utils/authUtils";
-
+import { requireDriver } from "../utils/authUtils";
 import { ensureVehicleForDriver, type VehicleRow } from "../utils/vehicleUtils";
 
 type TaskRow = {
@@ -84,7 +83,7 @@ export class DriverTaskEnRoute extends OpenAPIRoute {
 
     const destination =
       status === "in_progress" ? String(task.to_location ?? "").trim() : String(task.from_location ?? "").trim();
-    const details = destination ? `前往 ${destination}` : "前往目的地";
+    const details = destination ? `to ${destination}` : "in_transit";
 
     const eventId = crypto.randomUUID();
     await c.env.DB.prepare(
@@ -99,3 +98,4 @@ export class DriverTaskEnRoute extends OpenAPIRoute {
     return c.json({ success: true, status: "in_transit", location: vehicleCode });
   }
 }
+
