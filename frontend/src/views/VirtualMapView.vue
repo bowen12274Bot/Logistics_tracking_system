@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { useRoute } from "vue-router";
+import { useI18n } from "vue-i18n";
 import { api, type MapEdge, type MapNode } from "../services/api";
 import { useFullscreen } from "../composables/useFullscreen";
 import UiCard from "../components/ui/UiCard.vue";
@@ -17,6 +18,7 @@ const edges = ref<MapEdge[]>([]);
 const selectedNodeId = ref<string | null>(null);
 const hoveredNodeId = ref<string | null>(null);
 const route = useRoute();
+const { t } = useI18n();
 
 const svgEl = ref<SVGSVGElement | null>(null);
 const stageEl = ref<HTMLDivElement | null>(null);
@@ -57,8 +59,8 @@ function computeInitialViewBox(allNodes: MapNode[]): ViewBox {
 
   const x = minX - padX;
   const y = minY - padY;
-  const w = (maxX - minX) + padX * 2;
-  const h = (maxY - minY) + padY * 2;
+  const w = maxX - minX + padX * 2;
+  const h = maxY - minY + padY * 2;
   return { x, y, w, h };
 }
 
@@ -290,7 +292,7 @@ onMounted(async () => {
     if (nodeFromQuery) focusOnNode(nodeFromQuery);
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err);
-    toastFromApiError(err, error.value ?? "載入地圖失敗");
+    toastFromApiError(err, error.value ?? t("map.loadError"));
   } finally {
     loading.value = false;
   }
@@ -312,23 +314,23 @@ watch(
     <template #header>
       <div class="section-header section-header--split">
         <div>
-          <h2>虛擬地圖</h2>
-          <p class="hint">顯示 nodes/edges，支援縮放與平移。</p>
+          <h2>{{ t("map.title") }}</h2>
+          <p class="hint">{{ t("map.subtitle") }}</p>
         </div>
         <div class="map-actions">
-          <button class="ghost-btn" type="button" @click="resetView">重置視角</button>
+          <button class="ghost-btn" type="button" @click="resetView">{{ t("map.resetView") }}</button>
         </div>
       </div>
     </template>
 
     <UiCard v-if="error">
-      <p class="eyebrow">載入失敗</p>
+      <p class="eyebrow">{{ t("map.loadFailed") }}</p>
       <p class="hint">{{ error }}</p>
     </UiCard>
 
     <div v-else class="map-layout">
       <div ref="stageEl" class="card map-canvas" :class="{ fullscreen: isFullscreen }">
-        <div v-if="loading" class="hint">載入地圖中...</div>
+        <div v-if="loading" class="hint">{{ t("map.loading") }}</div>
         <div v-else class="map-stage">
           <div class="map-controls">
             <button
@@ -337,7 +339,7 @@ watch(
               type="button"
               @click="toggleFullscreen"
             >
-              {{ isFullscreen ? "退出全螢幕" : "全螢幕" }}
+              {{ isFullscreen ? t("map.fullscreen.exit") : t("map.fullscreen.enter") }}
             </button>
           </div>
           <svg
@@ -422,35 +424,35 @@ watch(
           </svg>
 
           <UiCard class="map-overlay" role="complementary" aria-label="map panel">
-            <p class="eyebrow">圖例</p>
+            <p class="eyebrow">{{ t("map.legend.title") }}</p>
             <div class="legend">
               <div class="legend-item">
                 <span class="dot hub"></span>
-                <span>配送中心</span>
+                <span>{{ t("map.legend.hub") }}</span>
               </div>
               <div class="legend-item">
                 <span class="dot reg"></span>
-                <span>配送站</span>
+                <span>{{ t("map.legend.reg") }}</span>
               </div>
               <div class="legend-item">
                 <span class="dot home"></span>
-                <span>住家</span>
+                <span>{{ t("map.legend.home") }}</span>
               </div>
               <div class="legend-item">
                 <span class="dot store"></span>
-                <span>超商</span>
+                <span>{{ t("map.legend.store") }}</span>
               </div>
             </div>
 
-            <p class="eyebrow">資訊</p>
+            <p class="eyebrow">{{ t("map.info.title") }}</p>
             <div v-if="selectedNode" class="hint">
               <div><strong>ID：</strong>{{ selectedNode.id }}</div>
               <div><strong>Name：</strong>{{ selectedNode.name }}</div>
               <div><strong>Level：</strong>{{ selectedNode.level }}</div>
               <div><strong>Subtype：</strong>{{ selectedNode.subtype ?? "-" }}</div>
-              <div><strong>座標：</strong>({{ selectedNode.x }}, {{ selectedNode.y }})</div>
+              <div>{{ t("map.info.coords", { x: selectedNode.x, y: selectedNode.y }) }}</div>
             </div>
-            <div v-else class="hint">點選節點查看詳細資訊。</div>
+            <div v-else class="hint">{{ t("map.info.selectHint") }}</div>
           </UiCard>
         </div>
       </div>
@@ -579,7 +581,7 @@ watch(
     stroke-width: 26;
   }
   70% {
-    opacity: 0.10;
+    opacity: 0.1;
     stroke-width: 14;
   }
   100% {
