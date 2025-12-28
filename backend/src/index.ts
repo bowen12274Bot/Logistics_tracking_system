@@ -42,6 +42,7 @@ import { DriverTaskEnRoute } from "./endpoints/driverTaskEnRoute";
 import { DriverTaskArrive } from "./endpoints/driverTaskArrive";
 import { CustomerServiceExceptionHandle, CustomerServiceExceptionList } from "./endpoints/csExceptions";
 import { CustomerServiceContractList, CustomerServiceContractReview } from "./endpoints/csContracts";
+import { AdminReportBilling, AdminReportPackages } from "./endpoints/adminReports";
 import { settleBillingCycle } from "./services/billingService";
 
 type Bindings = {
@@ -320,6 +321,13 @@ import { BillingSettle } from "./endpoints/billingCycle";
 import { BillingAdminUpdate, BillingAdminAddItem, BillingAdminRemoveItem } from "./endpoints/billingAdmin";
 
 // ... existing code ...
+
+// Admin Reports (P2 Improvement)
+openapi.get("/api/admin/reports/billing", AdminReportBilling);
+openapi.get("/api/admin/reports/packages", AdminReportPackages);
+
+// Public API for cron/manual trigger
+openapi.post("/api/billing/settle-cycle", settleBillingCycle);
 
 // Billing APIs
 openapi.get("/api/billing/bills", BillingBillList);
