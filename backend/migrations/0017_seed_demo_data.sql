@@ -17,13 +17,13 @@ INSERT OR IGNORE INTO packages (
     id, tracking_number, customer_id, status,
     sender_name, sender_phone, sender_address,
     receiver_name, receiver_phone, receiver_address,
-    weight, size, delivery_time, payment_type, payment_method,
+    weight, size, delivery_time, payment_type,
     route_path, estimated_delivery, created_at
 ) VALUES (
     'pkg-demo-delivered', 'TRK-DEMO-001', 'user-cust-1', 'delivered',
     '合約客戶', '0912345678', 'END_HOME_1',
     '收件者A', '0933111222', 'END_HOME_5',
-    2.5, '30x20x15 cm', 'standard', 'prepaid', 'credit_card',
+    2.5, '30x20x15 cm', 'standard', 'prepaid',
     '["END_HOME_1","REG_0","HUB_0","REG_1","END_HOME_5"]',
     datetime('now', '-1 day'),
     datetime('now', '-3 days')
@@ -44,13 +44,13 @@ INSERT OR IGNORE INTO packages (
     id, tracking_number, customer_id, status,
     sender_name, sender_phone, sender_address,
     receiver_name, receiver_phone, receiver_address,
-    weight, size, delivery_time, payment_type, payment_method,
+    weight, size, delivery_time, payment_type,
     route_path, estimated_delivery, created_at
 ) VALUES (
     'pkg-demo-intransit', 'TRK-DEMO-002', 'user-cust-2', 'in_transit',
     '非合約客戶', '0912999888', 'END_HOME_2',
     '收件者B', '0955666777', 'END_STORE_3',
-    1.2, '20x15x10 cm', 'two_day', 'cod', NULL,
+    1.2, '20x15x10 cm', 'two_day', 'cod',
     '["END_HOME_2","REG_0","HUB_0","REG_1","END_STORE_3"]',
     datetime('now', '+2 days'),
     datetime('now', '-1 day')
@@ -67,13 +67,13 @@ INSERT OR IGNORE INTO packages (
     id, tracking_number, customer_id, status,
     sender_name, sender_phone, sender_address,
     receiver_name, receiver_phone, receiver_address,
-    weight, size, delivery_time, payment_type, payment_method,
+    weight, size, delivery_time, payment_type,
     route_path, estimated_delivery, created_at
 ) VALUES (
     'pkg-demo-exception', 'TRK-DEMO-003', 'user-cust-1', 'exception',
     '合約客戶', '0912345678', 'END_HOME_1',
     '收件者C', '0977888999', 'END_HOME_7',
-    5.0, '40x30x25 cm', 'overnight', 'prepaid', 'credit_card',
+    5.0, '40x30x25 cm', 'overnight', 'prepaid',
     '["END_HOME_1","REG_0","HUB_0","REG_2","END_HOME_7"]',
     datetime('now', '+1 day'),
     datetime('now', '-2 days')
