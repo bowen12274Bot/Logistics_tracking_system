@@ -7,7 +7,7 @@ import UiCard from "../components/ui/UiCard.vue";
 import UiModal from "../components/ui/UiModal.vue";
 import UiPageShell from "../components/ui/UiPageShell.vue";
 import { useAuthStore } from "../stores/auth";
-import { api, type PackageStatus, type Package } from "../services/api";
+import { api, type WarehouseExceptionRecord, type WarehousePackageRecord } from "../services/api";
 import { exceptionReasonLabel, selectableReasonsFor } from "../lib/exceptionReasons";
 import { toastFromApiError } from "../services/errorToast";
 import { useToasts } from "../components/ui/toast";
@@ -18,16 +18,14 @@ const { t } = useI18n();
 
 const loading = ref(false);
 const busy = ref(false);
-const packages = ref<Package[]>([]);
-const exceptionReports = ref<
-  { id: string; tracking_number?: string | null; handled?: number | null; reported_at?: string | null; reason_code?: string | null }[]
->([]);
+const packages = ref<WarehousePackageRecord[]>([]);
+const exceptionReports = ref<WarehouseExceptionRecord[]>([]);
 
 const selectedNode = ref("");
 const adjacentNodes = ref<string[]>([]);
-const awaitingReceive = computed(() => packages.value.filter((p) => p.status === "warehouse_in"));
-const sorting = computed(() => packages.value.filter((p) => p.status === "warehouse_sorting"));
-const dispatched = computed(() => packages.value.filter((p) => p.status === "route_decided"));
+const awaitingReceive = computed(() => packages.value.filter((p) => p.ui_state === "await_receive"));
+const sorting = computed(() => packages.value.filter((p) => p.ui_state === "sorting"));
+const dispatched = computed(() => packages.value.filter((p) => p.ui_state === "dispatched"));
 
 const receiveChecked = reactive<Record<string, boolean>>({});
 const nextHopFor = reactive<Record<string, string>>({});
@@ -47,8 +45,8 @@ const refresh = async () => {
   try {
     const res = await api.getWarehousePackages();
     packages.value = res.packages ?? [];
-    selectedNode.value = res.node_id ?? "";
-    adjacentNodes.value = res.adjacent_nodes ?? [];
+    selectedNode.value = res.warehouse_node_id ?? "";
+    adjacentNodes.value = res.neighbors ?? [];
   } catch (err) {
     toastFromApiError(err, t("warehouse.errors.loadFailed"));
   } finally {
@@ -64,11 +62,11 @@ const receiveSelected = async () => {
   }
   busy.value = true;
   try {
-    const res = await api.warehouseReceive(targets.map((p) => p.id));
-    const failed = res.failed_ids?.length ?? 0;
+    const res = await api.receiveWarehousePackages(targets.map((p) => p.id));
+    const failed = res.failed ?? 0;
     toast.success(
       failed > 0
-        ? t("warehouse.receive.doneWithFailed", { success: res.processed, failed })
+        ? t("warehouse.receive.doneWithFailed", { success: res.processed ?? 0, failed })
         : t("warehouse.receive.done", { count: res.processed }),
     );
     await refresh();
@@ -79,11 +77,11 @@ const receiveSelected = async () => {
   }
 };
 
-const setNextHop = (pkg: Package, node: string) => {
-  nextHopFor[pkg.id] = node;
+const setNextHop = (pkg: WarehousePackageRecord, node?: string) => {
+  nextHopFor[pkg.id] = node ?? "";
 };
 
-const dispatchOne = async (pkg: Package) => {
+const dispatchOne = async (pkg: WarehousePackageRecord) => {
   const nextHop = nextHopFor[pkg.id];
   if (!nextHop) {
     toast.warning(t("warehouse.hints.selectNextHop"));
@@ -91,7 +89,7 @@ const dispatchOne = async (pkg: Package) => {
   }
   busy.value = true;
   try {
-    await api.warehouseDispatch(pkg.id, { next_hop: nextHop });
+    await api.dispatchWarehouseNext(pkg.id, { toNodeId: nextHop });
     toast.success(t("warehouse.dispatch.done", { tracking: pkg.tracking_number ?? pkg.id }));
     await refresh();
   } catch (err) {
@@ -102,12 +100,12 @@ const dispatchOne = async (pkg: Package) => {
 };
 
 const exceptionModalOpen = ref(false);
-const exceptionTarget = ref<Package | null>(null);
+const exceptionTarget = ref<WarehousePackageRecord | null>(null);
 const exceptionReason = ref("");
 const exceptionNote = ref("");
 const exceptionSubmitError = ref("");
 
-const startException = (pkg: Package) => {
+const startException = (pkg: WarehousePackageRecord) => {
   exceptionTarget.value = pkg;
   exceptionReason.value = "";
   exceptionNote.value = "";
@@ -133,11 +131,9 @@ const submitException = async () => {
 
   busy.value = true;
   try {
-    await api.reportException({
-      package_id: exceptionTarget.value.id,
+    await api.reportWarehouseException(exceptionTarget.value.id, {
       reason_code: exceptionReason.value,
-      reported_by: auth.user?.id ?? "warehouse",
-      handling_report: exceptionNote.value.trim(),
+      description: exceptionNote.value.trim(),
     });
     toast.success(t("warehouse.exception.done", { tracking: exceptionTarget.value.tracking_number ?? exceptionTarget.value.id }));
     await refresh();
@@ -152,8 +148,8 @@ const submitException = async () => {
 
 const loadExceptions = async () => {
   try {
-    const res = await api.getExceptions({ scope: "mine" });
-    exceptionReports.value = res.records ?? [];
+    const res = await api.getWarehouseExceptionReports();
+    exceptionReports.value = res.exceptions ?? [];
   } catch (err) {
     // ignore silently; optional
   }
