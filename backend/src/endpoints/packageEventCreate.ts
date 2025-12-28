@@ -113,12 +113,17 @@ export class PackageEventCreate extends OpenAPIRoute {
 
     // Trigger webhook notification (P1 improvement)
     if (pkg.customer_id) {
-       await sendWebhookNotification(c, pkg.customer_id, delivery_status, {
-           package_id: packageId,
-           delivery_details: delivery_details ?? null,
-           location: location ?? null,
-           events_at: eventsAt
-       });
+       // Fire and forget (or at least don't crash the request if webhook fails)
+       try {
+           await sendWebhookNotification(c, pkg.customer_id, delivery_status, {
+               package_id: packageId,
+               delivery_details: delivery_details ?? null,
+               location: location ?? null,
+               events_at: eventsAt
+           });
+       } catch (error) {
+           console.error("Failed to send webhook notification:", error);
+       }
     }
 
     return c.json({ success: true, event_id: eventId, message: "Event created" });

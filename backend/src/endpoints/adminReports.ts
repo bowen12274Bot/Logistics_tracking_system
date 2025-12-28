@@ -45,46 +45,50 @@ export class AdminReportBilling extends OpenAPIRoute {
   };
 
   async handle(c: AppContext) {
-    const auth = await requireAdmin(c);
-    if (!auth.ok) return (auth as any).res;
+    try {
+      const auth = await requireAdmin(c);
+      if (!auth.ok) return (auth as any).res;
 
-    const data = await this.getValidatedData<typeof this.schema>();
-    const { year, month } = data.query;
-    const period = `${year}-${month.padStart(2, "0")}`;
+      const data = await this.getValidatedData<typeof this.schema>();
+      const { year, month } = data.query;
+      const period = `${year}-${month.padStart(2, "0")}`;
 
-    // Fetch bills and aggregate data
-    const bills = await c.env.DB.prepare(`
-      SELECT 
-        b.period,
-        u.user_name as customer_name,
-        u.email,
-        b.total_amount,
-        b.status,
-        b.due_date,
-        b.paid_at
-      FROM monthly_bills b
-      JOIN users u ON b.customer_id = u.id
-      WHERE b.period = ?
-    `).bind(period).all();
+      const bills = await c.env.DB.prepare(`
+        SELECT 
+          b.period,
+          u.user_name as customer_name,
+          u.email,
+          b.total_amount,
+          b.status,
+          b.due_date,
+          b.paid_at
+        FROM monthly_bills b
+        JOIN users u ON b.customer_id = u.id
+        WHERE b.period = ?
+      `).bind(period).all();
 
-    const csvData = (bills.results || []).map((b: any) => ({
-      Period: b.period,
-      Customer: b.customer_name,
-      Email: b.email,
-      TotalAmount: b.total_amount,
-      Status: b.status,
-      DueDate: b.due_date,
-      PaidAt: b.paid_at
-    }));
+      const csvData = (bills.results || []).map((b: any) => ({
+        Period: b.period,
+        Customer: b.customer_name,
+        Email: b.email,
+        TotalAmount: b.total_amount,
+        Status: b.status,
+        DueDate: b.due_date,
+        PaidAt: b.paid_at
+      }));
 
-    const csvContent = toCSV(csvData);
+      const csvContent = toCSV(csvData);
 
-    return new Response(csvContent, {
-      headers: {
-        "Content-Type": "text/csv; charset=utf-8",
-        "Content-Disposition": `attachment; filename="billing_report_${period}.csv"`,
-      },
-    });
+      return new Response(csvContent, {
+        headers: {
+          "Content-Type": "text/csv; charset=utf-8",
+          "Content-Disposition": `attachment; filename="billing_report_${period}.csv"`,
+        },
+      });
+    } catch (e: any) {
+      console.error("FULL CRASH AdminReportBilling:", e);
+      return c.json({ success: false, error: String(e), stack: e.stack }, 500);
+    }
   }
 }
 
@@ -106,53 +110,58 @@ export class AdminReportPackages extends OpenAPIRoute {
   };
 
   async handle(c: AppContext) {
-    const auth = await requireAdmin(c);
-    if (!auth.ok) return (auth as any).res;
-    
-    const data = await this.getValidatedData<typeof this.schema>();
-    const { date } = data.query;
+    try {
+      const auth = await requireAdmin(c);
+      if (!auth.ok) return (auth as any).res;
+      
+      const data = await this.getValidatedData<typeof this.schema>();
+      const { date } = data.query;
 
-    let query = `
-      SELECT 
-        p.tracking_number, 
-        u.user_name as sender_name,
-        p.sender_address,
-        p.receiver_name,
-        p.receiver_address,
-        p.weight,
-        p.delivery_type,
-        p.created_at
-      FROM packages p
-      LEFT JOIN users u ON p.customer_id = u.id
-    `;
-    
-    const params: any[] = [];
-    if (date) {
-        query += " WHERE date(p.created_at) = ?";
-        params.push(date);
+      let query = `
+        SELECT 
+          p.tracking_number, 
+          u.user_name as sender_name,
+          p.sender_address,
+          p.receiver_name,
+          p.receiver_address,
+          p.weight,
+          p.delivery_time,
+          p.created_at
+        FROM packages p
+        LEFT JOIN users u ON p.customer_id = u.id
+      `;
+      
+      const params: any[] = [];
+      if (date) {
+          query += " WHERE date(p.created_at) = ?";
+          params.push(date);
+      }
+      query += " ORDER BY p.created_at DESC LIMIT 1000";
+
+      const pkgs = await c.env.DB.prepare(query).bind(...params).all();
+      
+      const csvData = (pkgs.results || []).map((p: any) => ({
+          TrackingNumber: p.tracking_number,
+          Sender: p.sender_name || 'N/A',
+          SenderAddress: p.sender_address,
+          Receiver: p.receiver_name,
+          ReceiverAddress: p.receiver_address,
+          Weight: p.weight,
+          Type: p.delivery_time,
+          Created: p.created_at
+      }));
+
+      const csvContent = toCSV(csvData);
+      
+      return new Response(csvContent, {
+          headers: {
+            "Content-Type": "text/csv; charset=utf-8",
+            "Content-Disposition": `attachment; filename="packages_export_${date || 'all'}.csv"`,
+          },
+      });
+    } catch (e: any) {
+      console.error("FULL CRASH AdminReportPackages:", e);
+      return c.json({ success: false, error: String(e), stack: e.stack }, 500);
     }
-    query += " ORDER BY p.created_at DESC LIMIT 1000";
-
-    const pkgs = await c.env.DB.prepare(query).bind(...params).all();
-    
-    const csvData = (pkgs.results || []).map((p: any) => ({
-        TrackingNumber: p.tracking_number,
-        Sender: p.sender_name || 'N/A',
-        SenderAddress: p.sender_address,
-        Receiver: p.receiver_name,
-        ReceiverAddress: p.receiver_address,
-        Weight: p.weight,
-        Type: p.delivery_type,
-        Created: p.created_at
-    }));
-
-    const csvContent = toCSV(csvData);
-    
-    return new Response(csvContent, {
-        headers: {
-          "Content-Type": "text/csv; charset=utf-8",
-          "Content-Disposition": `attachment; filename="packages_export_${date || 'all'}.csv"`,
-        },
-    });
   }
 }
