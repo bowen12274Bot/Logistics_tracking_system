@@ -465,6 +465,25 @@ async function refreshArriveData() {
   }
 }
 
+async function markArrivalForCashPayWindow() {
+  const nodeId = String(currentNodeId.value ?? "").trim();
+  if (!nodeId) return;
+
+  const targets = activeAssignedTasks.value.filter((task) => {
+    if (task.paid_at) return false;
+    if (!needsCashCollection(task)) return false;
+    if (!isCashPayment(task)) return false;
+    const taskType = String(task.task_type ?? "").trim().toLowerCase();
+    const from = String(task.from_location ?? "").trim();
+    const to = String(task.to_location ?? "").trim();
+    if (taskType === "pickup") return from === nodeId;
+    return to === nodeId;
+  });
+  if (targets.length === 0) return;
+
+  await Promise.allSettled(targets.map((task) => api.arriveDriverTask(task.id)));
+}
+
 function collapseSidebar() {
   sidebarCollapsed.value = true;
   exceptionModalOpen.value = false;
@@ -893,6 +912,7 @@ async function animateMoveTo(targetId: string) {
 
   await refreshActiveRouteFromCurrent();
   await refreshArriveData();
+  await markArrivalForCashPayWindow();
   openTaskList(true);
 }
 
@@ -948,6 +968,7 @@ onMounted(async () => {
     }
 
     await refreshArriveData();
+    await markArrivalForCashPayWindow();
     applyDeepLinkFromQuery();
   } catch (e: any) {
     error.value = String(e?.message ?? e);

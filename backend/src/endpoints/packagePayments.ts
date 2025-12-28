@@ -48,6 +48,28 @@ async function hasEvent(db: D1Database, packageId: string, status: string) {
   return !!row;
 }
 
+async function hasDriverVehicleAtPickupNode(db: D1Database, packageId: string, pickupNodeId: string | null) {
+  const nodeId = String(pickupNodeId ?? "").trim();
+  if (!nodeId) return false;
+  const row = await db
+    .prepare(
+      `
+      SELECT 1 AS ok
+      FROM delivery_tasks t
+      JOIN vehicles v ON v.driver_user_id = t.assigned_driver_id
+      WHERE t.package_id = ?
+        AND LOWER(TRIM(t.task_type)) = 'pickup'
+        AND t.status IN ('pending','accepted','in_progress')
+        AND LOWER(TRIM(COALESCE(t.from_location,''))) = LOWER(TRIM(?))
+        AND LOWER(TRIM(COALESCE(v.current_node_id,''))) = LOWER(TRIM(COALESCE(t.from_location,'')))
+      LIMIT 1
+      `,
+    )
+    .bind(packageId, nodeId)
+    .first();
+  return !!row;
+}
+
 async function computePayableNow(db: D1Database, pkg: any, paymentMethod: PackagePaymentMethod | null) {
   const paymentType = String(pkg?.payment_type ?? "").trim();
   const packageId = String(pkg?.id ?? "").trim();
@@ -85,7 +107,12 @@ async function computePayableNow(db: D1Database, pkg: any, paymentMethod: Packag
 
     // home: cash is collected when driver arrives (before pickup).
     const arrived = await hasEvent(db, packageId, "arrived_pickup");
-    return arrived
+    if (arrived) return { ok: true as const, payable_now: true, reason: null };
+
+    // Fallback: if driver vehicle is already at pickup node, allow pay even if arrived_pickup event wasn't recorded.
+    // This keeps customer payment unblocked when the driver app forgets to call /arrive.
+    const atPickup = await hasDriverVehicleAtPickupNode(db, packageId, pkg?.sender_address ?? null);
+    return atPickup
       ? { ok: true as const, payable_now: true, reason: null }
       : { ok: true as const, payable_now: false, reason: "Cash prepaid at home is payable after arrived_pickup" };
   }
