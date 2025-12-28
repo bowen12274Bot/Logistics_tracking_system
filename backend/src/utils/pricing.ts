@@ -4,73 +4,27 @@ export type DeliveryType = "overnight" | "two_day" | "standard" | "economy";
 export type SpecialMark = "fragile" | "dangerous" | "international";
 export type BoxType = "envelope" | "S" | "M" | "L";
 
-export const ROUTE_COST_K = 5200;
-export const ROUTE_COST_NORM_MIN = 0.3;
-export const ROUTE_COST_NORM_MAX = 1.6;
-export const INTERNATIONAL_MULTIPLIER = 1.8;
+// Dynamic Rules Interface
+export interface PricingRules {
+  const: {
+    route_cost_k: number;
+    route_cost_norm_min: number;
+    route_cost_norm_max: number;
+    international_multiplier: number;
+  };
+  multipliers: {
+    service: Record<DeliveryType, number>;
+  };
+  delivery_days: Record<DeliveryType, number>;
+  box_params: Record<BoxType, { baseFee: number; ratePerCost: number }>;
+  weight_surcharge: Record<BoxType, { includedWeightKg: number; perKgFee: number }>;
+  min_price: Record<BoxType, Record<DeliveryType, number>>;
+  max_price: Record<BoxType, Record<DeliveryType, number>>;
+  mark_fees: Record<string, number>;
+}
 
 export const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 export const ceilInt = (value: number) => Math.ceil(value);
-
-export const getServiceMultiplier = (deliveryType: DeliveryType) => {
-  const multipliers: Record<DeliveryType, number> = {
-    economy: 1.0,
-    standard: 1.25,
-    two_day: 1.55,
-    overnight: 2.0,
-  };
-  return multipliers[deliveryType];
-};
-
-export const getDeliveryDays = (deliveryType: DeliveryType) => {
-  const days: Record<DeliveryType, number> = {
-    overnight: 1,
-    two_day: 2,
-    standard: 3,
-    economy: 5,
-  };
-  return days[deliveryType];
-};
-
-export const getBaseParams = (boxType: BoxType) => {
-  const params: Record<BoxType, { baseFee: number; ratePerCost: number }> = {
-    envelope: { baseFee: 30, ratePerCost: 90 },
-    S: { baseFee: 70, ratePerCost: 170 },
-    M: { baseFee: 110, ratePerCost: 260 },
-    L: { baseFee: 160, ratePerCost: 380 },
-  };
-  return params[boxType];
-};
-
-export const getWeightSurchargeParams = (boxType: BoxType) => {
-  const params: Record<BoxType, { includedWeightKg: number; perKgFee: number }> = {
-    envelope: { includedWeightKg: 0.5, perKgFee: 0 },
-    S: { includedWeightKg: 3, perKgFee: 18 },
-    M: { includedWeightKg: 10, perKgFee: 15 },
-    L: { includedWeightKg: 25, perKgFee: 12 },
-  };
-  return params[boxType];
-};
-
-export const getMinPrice = (boxType: BoxType, deliveryType: DeliveryType) => {
-  const table: Record<BoxType, Record<DeliveryType, number>> = {
-    envelope: { economy: 50, standard: 70, two_day: 90, overnight: 120 },
-    S: { economy: 120, standard: 160, two_day: 210, overnight: 280 },
-    M: { economy: 200, standard: 260, two_day: 340, overnight: 450 },
-    L: { economy: 320, standard: 420, two_day: 550, overnight: 750 },
-  };
-  return table[boxType][deliveryType];
-};
-
-export const getMaxPrice = (boxType: BoxType, deliveryType: DeliveryType) => {
-  const table: Record<BoxType, Record<DeliveryType, number>> = {
-    envelope: { economy: 400, standard: 550, two_day: 700, overnight: 950 },
-    S: { economy: 900, standard: 1200, two_day: 1500, overnight: 1900 },
-    M: { economy: 1400, standard: 1850, two_day: 2350, overnight: 2900 },
-    L: { economy: 2200, standard: 2900, two_day: 3700, overnight: 4600 },
-  };
-  return table[boxType][deliveryType];
-};
 
 export const computeVolumetricWeightKg = (lengthCm: number, widthCm: number, heightCm: number) =>
   (lengthCm * widthCm * heightCm) / 6000;
@@ -92,10 +46,13 @@ export const determineBoxType = (
   return null;
 };
 
-export const computeMarkFee = (specialMarks: SpecialMark[]) => {
+export const computeMarkFee = (specialMarks: SpecialMark[], rules: PricingRules) => {
   let markFee = 0;
-  if (specialMarks.includes("dangerous")) markFee += 120;
-  if (specialMarks.includes("fragile")) markFee += 60;
+  for (const mark of specialMarks) {
+    if (rules.mark_fees[mark]) {
+      markFee += rules.mark_fees[mark];
+    }
+  }
   return markFee;
 };
 
@@ -121,10 +78,11 @@ export const calculatePackagePrice = (
   weightKg: number,
   dimensionsCm: { length: number; width: number; height: number },
   deliveryType: DeliveryType,
-  specialMarks: SpecialMark[] = []
+  specialMarks: SpecialMark[] = [],
+  rules: PricingRules // Logic now depends on passed rules
 ): PricingResult | { error: string } => {
-  const routeCostNormRaw = routeCost / ROUTE_COST_K;
-  const routeCostNorm = clamp(routeCostNormRaw, ROUTE_COST_NORM_MIN, ROUTE_COST_NORM_MAX);
+  const routeCostNormRaw = routeCost / rules.const.route_cost_k;
+  const routeCostNorm = clamp(routeCostNormRaw, rules.const.route_cost_norm_min, rules.const.route_cost_norm_max);
 
   const volumetricWeightKg = computeVolumetricWeightKg(
     dimensionsCm.length,
@@ -141,31 +99,32 @@ export const calculatePackagePrice = (
   );
   if (!boxType) return { error: "Oversized package" };
 
-  const serviceMultiplier = getServiceMultiplier(deliveryType);
-  const { baseFee, ratePerCost } = getBaseParams(boxType);
-  const base = baseFee + routeCostNorm * ratePerCost;
+  const serviceMultiplier = rules.multipliers.service[deliveryType] ?? 1.0;
+  
+  const boxParam = rules.box_params[boxType];
+  const base = boxParam.baseFee + routeCostNorm * boxParam.ratePerCost;
   const shipping = ceilInt(base * serviceMultiplier);
 
-  const { includedWeightKg, perKgFee } = getWeightSurchargeParams(boxType);
-  const extraKg = Math.max(0, ceilInt(billableWeightKg - includedWeightKg));
-  const weightSurcharge = extraKg * perKgFee;
+  const weightParam = rules.weight_surcharge[boxType];
+  const extraKg = Math.max(0, ceilInt(billableWeightKg - weightParam.includedWeightKg));
+  const weightSurcharge = extraKg * weightParam.perKgFee;
 
   let subtotal = shipping + weightSurcharge;
   const internationalMultiplierApplied = specialMarks.includes("international")
-    ? INTERNATIONAL_MULTIPLIER
+    ? rules.const.international_multiplier
     : 1;
   if (internationalMultiplierApplied !== 1) {
     subtotal = ceilInt(subtotal * internationalMultiplierApplied);
   }
 
-  const markFee = computeMarkFee(specialMarks);
+  const markFee = computeMarkFee(specialMarks, rules);
   const calculatedPrice = subtotal + markFee;
 
-  const minPrice = getMinPrice(boxType, deliveryType);
-  const maxPrice = getMaxPrice(boxType, deliveryType);
+  const minPrice = rules.min_price[boxType][deliveryType];
+  const maxPrice = rules.max_price[boxType][deliveryType];
   const totalCost = Math.min(Math.max(calculatedPrice, minPrice), maxPrice);
 
-  const days = getDeliveryDays(deliveryType);
+  const days = rules.delivery_days[deliveryType] ?? 3;
   const deliveryDate = new Date();
   deliveryDate.setDate(deliveryDate.getDate() + days);
 
@@ -205,4 +164,46 @@ export const guessDimensionsFromBoxType = (sizeString: string): { length: number
   if (["l", "large"].includes(s)) return { length: 90, width: 60, height: 60 };
   // Default to M
   return { length: 60, width: 40, height: 40 };
+};
+
+// Fallback Rules (matches original constants) for reliability
+export const DEFAULT_PRICING_RULES: PricingRules = {
+  const: {
+    route_cost_k: 5200,
+    route_cost_norm_min: 0.3,
+    route_cost_norm_max: 1.6,
+    international_multiplier: 1.8,
+  },
+  multipliers: {
+    service: { economy: 1.0, standard: 1.25, two_day: 1.55, overnight: 2.0 },
+  },
+  delivery_days: { overnight: 1, two_day: 2, standard: 3, economy: 5 },
+  box_params: {
+    envelope: { baseFee: 30, ratePerCost: 90 },
+    S: { baseFee: 70, ratePerCost: 170 },
+    M: { baseFee: 110, ratePerCost: 260 },
+    L: { baseFee: 160, ratePerCost: 380 },
+  },
+  weight_surcharge: {
+    envelope: { includedWeightKg: 0.5, perKgFee: 0 },
+    S: { includedWeightKg: 3, perKgFee: 18 },
+    M: { includedWeightKg: 10, perKgFee: 15 },
+    L: { includedWeightKg: 25, perKgFee: 12 },
+  },
+  min_price: {
+    envelope: { economy: 50, standard: 70, two_day: 90, overnight: 120 },
+    S: { economy: 120, standard: 160, two_day: 210, overnight: 280 },
+    M: { economy: 200, standard: 260, two_day: 340, overnight: 450 },
+    L: { economy: 320, standard: 420, two_day: 550, overnight: 750 },
+  },
+  max_price: {
+    envelope: { economy: 400, standard: 550, two_day: 700, overnight: 950 },
+    S: { economy: 900, standard: 1200, two_day: 1500, overnight: 1900 },
+    M: { economy: 1400, standard: 1850, two_day: 2350, overnight: 2900 },
+    L: { economy: 2200, standard: 2900, two_day: 3700, "overnight": 4600 },
+  },
+  mark_fees: {
+    dangerous: 120,
+    fragile: 60
+  }
 };

@@ -97,6 +97,12 @@ const router = createRouter({
       meta: { roles: CS_ROLES },
     },
     {
+      path: '/cs/packages',
+      name: 'cs-packages',
+      component: CustomerTrackView,
+      meta: { roles: CS_ROLES },
+    },
+    {
       path: '/employee/driver',
       name: 'employee-driver',
       component: EmployeeDriverView,

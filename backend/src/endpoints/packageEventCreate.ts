@@ -3,6 +3,7 @@ import { z } from "zod";
 import { type AppContext } from "../types";
 import { getTerminalStatus, hasActiveException } from "../lib/packageGuards";
 import { requireAuth } from "../utils/authUtils";
+import { sendWebhookNotification } from "../services/webhookNotifier";
 
 const DeliveryStatusEnum = z.enum([
   "created",
@@ -26,6 +27,9 @@ const DeliveryStatusEnum = z.enum([
   "enroute_delivery",
   "arrived_delivery",
   "payment_collected_cod",
+  "customs_hold",
+  "customs_cleared",
+  "cross_border",
 ]);
 
 export class PackageEventCreate extends OpenAPIRoute {
@@ -92,7 +96,7 @@ export class PackageEventCreate extends OpenAPIRoute {
       if (!ok) return c.json({ success: false, error: "in_transit requires delivery_details containing destination" }, 400);
     }
 
-    const pkg = await c.env.DB.prepare("SELECT 1 AS ok FROM packages WHERE id = ? LIMIT 1").bind(packageId).first();
+    const pkg = await c.env.DB.prepare("SELECT customer_id FROM packages WHERE id = ? LIMIT 1").bind(packageId).first<{ customer_id: string }>();
     if (!pkg) return c.json({ success: false, error: "Package not found" }, 404);
 
     const terminal = await getTerminalStatus(c.env.DB, packageId);
@@ -106,6 +110,21 @@ export class PackageEventCreate extends OpenAPIRoute {
     )
       .bind(eventId, packageId, delivery_status, delivery_details ?? null, eventsAt, location ?? null)
       .run();
+
+    // Trigger webhook notification (P1 improvement)
+    if (pkg.customer_id) {
+       // Fire and forget (or at least don't crash the request if webhook fails)
+       try {
+           await sendWebhookNotification(c, pkg.customer_id, delivery_status, {
+               package_id: packageId,
+               delivery_details: delivery_details ?? null,
+               location: location ?? null,
+               events_at: eventsAt
+           });
+       } catch (error) {
+           console.error("Failed to send webhook notification:", error);
+       }
+    }
 
     return c.json({ success: true, event_id: eventId, message: "Event created" });
   }
