@@ -357,6 +357,19 @@ onMounted(() => {
             {{ t('login.credentials.openModal') }}
           </button>
         </div>
+
+        <div class="test-account-actions">
+          <button
+            v-for="acct in testAccounts"
+            :key="acct.email"
+            type="button"
+            class="ghost-btn test-account-btn"
+            @click="fillTestAccount(acct)"
+          >
+            <span>{{ t(acct.roleKey) }}</span>
+            <span class="test-account-meta">{{ acct.email }}</span>
+          </button>
+        </div>
       </div>
     </div>
 
