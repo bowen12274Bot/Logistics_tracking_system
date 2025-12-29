@@ -247,7 +247,18 @@ onBeforeUnmount(() => {
   padding: 9px 14px;
   border-radius: 999px;
   border: 1px solid transparent;
-  transition: background-color 0.2s ease, color 0.2s ease;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+}
+
+.nav-links a:hover:not(.router-link-active) {
+  background: rgba(244, 182, 194, 0.15);
+  border-color: rgba(244, 182, 194, 0.25);
+  transform: translateY(-1px);
+}
+
+.nav-links a:active:not(.router-link-active) {
+  transform: translateY(0);
 }
 
 .nav-links a.router-link-active {
@@ -286,10 +297,16 @@ onBeforeUnmount(() => {
   background: rgba(244, 182, 194, 0.22);
   color: #3f2620;
   cursor: pointer;
+  transition: all 0.2s ease;
 }
 
 .nav-toggle:hover {
   background: rgba(244, 182, 194, 0.35);
+  transform: scale(1.05);
+}
+
+.nav-toggle:active {
+  transform: scale(0.95);
 }
 
 .locale-switch select {
@@ -299,6 +316,19 @@ onBeforeUnmount(() => {
   background: rgba(255, 255, 255, 0.8);
   color: #2f2a24;
   font-size: 12px;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.locale-switch select:hover {
+  border-color: rgba(165, 122, 99, 0.35);
+  background: rgba(255, 255, 255, 0.95);
+}
+
+.locale-switch select:focus {
+  outline: none;
+  border-color: rgba(225, 139, 139, 0.5);
+  box-shadow: 0 0 0 3px rgba(225, 139, 139, 0.15);
 }
 
 .sr-only {
@@ -322,6 +352,19 @@ onBeforeUnmount(() => {
   background: rgba(255, 255, 255, 0.7);
   color: var(--text-main);
   cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.user-chip:hover {
+  background: rgba(255, 255, 255, 0.9);
+  border-color: rgba(165, 122, 99, 0.35);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(165, 122, 99, 0.15);
+}
+
+.user-chip:active {
+  transform: translateY(0);
+  box-shadow: none;
 }
 
 .user-role {
@@ -362,6 +405,22 @@ onBeforeUnmount(() => {
   text-decoration: none;
   cursor: pointer;
   font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.menu-item:hover {
+  background: rgba(244, 182, 194, 0.22);
+  border-color: rgba(244, 182, 194, 0.35);
+  transform: translateX(2px);
+}
+
+.menu-item:active {
+  transform: translateX(0);
+}
+
+.menu-item.danger:hover {
+  background: rgba(161, 60, 60, 0.12);
+  border-color: rgba(161, 60, 60, 0.25);
 }
 
 .menu-icon {
@@ -371,20 +430,15 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   opacity: 0.8;
+  transition: transform 0.2s ease;
+}
+
+.menu-item:hover .menu-icon {
+  transform: scale(1.1);
 }
 
 .menu-icon svg {
   display: block;
-}
-
-.menu-item:hover {
-  background: rgba(244, 182, 194, 0.22);
-  border-color: rgba(244, 182, 194, 0.35);
-}
-
-.menu-item.danger:hover {
-  background: rgba(161, 60, 60, 0.12);
-  border-color: rgba(161, 60, 60, 0.25);
 }
 
 .primary-btn {

@@ -1271,11 +1271,20 @@ onUnmounted(() => {
   border-radius: 12px;
   padding: 12px 14px;
   cursor: pointer;
-  transition: background 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  color: inherit;
 }
 
-.task-btn:hover {
+.task-btn:hover:not(.active) {
   background: rgba(255, 255, 255, 0.75);
+  border-color: rgba(165, 122, 99, 0.28);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(165, 122, 99, 0.12);
+}
+
+.task-btn:active:not(.active) {
+  transform: translateY(0);
+  box-shadow: none;
 }
 
 .task-btn.active {

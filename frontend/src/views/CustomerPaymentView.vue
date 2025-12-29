@@ -759,6 +759,11 @@ const payableReasonFor = (pkg: StoredPackage) => {
   border: none;
   cursor: pointer;
   color: inherit;
+  transition: all 0.2s ease;
+}
+
+.tab-btn:hover:not(.active) {
+  background: rgba(225, 139, 139, 0.08);
 }
 
 .tab-btn + .tab-btn {
@@ -828,10 +833,16 @@ const payableReasonFor = (pkg: StoredPackage) => {
   border-radius: 12px;
   overflow: hidden;
   background: #fff;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.package-row:hover {
+  box-shadow: 0 2px 8px rgba(165, 122, 99, 0.12);
 }
 
 .package-row.active {
   border-color: var(--accent);
+  box-shadow: 0 4px 12px rgba(244, 182, 194, 0.2);
 }
 
 .detail-grid {
@@ -854,6 +865,18 @@ const payableReasonFor = (pkg: StoredPackage) => {
   background: rgba(255, 255, 255, 0.86);
   color: var(--text-main);
   min-width: 220px;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.method-select:hover {
+  border-color: rgba(165, 122, 99, 0.35);
+}
+
+.method-select:focus {
+  outline: none;
+  border-color: rgba(225, 139, 139, 0.5);
+  box-shadow: 0 0 0 3px rgba(225, 139, 139, 0.15);
 }
 
 .package-row.highlight {
@@ -872,6 +895,24 @@ const payableReasonFor = (pkg: StoredPackage) => {
   border: none;
   cursor: pointer;
   text-align: left;
+  transition: all 0.2s ease;
+  color: inherit;
+}
+
+.row-btn:hover {
+  background: rgba(244, 182, 194, 0.08);
+}
+
+.row-btn:active {
+  background: rgba(244, 182, 194, 0.15);
+}
+
+.row-static {
+  cursor: default;
+}
+
+.row-static:hover {
+  background: transparent;
 }
 
 .tracking {
@@ -883,6 +924,12 @@ const payableReasonFor = (pkg: StoredPackage) => {
   border-radius: 999px;
   background: rgba(0, 0, 0, 0.05);
   font-size: 13px;
+  transition: all 0.2s ease;
+}
+
+.pill:hover {
+  background: rgba(0, 0, 0, 0.08);
+  transform: scale(1.02);
 }
 
 .pill.danger {
@@ -890,11 +937,27 @@ const payableReasonFor = (pkg: StoredPackage) => {
   color: #7a2e2e;
 }
 
+.pill.danger:hover {
+  background: rgba(161, 60, 60, 0.15);
+}
+
 .package-detail {
   padding: 12px;
   border-top: 1px dashed var(--surface-stroke);
   display: grid;
   gap: 10px;
+  animation: slideDown 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .chip {
@@ -903,11 +966,20 @@ const payableReasonFor = (pkg: StoredPackage) => {
   font-size: 12px;
   background: #f2f2f2;
   color: #444;
+  transition: all 0.2s ease;
+}
+
+.chip:hover {
+  background: #e8e8e8;
 }
 
 .chip.danger {
   background: #ffeceb;
   color: #a13c3c;
+}
+
+.chip.danger:hover {
+  background: #ffd9d7;
 }
 
 .meta {
@@ -937,6 +1009,17 @@ const payableReasonFor = (pkg: StoredPackage) => {
   border: 1px solid currentColor;
   padding: 8px 12px;
   border-radius: 10px;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.ghost-btn:hover:not(:disabled) {
+  background: rgba(244, 182, 194, 0.1);
+  transform: translateY(-1px);
+}
+
+.ghost-btn:active:not(:disabled) {
+  transform: translateY(0);
 }
 
 .ghost-btn:disabled {
