@@ -35,6 +35,31 @@ const methodLabel = (method: PaymentMethod) => t(`payment.method.${method}`)
 const trackingLabel = (tracking?: string | null) => (tracking && tracking.trim() ? tracking.trim() : t('common.tracking.pending'))
 const listSeparator = computed(() => (locale.value === 'zh-TW' ? '、' : ', '))
 
+// 格式化日期範圍字串 "2025-12-01T00:00:00.000Z - 2025-12-31T23:59:59.999Z" -> "2025/12/1 - 2025/12/31"
+const formatPeriodRange = (period: string) => {
+  if (!period || !period.includes(' - ')) return period
+  
+  const [start, end] = period.split(' - ').map(s => s.trim())
+  if (!start || !end) return period
+  
+  try {
+    const startDate = new Date(start)
+    const endDate = new Date(end)
+    
+    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) return period
+    
+    const targetLocale = locale.value === 'en-US' ? 'en-US' : 'zh-TW'
+    const options: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'numeric', day: 'numeric' }
+    
+    const formattedStart = startDate.toLocaleDateString(targetLocale, options)
+    const formattedEnd = endDate.toLocaleDateString(targetLocale, options)
+    
+    return `${formattedStart} - ${formattedEnd}`
+  } catch {
+    return period
+  }
+}
+
 const unpaidPackages = computed<StoredPackage[]>(() => packageStore.unpaidPackages)
 const myUnpaidPackages = computed<StoredPackage[]>(() => unpaidPackages.value)
 const expandedIds = ref<Set<string>>(new Set())
@@ -403,7 +428,20 @@ const canPayNow = (pkg: StoredPackage) => {
 }
 
 const payableReasonFor = (pkg: StoredPackage) => {
-  return getPayableSnapshot(pkg)?.reason ?? null
+  const reason = getPayableSnapshot(pkg)?.reason ?? null
+  if (!reason) return null
+  
+  // 翻譯後端返回的英文 reason
+  const reasonMap: Record<string, string> = {
+    'Package not found': t('payment.reason.packageNotFound'),
+    'monthly_billing is only available for prepaid/cod': t('payment.reason.monthlyBillingOnly'),
+    'COD cash at store is payable after delivered at END_STORE_*': t('payment.reason.codStoreAfterDelivered'),
+    'COD cash at home is payable after arrived_delivery': t('payment.reason.codHomeAfterDelivered'),
+    'Cash prepaid at home is payable after arrived_pickup': t('payment.reason.prepaidHomeAfterPickup'),
+    'Unsupported payment_type': t('payment.reason.unsupportedPaymentType'),
+  }
+  
+  return reasonMap[reason] ?? reason
 }
 </script>
 
@@ -684,7 +722,7 @@ const payableReasonFor = (pkg: StoredPackage) => {
               :class="{ active: expandedRecordIds.has(recordKeyForBill(item.bill_id)) }"
             >
               <button type="button" class="row-btn" @click="toggleBillRecord(item.bill_id)">
-                <span class="tracking">{{ t('payment.billType.monthly') }} | {{ item.period }}</span>
+                <span class="tracking">{{ t('payment.billType.monthly') }} | {{ formatPeriodRange(item.period) }}</span>
                 <span class="pill">{{ billPaymentMethodLabel(item.payment_method) }}</span>
                 <span class="pill">{{ t('payment.records.amount', { amount: formatMoney(item.amount) }) }}</span>
                 <span class="meta">{{ t('payment.records.paidAt', { at: item.paid_at ? formatCreatedAt(item.paid_at) : '--' }) }}</span>
@@ -692,7 +730,7 @@ const payableReasonFor = (pkg: StoredPackage) => {
 
               <div v-if="expandedRecordIds.has(recordKeyForBill(item.bill_id))" class="package-detail">
                 <div class="detail-grid">
-                  <p class="meta">{{ t('payment.records.billPeriod') }}：{{ item.period }}</p>
+                  <p class="meta">{{ t('payment.records.billPeriod') }}：{{ formatPeriodRange(item.period) }}</p>
                   <p class="meta">{{ t('payment.detail.method') }}：{{ billPaymentMethodLabel(item.payment_method) }}</p>
                   <p class="meta">{{ t('payment.records.amount') }}：{{ formatMoney(item.amount) }} {{ t('payment.currency') }}</p>
                   <p class="meta">{{ t('payment.records.paidAt') }}：{{ item.paid_at ? formatCreatedAt(item.paid_at) : '--' }}</p>

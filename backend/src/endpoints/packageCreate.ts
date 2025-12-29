@@ -4,88 +4,88 @@ import { type AppContext, Package } from "../types";
 import { requireAuth } from "../utils/authUtils";
 import { computeRoute } from "./mapRoute";
 import {
-  calculatePackagePrice,
-  guessDimensionsFromBoxType,
-  mapDeliveryTimeToType,
-  type DeliveryType,
-  type BoxType,
-  DEFAULT_PRICING_RULES
+	calculatePackagePrice,
+	guessDimensionsFromBoxType,
+	mapDeliveryTimeToType,
+	type DeliveryType,
+	type BoxType,
+	DEFAULT_PRICING_RULES
 } from "../utils/pricing";
 import { buildGraph, normalizeNodeId, type EdgeRow } from "../utils/graphUtils";
 import { logPackage } from "../middlewares/logger";
 
 async function computeInitialPaymentAmount(
-  db: any,
-  fromNodeId: string,
-  toNodeId: string,
-  payload: {
-    weight?: number | null;
-    size?: string | null;
-    length?: number | null;
-    width?: number | null;
-    height?: number | null;
-    delivery_time?: string | null;
-    dangerous_materials?: boolean;
-    fragile_items?: boolean;
-    international_shipments?: boolean;
-  },
+	db: any,
+	fromNodeId: string,
+	toNodeId: string,
+	payload: {
+		weight?: number | null;
+		size?: string | null;
+		length?: number | null;
+		width?: number | null;
+		height?: number | null;
+		delivery_time?: string | null;
+		dangerous_materials?: boolean;
+		fragile_items?: boolean;
+		international_shipments?: boolean;
+	},
 ) {
-  // Route cost (fallback 0 if route missing)
-  const route = await computeRoute(db, fromNodeId, toNodeId);
-  const routeCost = route.ok ? route.totalCost : 0;
-  
-  const deliveryType = mapDeliveryTimeToType(payload.delivery_time ?? null);
+	// Route cost (fallback 0 if route missing)
+	const route = await computeRoute(db, fromNodeId, toNodeId);
+	const routeCost = route.ok ? route.totalCost : 0;
 
-  // Resolve dimensions: explicit > guess from size > default M
-  let dimensions = { length: 60, width: 40, height: 40 };
-  if (payload.length && payload.width && payload.height) {
-    dimensions = {
-      length: Number(payload.length),
-      width: Number(payload.width),
-      height: Number(payload.height)
-    };
-  } else if (payload.size) {
-    const raw = String(payload.size).trim();
-    const match = raw.match(/(\d+(?:\.\d+)?)\s*[xX*×]\s*(\d+(?:\.\d+)?)\s*[xX*×]\s*(\d+(?:\.\d+)?)/);
-    if (match) {
-      dimensions = {
-        length: Number(match[1]),
-        width: Number(match[2]),
-        height: Number(match[3]),
-      };
-    } else {
-      dimensions = guessDimensionsFromBoxType(raw);
-    }
-  }
+	const deliveryType = mapDeliveryTimeToType(payload.delivery_time ?? null);
 
-  const weightKg = Number(payload.weight ?? 0);
-  const specialMarks: Array<"fragile" | "dangerous" | "international"> = [];
-  if (payload.dangerous_materials) specialMarks.push("dangerous");
-  if (payload.fragile_items) specialMarks.push("fragile");
-  if (payload.international_shipments) specialMarks.push("international");
+	// Resolve dimensions: explicit > guess from size > default M
+	let dimensions = { length: 60, width: 40, height: 40 };
+	if (payload.length && payload.width && payload.height) {
+		dimensions = {
+			length: Number(payload.length),
+			width: Number(payload.width),
+			height: Number(payload.height)
+		};
+	} else if (payload.size) {
+		const raw = String(payload.size).trim();
+		const match = raw.match(/(\d+(?:\.\d+)?)\s*[xX*×]\s*(\d+(?:\.\d+)?)\s*[xX*×]\s*(\d+(?:\.\d+)?)/);
+		if (match) {
+			dimensions = {
+				length: Number(match[1]),
+				width: Number(match[2]),
+				height: Number(match[3]),
+			};
+		} else {
+			dimensions = guessDimensionsFromBoxType(raw);
+		}
+	}
 
-  const pricing = calculatePackagePrice(
-    routeCost,
-    weightKg,
-    dimensions,
-    deliveryType,
-    specialMarks,
-    DEFAULT_PRICING_RULES
-  );
+	const weightKg = Number(payload.weight ?? 0);
+	const specialMarks: Array<"fragile" | "dangerous" | "international"> = [];
+	if (payload.dangerous_materials) specialMarks.push("dangerous");
+	if (payload.fragile_items) specialMarks.push("fragile");
+	if (payload.international_shipments) specialMarks.push("international");
 
-  if ("error" in pricing) {
-    // If oversized, fallback to max cost to avoid blocking creation? 
-    // Or throw error? Standards say "Service not applicable"
-    // For now, let's just default to a high cost or throw.
-    // Given the existing code returns { totalCost, routeCost }, we should respect that signature.
-    // Let's fallback to max generic calculation if error, or throw.
-    throw new Error(pricing.error);
-  }
+	const pricing = calculatePackagePrice(
+		routeCost,
+		weightKg,
+		dimensions,
+		deliveryType,
+		specialMarks,
+		DEFAULT_PRICING_RULES
+	);
 
-  return {
-    totalCost: pricing.totalCost,
-    routeCost,
-  };
+	if ("error" in pricing) {
+		// If oversized, fallback to max cost to avoid blocking creation? 
+		// Or throw error? Standards say "Service not applicable"
+		// For now, let's just default to a high cost or throw.
+		// Given the existing code returns { totalCost, routeCost }, we should respect that signature.
+		// Let's fallback to max generic calculation if error, or throw.
+		throw new Error(pricing.error);
+	}
+
+	return {
+		totalCost: pricing.totalCost,
+		routeCost,
+	};
 }
 
 export class PackageCreate extends OpenAPIRoute {
@@ -114,7 +114,7 @@ export class PackageCreate extends OpenAPIRoute {
 							receiver_address: Str({ required: false, description: "Receiver address" }),
 							receiver_user_id: Str({ required: false, description: "Receiver user id (COD payer binding)" }),
 
-							weight: z.coerce.number().int().optional(),
+							weight: z.coerce.number().positive().optional(),
 							size: Str({ required: false, description: "Package size (legacy)" }),
 							length: z.coerce.number().positive().optional(),
 							width: z.coerce.number().positive().optional(),
@@ -122,7 +122,7 @@ export class PackageCreate extends OpenAPIRoute {
 							delivery_time: Str({ required: false, description: "Delivery time tier" }),
 							payment_type: Str({ required: false, description: "Payment type (prepaid/cod)" }),
 							payment_method: Str({ required: false, description: "Payment method" }),
-							declared_value: z.coerce.number().int().optional(),
+							declared_value: z.coerce.number().positive().optional(),
 							dangerous_materials: z.boolean().default(false),
 							fragile_items: z.boolean().default(false),
 							international_shipments: z.boolean().default(false),
@@ -395,7 +395,7 @@ export class PackageCreate extends OpenAPIRoute {
 					"created",
 					createdAt,
 					estimatedDelivery,
-			)
+				)
 				.run();
 
 			// Pre-create a payment record using the pricing formula so driver can display fees to collect.
@@ -462,15 +462,15 @@ export class PackageCreate extends OpenAPIRoute {
 				// edge has no cost column here, just source/target.
 				// But buildGraph expects optional cost.
 				// We can just cast or map.
-				
+
 				const nodesResult = await c.env.DB.prepare("SELECT id, level FROM nodes").all();
 				const edgesResult = await c.env.DB.prepare("SELECT source, target FROM edges").all();
 				const nodes = (nodesResult.results || []) as NodeRowExtended[];
 				const edges = (edgesResult.results || []) as EdgeRow[];
 
-                // Use shared utility to build graph adjacency
+				// Use shared utility to build graph adjacency
 				const graph = buildGraph(nodes, edges);
-                // graph.adj values are { to: string; cost: number }[]
+				// graph.adj values are { to: string; cost: number }[]
 
 				const levelById = new Map<string, number>();
 				for (const n of nodes) levelById.set(String(n.id).trim(), Number(n.level));
@@ -496,10 +496,10 @@ export class PackageCreate extends OpenAPIRoute {
 						const node = queue.shift()!;
 						const lvl = levelById.get(node);
 						if (lvl === 1) return node;
-						
+
 						// Iterating graphUtils adj
 						for (const edge of graph.adj.get(node) ?? []) {
-                            const nei = edge.to;
+							const nei = edge.to;
 							if (visited.has(nei)) continue;
 							visited.add(nei);
 							queue.push(nei);

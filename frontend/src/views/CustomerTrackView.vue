@@ -560,6 +560,25 @@ const segmentTooltipText = (pkg: any, segmentIndex: number) => {
   return t('track.tooltip.segmentPending')
 }
 
+const refreshResults = async () => {
+  await lookup()
+
+  const currentIds = new Set([
+    ...(inTransitResult.value?.packages?.map((p) => p.id) ?? []),
+    ...(historyResult.value?.packages?.map((p) => p.id) ?? []),
+  ])
+
+  const expanded = [...expandedIds.value].filter((id) => currentIds.has(id))
+  if (expanded.length === 0) return
+
+  const nextDetails = { ...detailByPackageId.value }
+  for (const id of expanded) delete nextDetails[id]
+  detailByPackageId.value = nextDetails
+
+  expandedIds.value = new Set(expanded)
+  for (const id of expanded) void ensurePackageDetails(id)
+}
+
 const lookup = async () => {
   isLoading.value = true
   error.value = null
@@ -693,8 +712,13 @@ watch(
     </div>
 
     <div class="card">
-      <div class="legend">
-        <p class="eyebrow">{{ activeTab === 'in_transit' ? t('track.tabs.inTransit') : t('track.tabs.history') }}</p>
+      <div class="results-head">
+        <div class="legend">
+          <p class="eyebrow">{{ activeTab === 'in_transit' ? t('track.tabs.inTransit') : t('track.tabs.history') }}</p>
+        </div>
+        <UiButton icon="refresh" variant="ghost" size="small" type="button" :disabled="isLoading" @click="refreshResults">
+          {{ t('track.actions.refresh') }}
+        </UiButton>
       </div>
 
       <p v-if="error" class="hint">{{ error }}</p>
@@ -878,6 +902,14 @@ watch(
 
 .results {
   margin-top: 16px;
+}
+
+.results-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .filters-actions {

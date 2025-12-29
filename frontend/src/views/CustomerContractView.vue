@@ -33,6 +33,31 @@ const { t, locale } = useI18n()
 const listSeparator = computed(() => (locale.value === 'zh-TW' ? '、' : ', '))
 const trackingLabel = (tracking?: string | null) => (tracking && tracking.trim() ? tracking.trim() : t('common.tracking.pending'))
 
+// 格式化日期範圍字串 "2025-12-01T00:00:00.000Z - 2025-12-31T23:59:59.999Z" -> "2025/12/1 - 2025/12/31"
+const formatPeriodRange = (period: string) => {
+  if (!period || !period.includes(' - ')) return period
+  
+  const [start, end] = period.split(' - ').map(s => s.trim())
+  if (!start || !end) return period
+  
+  try {
+    const startDate = new Date(start)
+    const endDate = new Date(end)
+    
+    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) return period
+    
+    const targetLocale = locale.value === 'en-US' ? 'en-US' : 'zh-TW'
+    const options: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'numeric', day: 'numeric' }
+    
+    const formattedStart = startDate.toLocaleDateString(targetLocale, options)
+    const formattedEnd = endDate.toLocaleDateString(targetLocale, options)
+    
+    return `${formattedStart} - ${formattedEnd}`
+  } catch {
+    return period
+  }
+}
+
 const props = defineProps<{
   embedded?: boolean
 }>()
@@ -310,7 +335,7 @@ onMounted(() => {
           ></textarea>
         </label>
 
-        <button class="secondary-btn" type="button" @click="fillTestData">{{ t('contract.form.fillTestData') }}</button>
+        <!--<button class="secondary-btn" type="button" @click="fillTestData">{{ t('contract.form.fillTestData') }}</button>-->
         <button class="primary-btn" type="submit" :disabled="isSubmitting">
           {{ isSubmitting ? t('contract.form.submitting') : t('contract.form.submit') }}
         </button>
@@ -343,7 +368,7 @@ onMounted(() => {
           <div class="billing-summary">
             <div class="summary-item">
               <span class="label">{{ t('contract.bill.summary.period') }}</span>
-              <span class="value">{{ currentBill.period }}</span>
+              <span class="value">{{ formatPeriodRange(currentBill.period) }}</span>
             </div>
             <div class="summary-item">
               <span class="label">{{ t('contract.bill.summary.settlement') }}</span>
@@ -363,7 +388,7 @@ onMounted(() => {
             </div>
             <div v-if="currentBill.due_date" class="summary-item">
               <span class="label">{{ t('contract.bill.summary.dueDate') }}</span>
-              <span class="value">{{ currentBill.due_date }}</span>
+              <span class="value">{{ formatDateTime(currentBill.due_date, locale) }}</span>
             </div>
           </div>
 
