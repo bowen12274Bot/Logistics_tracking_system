@@ -1,6 +1,7 @@
 ﻿<script setup lang="ts">
 import { useI18n } from 'vue-i18n'
 import { RouterLink } from 'vue-router'
+import UiIcon from '../components/ui/UiIcon.vue'
 
 const { t } = useI18n()
 </script>
@@ -18,9 +19,7 @@ const { t } = useI18n()
         <!-- Map Card -->
         <RouterLink to="/map" class="action-card">
           <div class="card-icon">
-            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <polygon points="3 11 22 2 13 21 11 13 3 11"></polygon>
-            </svg>
+            <UiIcon name="map" :size="32" />
           </div>
           <h3 class="card-title">{{ t('home.actions.map') }}</h3>
           <p class="card-desc">{{ t('home.actions.mapDesc') }}</p>
@@ -29,10 +28,7 @@ const { t } = useI18n()
         <!-- Track Card -->
         <RouterLink to="/track" class="action-card">
           <div class="card-icon">
-            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="11" cy="11" r="8"></circle>
-              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-            </svg>
+            <UiIcon name="search" :size="32" />
           </div>
           <h3 class="card-title">{{ t('home.actions.track') }}</h3>
           <p class="card-desc">{{ t('home.actions.trackDesc') }}</p>
@@ -41,10 +37,7 @@ const { t } = useI18n()
         <!-- Estimate Card -->
         <RouterLink to="/shipping/estimate" class="action-card">
           <div class="card-icon">
-            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="12" y1="1" x2="12" y2="23"></line>
-              <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
-            </svg>
+            <UiIcon name="billing" :size="32" />
           </div>
           <h3 class="card-title">{{ t('home.actions.estimate') }}</h3>
           <p class="card-desc">{{ t('home.actions.estimateDesc') }}</p>

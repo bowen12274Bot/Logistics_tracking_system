@@ -11,6 +11,7 @@ import UiList from "../components/ui/UiList.vue";
 import UiModal from "../components/ui/UiModal.vue";
 import UiNotice from "../components/ui/UiNotice.vue";
 import UiPageShell from "../components/ui/UiPageShell.vue";
+import UiButton from "../components/ui/UiButton.vue";
 import { useToasts } from "../components/ui/toast";
 import { toastFromApiError } from "../services/errorToast";
 
@@ -645,13 +646,8 @@ watch(
             </div>
           </div>
           <div class="wh-bar__actions">
-            <RouterLink class="ghost-btn" to="/map">
-              <span class="wh-btn-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
-                  <path d="M15 4 9 2 3 4v17l6-2 6 2 6-2V2l-6 2ZM9 4.1l6 2v13.8l-6-2V4.1Z" />
-                </svg>
-              </span>
-              {{ t("warehouse.actions.map") }}
+            <RouterLink to="/map">
+              <UiButton icon="map" variant="ghost">{{ t("warehouse.actions.map") }}</UiButton>
             </RouterLink>
           </div>
         </div>
@@ -758,37 +754,19 @@ watch(
             </div>
 
             <div class="wh-header-actions">
-              <button class="ghost-btn small-btn wh-refresh-btn" type="button" :disabled="loading || busy" @click="refresh">
-                <span class="wh-btn-icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-                    <path
-                      d="M12 6V3L8 7l4 4V8a4 4 0 1 1-3.9 5H6a6 6 0 1 0 6-7Z"
-                    />
-                  </svg>
-                </span>
+              <UiButton icon="refresh" variant="ghost" size="small" :disabled="loading || busy" @click="refresh">
                 {{ t("warehouse.actions.refresh") }}
-              </button>
-              <button
+              </UiButton>
+              <UiButton
                 v-if="mainFullscreenSupported"
-                class="ghost-btn small-btn"
-                type="button"
+                :icon="mainIsFullscreen ? 'fullscreen-exit' : 'fullscreen'"
+                variant="ghost"
+                size="small"
                 :disabled="busy"
                 @click="toggleMainFullscreen"
               >
-                <span class="wh-btn-icon" aria-hidden="true">
-                  <svg v-if="!mainIsFullscreen" viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-                    <path
-                      d="M4 4h6v2H6v4H4V4Zm14 0h2v6h-2V6h-4V4h4ZM4 14h2v4h4v2H4v-6Zm14 0h2v6h-6v-2h4v-4Z"
-                    />
-                  </svg>
-                  <svg v-else viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-                    <path
-                      d="M10 4v2H6v4H4V4h6Zm10 0v6h-2V6h-4V4h6ZM4 14h2v4h4v2H4v-6Zm16 0v6h-6v-2h4v-4h2Z"
-                    />
-                  </svg>
-                </span>
                 {{ mainIsFullscreen ? t("warehouse.actions.fullscreen.exit") : t("warehouse.actions.fullscreen.enter") }}
-              </button>
+              </UiButton>
             </div>
           </div>
 

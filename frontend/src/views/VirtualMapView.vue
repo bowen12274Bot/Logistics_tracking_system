@@ -6,6 +6,7 @@ import { api, type MapEdge, type MapNode } from "../services/api";
 import { useFullscreen } from "../composables/useFullscreen";
 import UiCard from "../components/ui/UiCard.vue";
 import UiPageShell from "../components/ui/UiPageShell.vue";
+import UiButton from "../components/ui/UiButton.vue";
 import { toastFromApiError } from "../services/errorToast";
 
 type ViewBox = { x: number; y: number; w: number; h: number };
@@ -318,7 +319,7 @@ watch(
           <p class="hint">{{ t("map.subtitle") }}</p>
         </div>
         <div class="map-actions">
-          <button class="ghost-btn" type="button" @click="resetView">{{ t("map.resetView") }}</button>
+          <UiButton icon="refresh" variant="ghost" @click="resetView">{{ t("map.resetView") }}</UiButton>
         </div>
       </div>
     </template>

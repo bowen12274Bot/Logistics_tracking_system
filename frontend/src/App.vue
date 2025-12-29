@@ -4,6 +4,7 @@ import { RouterLink, RouterView, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { useAuthStore } from './stores/auth'
 import UiToastHost from './components/ui/UiToastHost.vue'
+import UiIcon from './components/ui/UiIcon.vue'
 import { useI18n } from 'vue-i18n'
 import { roleLabelKey } from './services/roleLabels'
 import type { Role } from './types/router'
@@ -134,14 +135,8 @@ onBeforeUnmount(() => {
             :aria-expanded="isNavOpen"
             @click="toggleNav"
           >
-            <svg v-if="!isNavOpen" viewBox="0 0 24 24" fill="currentColor" width="18" height="18" aria-hidden="true">
-              <path d="M3 6h18v2H3V6Zm0 5h18v2H3v-2Zm0 5h18v2H3v-2Z" />
-            </svg>
-            <svg v-else viewBox="0 0 24 24" fill="currentColor" width="18" height="18" aria-hidden="true">
-              <path
-                d="M18.3 5.71 12 12l6.3 6.29-1.41 1.42L10.59 13.4 4.29 19.71 2.88 18.3 9.17 12 2.88 5.71 4.29 4.29l6.3 6.3 6.3-6.3 1.41 1.42Z"
-              />
-            </svg>
+            <UiIcon v-if="!isNavOpen" name="menu" :size="18" />
+            <UiIcon v-else name="close" :size="18" />
           </button>
           <label class="locale-switch">
             <span class="sr-only">{{ t('aria.localeSwitch') }}</span>
@@ -166,34 +161,15 @@ onBeforeUnmount(() => {
 
             <div v-if="isMenuOpen" class="menu-panel" role="menu">
               <RouterLink v-if="isCustomerRole" to="/customer/profile" class="menu-item" role="menuitem" @click="closeMenu">
-                <span class="menu-icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
-                    <path
-                      d="M12 12c2.76 0 5-2.46 5-5.5S14.76 1 12 1 7 3.46 7 6.5 9.24 12 12 12Zm0 2c-4.42 0-8 2.24-8 5v2h16v-2c0-2.76-3.58-5-8-5Z"
-                    />
-                  </svg>
-                </span>
+                <UiIcon name="user" :size="16" class="menu-icon" />
                 {{ t('menu.personalSettings') }}
               </RouterLink>
               <RouterLink v-if="isCustomerRole" to="/customer/billing" class="menu-item" role="menuitem" @click="closeMenu">
-                <span class="menu-icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
-                    <path
-                      d="M7 3h10a2 2 0 0 1 2 2v1h-2V5H7v14h10v-1h2v1a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"
-                    />
-                    <path d="M9 7h8v2H9V7Zm0 4h8v2H9v-2Zm0 4h6v2H9v-2Z" />
-                  </svg>
-                </span>
+                <UiIcon name="billing" :size="16" class="menu-icon" />
                 {{ t('menu.billingCenter') }}
               </RouterLink>
               <button class="menu-item danger" type="button" role="menuitem" @click="logout">
-                <span class="menu-icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
-                    <path d="M10 17v-2h4V9h-4V7h4a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2h-4Z" />
-                    <path d="M8.59 16.59 10 18l-6-6 6-6-1.41 1.41L4.83 11H14v2H4.83l3.76 3.59Z" />
-                    <path d="M20 3h-8v2h8v14h-8v2h8a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2Z" />
-                  </svg>
-                </span>
+                <UiIcon name="logout" :size="16" class="menu-icon" />
                 {{ t('nav.logout') }}
               </button>
             </div>
