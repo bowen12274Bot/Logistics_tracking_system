@@ -87,7 +87,6 @@ const registerForm = reactive({
 const quickAccounts = computed<TestAccount[]>(() => [
   { email: 'lin@example.com', password: '123456', roleKey: 'login.quickRoles.lin' },// 小林
   { email: 'wang@example.com', password: '123456', roleKey: 'login.quickRoles.wang' },// 小王
-  { email: 'driver_hub_0@example.com', password: 'driver123', roleKey: 'login.quickRoles.driver_hub_0' },
   { email: 'driver_hub_1@example.com', password: 'driver123', roleKey: 'login.quickRoles.driver_hub_1' },
   { email: 'warehouse_hub_1@example.com', password: 'warehouse123', roleKey: 'login.quickRoles.warehouse_hub_1' },
   { email: 'warehouse_reg_0@example.com', password: 'warehouse123', roleKey: 'login.quickRoles.warehouse_reg_0' },
