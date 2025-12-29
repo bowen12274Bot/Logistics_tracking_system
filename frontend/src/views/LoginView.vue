@@ -85,11 +85,15 @@ const registerForm = reactive({
 
 // 暫時演示帳號，在此修改
 const quickAccounts = computed<TestAccount[]>(() => [
-  { email: 'customer@example.com', password: 'customer123', roleKey: 'login.quickRoles.customer' },
-  { email: 'driver_hub_0@example.com', password: 'driver123', roleKey: 'login.quickRoles.driver' },
-  { email: 'warehouse_hub_0@example.com', password: 'warehouse123', roleKey: 'login.quickRoles.warehouse' },
-  { email: 'cs@example.com', password: 'cs123', roleKey: 'login.quickRoles.cs' },
-  { email: 'admin@example.com', password: 'admin123', roleKey: 'login.quickRoles.admin' },
+  { email: 'lin@example.com', password: '123456', roleKey: 'login.quickRoles.lin' },// 小林
+  { email: 'wang@example.com', password: '123456', roleKey: 'login.quickRoles.wang' },// 小王
+  { email: 'driver_hub_0@example.com', password: 'driver123', roleKey: 'login.quickRoles.driver_hub_0' },
+  { email: 'driver_hub_1@example.com', password: 'driver123', roleKey: 'login.quickRoles.driver_hub_1' },
+  { email: 'warehouse_hub_1@example.com', password: 'warehouse123', roleKey: 'login.quickRoles.warehouse_hub_1' },
+  { email: 'warehouse_reg_0@example.com', password: 'warehouse123', roleKey: 'login.quickRoles.warehouse_reg_0' },
+  { email: 'warehouse_reg_7@example.com', password: 'warehouse123', roleKey: 'login.quickRoles.warehouse_reg_7' },
+  { email: 'warehouse_reg_8@example.com', password: 'warehouse123', roleKey: 'login.quickRoles.warehouse_reg_8' },
+  { email: 'warehouse_reg_14@example.com', password: 'warehouse123', roleKey: 'login.quickRoles.warehouse_reg_14' },
 ])
 
 const getDefaultRouteForUser = (user: User | null | undefined) => {
@@ -795,6 +799,27 @@ onMounted(() => {
 .credential-list {
   display: grid;
   gap: 8px;
+  max-height: 400px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.credential-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.credential-list::-webkit-scrollbar-track {
+  background: rgba(248, 240, 235, 0.5);
+  border-radius: 3px;
+}
+
+.credential-list::-webkit-scrollbar-thumb {
+  background: rgba(165, 122, 99, 0.3);
+  border-radius: 3px;
+}
+
+.credential-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(165, 122, 99, 0.5);
 }
 
 .credential-item {
