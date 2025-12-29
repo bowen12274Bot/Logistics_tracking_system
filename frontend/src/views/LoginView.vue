@@ -7,6 +7,14 @@ import type { User } from '../services/api'
 import { useToasts } from '../components/ui/toast'
 import { toastFromApiError } from '../services/errorToast'
 import UiIcon from '../components/ui/UiIcon.vue'
+import UiModal from '../components/ui/UiModal.vue'
+import {
+  loadLoginCredentials,
+  saveLoginCredentials,
+  addCredential,
+  removeCredential,
+  type LoginCredentialStorage,
+} from '../services/loginCredentialStorage'
 
 type Mode = 'login' | 'register'
 type TestAccount = { email: string; password: string; roleKey: string }
@@ -21,6 +29,12 @@ const loading = ref(false)
 const { t } = useI18n()
 const showLoginPassword = ref(false)
 const showRegisterPassword = ref(false)
+
+// Credential management
+const showCredentialModal = ref(false)
+const credentialStorage = ref<LoginCredentialStorage>(loadLoginCredentials())
+const credentialTab = ref<'custom' | 'default' | 'demo'>('custom')
+const credentialLabel = ref('')
 
 const applyReasonHint = () => {
   if (statusMessage.value) return
@@ -69,6 +83,7 @@ const registerForm = reactive({
   address: '',
 })
 
+// 暫時演示帳號，在此修改
 const quickAccounts = computed<TestAccount[]>(() => [
   { email: 'customer@example.com', password: 'customer123', roleKey: 'login.quickRoles.customer' },
   { email: 'driver_hub_0@example.com', password: 'driver123', roleKey: 'login.quickRoles.driver' },
@@ -159,6 +174,50 @@ const fillTestAccount = (acct: TestAccount) => {
   loginForm.password = acct.password
   statusMessage.value = `${t('login.filled')}: ${t(acct.roleKey)}`
 }
+
+// Credential management functions
+const openCredentialModal = () => {
+  showCredentialModal.value = true
+}
+
+const closeCredentialModal = () => {
+  showCredentialModal.value = false
+  credentialLabel.value = ''
+}
+
+const fillCredential = (email: string, password: string, label?: string) => {
+  switchMode('login')
+  loginForm.identifier = email
+  loginForm.password = password
+  closeCredentialModal()
+  statusMessage.value = label ? `${t('login.filled')}: ${label}` : t('login.filled')
+}
+
+const saveCurrentCredential = () => {
+  if (!loginForm.identifier || !loginForm.password) return
+  
+  const updated = addCredential(credentialStorage.value, {
+    email: loginForm.identifier,
+    password: loginForm.password,
+    label: credentialLabel.value || loginForm.identifier,
+  })
+  
+  credentialStorage.value = updated
+  saveLoginCredentials(updated)
+  credentialLabel.value = ''
+  toast.success(t('login.credentials.saveSuccess'))
+}
+
+const deleteCredential = (index: number) => {
+  const updated = removeCredential(credentialStorage.value, index)
+  credentialStorage.value = updated
+  saveLoginCredentials(updated)
+  toast.success(t('login.credentials.deleteSuccess'))
+}
+
+onMounted(() => {
+  credentialStorage.value = loadLoginCredentials()
+})
 </script>
 
 <template>
@@ -289,22 +348,137 @@ const fillTestAccount = (acct: TestAccount) => {
       </div>
 
       <div v-if="mode === 'login'" class="auth-panel auth-panel--test">
-        <p class="hint auth-test-hint">{{ t('login.testHint') }}</p>
-        <div class="test-account-actions" role="list">
-          <button
-            v-for="acct in testAccounts"
-            :key="acct.email"
-            type="button"
-            class="ghost-btn test-account-btn"
-            role="listitem"
-            @click="fillTestAccount(acct)"
-          >
-            <strong>{{ t(acct.roleKey) }}</strong>
-            <span class="test-account-meta">{{ acct.email }}</span>
+        <div class="test-hint-row">
+          <p class="hint auth-test-hint">{{ t('login.testHint') }}</p>
+          <button type="button" class="ghost-btn small-btn credential-link-btn" @click="openCredentialModal">
+            {{ t('login.credentials.openModal') }}
           </button>
         </div>
       </div>
     </div>
+
+    <!-- Credential Management Modal -->
+    <UiModal
+      v-model="showCredentialModal"
+      :title="t('login.credentials.modalTitle')"
+      @close="closeCredentialModal"
+    >
+      <div class="credential-modal-content">
+        <div class="tab-switch credential-tabs" role="tablist">
+          <button
+            :class="{ active: credentialTab === 'custom' }"
+            type="button"
+            role="tab"
+            @click="credentialTab = 'custom'"
+          >
+            {{ t('login.credentials.tabs.custom') }}
+          </button>
+          <button
+            :class="{ active: credentialTab === 'default' }"
+            type="button"
+            role="tab"
+            @click="credentialTab = 'default'"
+          >
+            {{ t('login.credentials.tabs.default') }}
+          </button>
+          <button
+            :class="{ active: credentialTab === 'demo' }"
+            type="button"
+            role="tab"
+            @click="credentialTab = 'demo'"
+          >
+            {{ t('login.credentials.tabs.demo') }}
+          </button>
+        </div>
+
+        <!-- Custom Saved Tab -->
+        <div v-if="credentialTab === 'custom'" class="credential-tab-content">
+          <div class="credential-save-section">
+            <input
+              v-model="credentialLabel"
+              type="text"
+              class="credential-label-input"
+              :placeholder="t('login.credentials.labelPlaceholder')"
+            />
+            <button
+              type="button"
+              class="primary-btn"
+              :disabled="!loginForm.identifier || !loginForm.password"
+              @click="saveCurrentCredential"
+            >
+              {{ t('login.credentials.saveCurrent') }}
+            </button>
+          </div>
+
+          <div v-if="credentialStorage.credentials.length === 0" class="credential-empty">
+            <p class="hint">{{ t('login.credentials.emptyCustom') }}</p>
+          </div>
+          <div v-else class="credential-list">
+            <button
+              v-for="(cred, index) in credentialStorage.credentials"
+              :key="index"
+              type="button"
+              class="credential-item"
+              @click="fillCredential(cred.email, cred.password, cred.label)"
+            >
+              <div class="credential-item-main">
+                <strong>{{ cred.label || cred.email }}</strong>
+                <span class="credential-item-email">{{ cred.email }}</span>
+              </div>
+              <button
+                type="button"
+                class="ghost-btn small-btn credential-delete-btn"
+                @click.stop="deleteCredential(index)"
+              >
+                {{ t('login.credentials.delete') }}
+              </button>
+            </button>
+          </div>
+        </div>
+
+        <!-- Default Accounts Tab -->
+        <div v-if="credentialTab === 'default'" class="credential-tab-content">
+          <div v-if="testAccounts.length === 0" class="credential-empty">
+            <p class="hint">{{ t('login.credentials.emptyDefault') }}</p>
+          </div>
+          <div v-else class="credential-list">
+            <button
+              v-for="acct in testAccounts"
+              :key="acct.email"
+              type="button"
+              class="credential-item"
+              @click="fillCredential(acct.email, acct.password, t(acct.roleKey))"
+            >
+              <div class="credential-item-main">
+                <strong>{{ t(acct.roleKey) }}</strong>
+                <span class="credential-item-email">{{ acct.email }}</span>
+              </div>
+            </button>
+          </div>
+        </div>
+
+        <!-- Demo Accounts Tab -->
+        <div v-if="credentialTab === 'demo'" class="credential-tab-content">
+          <div v-if="quickAccounts.length === 0" class="credential-empty">
+            <p class="hint">{{ t('login.credentials.emptyDemo') }}</p>
+          </div>
+          <div v-else class="credential-list">
+            <button
+              v-for="acct in quickAccounts"
+              :key="acct.email"
+              type="button"
+              class="credential-item"
+              @click="fillCredential(acct.email, acct.password, t(acct.roleKey))"
+            >
+              <div class="credential-item-main">
+                <strong>{{ t(acct.roleKey) }}</strong>
+                <span class="credential-item-email">{{ acct.email }}</span>
+              </div>
+            </button>
+          </div>
+        </div>
+      </div>
+    </UiModal>
   </section>
 </template>
 
@@ -509,6 +683,199 @@ const fillTestAccount = (acct: TestAccount) => {
 .test-account-meta {
   opacity: 0.8;
   font-size: 13px;
+}
+
+.test-hint-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.auth-test-hint {
+  flex: 1;
+  margin: 0;
+}
+
+.credential-link-btn {
+  flex-shrink: 0;
+  font-size: 13px;
+  padding: 6px 12px;
+  opacity: 0.85;
+  transition: all 0.2s ease;
+}
+
+.credential-link-btn:hover {
+  opacity: 1;
+  background: rgba(244, 182, 194, 0.2);
+}
+
+.credential-modal-content {
+  min-height: 320px;
+}
+
+.credential-tabs {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  border-radius: 14px;
+  background: rgba(248, 240, 235, 0.85);
+  margin-bottom: 20px;
+  padding: 4px;
+  gap: 4px;
+}
+
+.credential-tabs button {
+  padding: 11px 14px;
+  font-weight: 600;
+  font-size: 14px;
+  border-radius: 10px;
+  transition: all 0.2s ease;
+  color: rgba(107, 74, 64, 0.7);
+}
+
+.credential-tabs button:hover {
+  color: rgba(107, 74, 64, 0.9);
+  background: rgba(255, 255, 255, 0.4);
+}
+
+.credential-tabs button.active {
+  background: rgba(244, 182, 194, 0.55);
+  color: #6b4a40;
+  box-shadow: 0 2px 8px rgba(170, 124, 105, 0.15);
+}
+
+.credential-tab-content {
+  min-height: 260px;
+}
+
+.credential-save-section {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 18px;
+  padding: 14px;
+  border-radius: 14px;
+  background: rgba(255, 248, 241, 0.6);
+  border: 1px solid rgba(165, 122, 99, 0.15);
+}
+
+.credential-label-input {
+  flex: 1;
+  padding: 11px 14px;
+  border-radius: 11px;
+  border: 1px solid rgba(165, 122, 99, 0.28);
+  background: rgba(255, 255, 255, 0.95);
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.credential-label-input:hover {
+  border-color: rgba(165, 122, 99, 0.38);
+}
+
+.credential-label-input:focus {
+  outline: 2px solid rgba(244, 182, 194, 0.5);
+  border-color: rgba(225, 139, 139, 0.5);
+  background: #fff;
+}
+
+.credential-save-section .primary-btn {
+  padding: 11px 20px;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.credential-empty {
+  padding: 50px 20px;
+  text-align: center;
+}
+
+.credential-empty .hint {
+  color: rgba(107, 74, 64, 0.6);
+  font-size: 14px;
+}
+
+.credential-list {
+  display: grid;
+  gap: 8px;
+}
+
+.credential-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: 13px;
+  text-align: left;
+  background: rgba(255, 255, 255, 0.65);
+  border: 1px solid rgba(165, 122, 99, 0.2);
+  transition: all 0.2s ease;
+  cursor: pointer;
+  position: relative;
+}
+
+.credential-item::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 13px;
+  background: linear-gradient(135deg, rgba(244, 182, 194, 0.08) 0%, rgba(255, 248, 241, 0.08) 100%);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.credential-item:hover {
+  background: rgba(255, 255, 255, 0.85);
+  transform: translateY(-2px);
+  border-color: rgba(165, 122, 99, 0.35);
+  box-shadow: 0 4px 12px rgba(170, 124, 105, 0.12);
+}
+
+.credential-item:hover::before {
+  opacity: 1;
+}
+
+.credential-item:active {
+  transform: translateY(-1px);
+}
+
+.credential-item-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  position: relative;
+  z-index: 1;
+}
+
+.credential-item-main strong {
+  color: #6b4a40;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.credential-item-email {
+  opacity: 0.7;
+  font-size: 13px;
+  color: #6b4a40;
+  line-height: 1.3;
+}
+
+.credential-delete-btn {
+  flex-shrink: 0;
+  position: relative;
+  z-index: 1;
+  font-size: 13px;
+  padding: 6px 12px;
+  opacity: 0.8;
+  transition: all 0.2s ease;
+}
+
+.credential-delete-btn:hover {
+  opacity: 1;
+  background: rgba(244, 182, 194, 0.25);
 }
 
 @media (max-width: 860px) {
