@@ -4,6 +4,7 @@ import type { AppContext } from "../types";
 import { getTerminalStatus, hasActiveException } from "../lib/packageGuards";
 import { requireDriver } from "../utils/authUtils";
 import { ensureVehicleForDriver, type VehicleRow } from "../utils/vehicleUtils";
+import { logDriver } from "../middlewares/logger";
 
 type TaskRow = {
   id: string;

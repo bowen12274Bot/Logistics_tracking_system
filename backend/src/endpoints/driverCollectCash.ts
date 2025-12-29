@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { AppContext } from "../types";
 import { requireDriver } from "../utils/authUtils";
 import { ensureVehicleForDriver } from "../utils/vehicleUtils";
+import { logBilling } from "../middlewares/logger";
 
 async function hasEvent(db: D1Database, packageId: string, status: string) {
   const row = await db
@@ -123,6 +124,11 @@ export class DriverCollectCash extends OpenAPIRoute {
       )
       .bind(eventId, packageId, status, details, now, currentNodeId)
       .run();
+
+    logBilling('cash_collected', 'info', auth.user.id, packageId, {
+      payment_type: paymentType,
+      location: currentNodeId
+    });
 
     return c.json({ success: true, paid_at: now, payment_method: "cash" });
   }

@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { AppContext } from "../types";
 import { requireAdmin } from "../utils/authUtils";
 import { sha256Hex } from "../utils/cryptoUtils";
+import { logAdmin } from "../middlewares/logger";
 
 // GET /api/admin/users - 取得使用者列表
 export class AdminUserList extends OpenAPIRoute {

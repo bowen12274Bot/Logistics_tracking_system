@@ -1,5 +1,6 @@
 
 import type { AppContext } from "../types";
+import { logAuth } from "../middlewares/logger";
 
 export interface AuthUser {
   id: string;
@@ -19,6 +20,7 @@ export type AuthResult<T = AuthUser> =
 export async function requireAuth(c: AppContext): Promise<AuthResult> {
   const authHeader = c.req.header("Authorization");
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    logAuth('token_validation_failed', 'warn', null, { reason: 'token_missing' });
     return { ok: false, res: c.json({ error: "Token missing" }, 401) };
   }
 
@@ -28,6 +30,7 @@ export async function requireAuth(c: AppContext): Promise<AuthResult> {
     .first<{ user_id: string }>();
 
   if (!tokenRecord) {
+    logAuth('token_validation_failed', 'warn', null, { reason: 'invalid_token' });
     return { ok: false, res: c.json({ error: "Invalid token" }, 401) };
   }
 
@@ -38,6 +41,7 @@ export async function requireAuth(c: AppContext): Promise<AuthResult> {
     .first<AuthUser>();
 
   if (!user) {
+    logAuth('token_validation_failed', 'warn', tokenRecord.user_id, { reason: 'user_not_found' });
     return { ok: false, res: c.json({ error: "User not found" }, 401) };
   }
 
@@ -51,6 +55,7 @@ export async function requireRole(c: AppContext, roles: string[]): Promise<AuthR
   // Check if user_class OR user_type matches any of the allowed roles
   // user_type is usually 'customer' or 'admin', user_class is 'driver', 'warehouse', 'customer_service' etc.
   if (!roles.includes(auth.user.user_class) && !roles.includes(auth.user.user_type)) {
+    logAuth('permission_denied', 'warn', auth.user.id, { required_roles: roles, user_class: auth.user.user_class, user_type: auth.user.user_type });
     return { ok: false, res: c.json({ error: "Forbidden" }, 403) };
   }
   return auth;

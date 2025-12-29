@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { AppContext } from "../types";
 import { getTerminalStatus, hasActiveException } from "../lib/packageGuards";
 import { requireDriver, type AuthUser } from "../utils/authUtils";
+import { logException } from "../middlewares/logger";
 
 type VehicleRow = {
   id: string;
@@ -271,6 +272,12 @@ export class DriverPackageExceptionCreate extends OpenAPIRoute {
     )
       .bind(eventId, packageId, "exception", body.description, now, location)
       .run();
+
+    logException('exception_reported', 'warn', auth.user.id, packageId, {
+      reason_code: reasonCode,
+      location: location,
+      description: body.description.substring(0, 50)
+    });
 
     return c.json({ success: true, exception_id: exceptionId });
   }

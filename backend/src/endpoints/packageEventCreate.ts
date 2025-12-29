@@ -4,6 +4,7 @@ import { type AppContext } from "../types";
 import { getTerminalStatus, hasActiveException } from "../lib/packageGuards";
 import { requireAuth } from "../utils/authUtils";
 import { sendWebhookNotification } from "../services/webhookNotifier";
+import { logPackage } from "../middlewares/logger";
 
 const DeliveryStatusEnum = z.enum([
   "created",
@@ -125,6 +126,11 @@ export class PackageEventCreate extends OpenAPIRoute {
            console.error("Failed to send webhook notification:", error);
        }
     }
+
+    logPackage('event_created', 'info', auth.user.id, packageId, {
+      delivery_status,
+      location: location ?? null
+    });
 
     return c.json({ success: true, event_id: eventId, message: "Event created" });
   }

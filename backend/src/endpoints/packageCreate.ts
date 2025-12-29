@@ -12,6 +12,7 @@ import {
   DEFAULT_PRICING_RULES
 } from "../utils/pricing";
 import { buildGraph, normalizeNodeId, type EdgeRow } from "../utils/graphUtils";
+import { logPackage } from "../middlewares/logger";
 
 async function computeInitialPaymentAmount(
   db: any,
@@ -567,10 +568,50 @@ export class PackageCreate extends OpenAPIRoute {
 			}
 			const message = String(err?.message ?? err);
 			if (message === "Route not found") {
+				logPackage('package_create_failed', 'warn', resolvedCustomerId, packageId, { reason: 'route_not_found' });
 				return c.json({ success: false, error: "Route not found" }, 400);
 			}
+			logPackage('package_create_failed', 'error', resolvedCustomerId, packageId, { reason: 'db_error' }, message);
 			return c.json({ success: false, error: "Failed to create package", detail: message }, 500);
 		}
+
+		return {
+			success: true,
+			package: {
+				id: packageId,
+				customer_id: resolvedCustomerId,
+				sender: resolvedSenderName,
+				receiver: resolvedReceiverName,
+				sender_name: resolvedSenderName,
+				sender_phone: body.sender_phone ?? null,
+				sender_address: normalizedSenderAddress || null,
+				receiver_name: resolvedReceiverName,
+				receiver_phone: body.receiver_phone ?? null,
+				receiver_address: normalizedReceiverAddress || null,
+				weight: body.weight ?? null,
+				size: body.size,
+				delivery_time: body.delivery_time,
+				payment_type: body.payment_type,
+				payment_method: effectivePaymentMethod ?? null,
+				declared_value: body.declared_value ?? null,
+				tracking_number: trackingNumber,
+				contents_description: body.contents_description ?? null,
+				description_json: descriptionJson,
+				special_handling: specialHandlingList,
+				final_billing_date: createdAt,
+				estimated_delivery: estimatedDelivery,
+				route_path: body.route_path ?? null,
+				pickup_date: body.pickup_date,
+				pickup_time_window: body.pickup_time_window,
+				pickup_notes: body.pickup_notes,
+			},
+		};
+
+		logPackage('package_created', 'info', resolvedCustomerId, packageId, {
+			tracking_number: trackingNumber,
+			payment_type: effectivePaymentType,
+			delivery_time: body.delivery_time ?? null
+		});
 
 		return {
 			success: true,

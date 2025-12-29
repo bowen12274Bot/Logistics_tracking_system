@@ -4,6 +4,7 @@ import type { AppContext } from "../types";
 import { getTerminalStatus, hasActiveException } from "../lib/packageGuards";
 import { requireDriver } from "../utils/authUtils";
 import { ensureVehicleForDriver, type VehicleRow } from "../utils/vehicleUtils";
+import { logDriver } from "../middlewares/logger";
 
 type TaskRow = {
   id: string;
@@ -192,6 +193,11 @@ export class DriverTaskPickup extends OpenAPIRoute {
 
     await c.env.DB.prepare("UPDATE delivery_tasks SET status = 'in_progress', updated_at = ? WHERE id = ?").bind(now, taskId).run();
 
+    logDriver('cargo_pickup', 'info', auth.user.id, taskId, {
+      package_id: task.package_id,
+      from_location: from
+    });
+
     return c.json({ success: true, cargo_id: cargoId });
   }
 }
@@ -307,6 +313,12 @@ export class DriverTaskDropoff extends OpenAPIRoute {
     }
 
     await c.env.DB.prepare("UPDATE delivery_tasks SET status = 'completed', updated_at = ? WHERE id = ?").bind(now, taskId).run();
+
+    logDriver('cargo_dropoff', 'info', auth.user.id, taskId, {
+      package_id: task.package_id,
+      to_location: to,
+      status: nextStatus
+    });
 
     return c.json({ success: true, status: nextStatus });
   }
