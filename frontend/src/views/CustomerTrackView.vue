@@ -140,17 +140,44 @@ const statusLabel = (key: 'ok' | 'exception' | 'failed') => {
   return t('track.status.ok')
 }
 
-const reasonLabel = exceptionReasonLabel
+const reasonLabel = (code?: string | null) => exceptionReasonLabel(code, t)
 
 const statusInfoText = (pkg: any) => {
   const key = statusKeyForPackage(pkg)
   const details = detailByPackageId.value[pkg.id]
+  const latest = details?.events?.length ? details.events[details.events.length - 1] : null
   if (key === 'failed') return t('track.statusInfo.failed')
   if (key === 'exception') {
     const code = details?.activeReasonCode ?? null
     return code ? `${t('track.status.exception')} (${reasonLabel(code)})` : t('track.statusInfo.exception')
   }
-  return details?.latestDetails || '-'
+
+  const status = String(latest?.delivery_status ?? '').trim().toLowerCase()
+  const raw = String(latest?.delivery_details ?? '').trim()
+  const rawLower = raw.toLowerCase()
+
+  if (status === 'in_transit') {
+    const patterns: RegExp[] = [
+      /(?:next|to)\s*([A-Z0-9_]+)/i,
+      /destination\s*[:=]\s*([A-Z0-9_]+)/i,
+    ]
+    for (const p of patterns) {
+      const m = raw.match(p)
+      if (m?.[1]) return t('track.event.enrouteTo', { node: String(m[1]).trim() })
+    }
+    return t('track.event.in_transit')
+  }
+
+  if (status === 'warehouse_in' || rawLower === 'arrived at warehouse') return t('track.event.warehouse_in')
+  if (status === 'delivered' || rawLower === 'delivered') return t('track.event.delivered')
+  if (rawLower === 'arrived') return t('track.event.arrived')
+  if (status === 'arrived_pickup') return t('track.event.arrived_pickup')
+  if (status === 'arrived_delivery') return t('track.event.arrived_delivery')
+  if (status === 'warehouse_received') return t('track.event.warehouse_received')
+  if (status === 'sorting') return t('track.event.sorting')
+  if (status === 'route_decided') return t('track.event.route_decided')
+
+  return raw || details?.latestDetails || '-'
 }
 
 const displayNodeText = (nodeId?: string | null) => {
@@ -783,7 +810,7 @@ watch(
                     </template>
                     <template v-else>{{ pkg.current_location || '-' }}</template>
                   </span>
-                  <span class="summary-sep">P</span>
+                  <span class="summary-sep" aria-hidden="true">·</span>
                   <span class="summary-label">{{ t('track.summary.status') }}</span>
                   <span class="summary-value">
                     <template v-if="detailByPackageId[pkg.id]?.isLoading">{{ t('track.loading') }}</template>

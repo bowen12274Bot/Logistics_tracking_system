@@ -420,10 +420,10 @@ watch(
       <div class="filters">
         <select v-model="errors.level">
           <option value="all">{{ t('admin.errors.filters.level.all') }}</option>
-          <option value="info">Info</option>
-          <option value="warning">Warning</option>
-          <option value="error">Error</option>
-          <option value="critical">Critical</option>
+          <option value="info">{{ t('admin.errors.filters.level.info') }}</option>
+          <option value="warning">{{ t('admin.errors.filters.level.warning') }}</option>
+          <option value="error">{{ t('admin.errors.filters.level.error') }}</option>
+          <option value="critical">{{ t('admin.errors.filters.level.critical') }}</option>
         </select>
         <select v-model="errors.resolved">
           <option value="all">{{ t('admin.errors.filters.resolved.all') }}</option>

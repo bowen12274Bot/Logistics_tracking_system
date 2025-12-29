@@ -449,7 +449,7 @@ watch(
               <div><strong>ID：</strong>{{ selectedNode.id }}</div>
               <div><strong>Name：</strong>{{ selectedNode.name }}</div>
               <div><strong>Level：</strong>{{ selectedNode.level }}</div>
-              <div><strong>Subtype：</strong>{{ selectedNode.subtype ?? "-" }}</div>
+              <div><strong>{{ t("map.node.subtype") }}：</strong>{{ selectedNode.subtype ?? "-" }}</div>
               <div>{{ t("map.info.coords", { x: selectedNode.x, y: selectedNode.y }) }}</div>
             </div>
             <div v-else class="hint">{{ t("map.info.selectHint") }}</div>

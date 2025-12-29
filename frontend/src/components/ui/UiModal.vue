@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { nextTick, onUnmounted, ref, watch } from "vue";
+import { i18n } from "../../i18n";
 
 type Props = {
   modelValue: boolean;
@@ -11,7 +12,7 @@ type Props = {
 };
 
 const props = withDefaults(defineProps<Props>(), {
-  closeText: "關閉",
+  closeText: i18n.global.t("common.close"),
   closeOnEsc: true,
   closeOnBackdrop: true,
 });
@@ -132,3 +133,4 @@ function onBackdropClick() {
     </div>
   </Teleport>
 </template>
+

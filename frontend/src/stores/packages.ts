@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { api, type PackagePayableItem, type PackageRecord } from '../services/api'
+import { i18n } from '../i18n'
 
 export type PaymentMethod =
   | 'cash'
@@ -33,7 +34,7 @@ export const usePackageStore = defineStore('packages', {
         this.payableItems = res.items ?? []
         this.packages = this.payableItems.map((i) => i.package)
       } catch (err: any) {
-        this.error = err?.message || '載入待付款項失敗'
+        this.error = err?.message || i18n.global.t('packages.errors.loadPayablesFailed')
       } finally {
         this.isLoading = false
       }

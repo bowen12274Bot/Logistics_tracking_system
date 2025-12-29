@@ -220,7 +220,7 @@ const fillTestAccount = (acct: TestAccount) => {
           </label>
 
           <label class="form-field reg-email">
-            <span>Email</span>
+            <span>{{ t('login.email') }}</span>
             <input v-model="registerForm.email" required name="email" type="email" placeholder="you@example.com" />
           </label>
 

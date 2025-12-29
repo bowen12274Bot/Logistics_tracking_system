@@ -24,7 +24,7 @@ const packageStore = usePackageStore()
 const auth = useAuthStore()
 const route = useRoute()
 const router = useRouter()
-const { t } = useI18n()
+const { t, locale } = useI18n()
 
 const props = defineProps<{
   embedded?: boolean
@@ -33,6 +33,7 @@ const props = defineProps<{
 
 const methodLabel = (method: PaymentMethod) => t(`payment.method.${method}`)
 const trackingLabel = (tracking?: string | null) => (tracking && tracking.trim() ? tracking.trim() : t('common.tracking.pending'))
+const listSeparator = computed(() => (locale.value === 'zh-TW' ? '、' : ', '))
 
 const unpaidPackages = computed<StoredPackage[]>(() => packageStore.unpaidPackages)
 const myUnpaidPackages = computed<StoredPackage[]>(() => unpaidPackages.value)
@@ -457,11 +458,11 @@ const payableReasonFor = (pkg: StoredPackage) => {
             <div class="package-detail">
               <div class="detail-grid">
                 <p class="meta">
-                  {{ t('payment.detail.sender') }}：{{ senderDisplayName(guidedPackage, auth.user?.user_name) }}
+                  {{ t('payment.detail.sender') }}：{{ senderDisplayName(guidedPackage, auth.user?.user_name, t) }}
                   <span v-if="guidedPackage.sender_phone">（{{ guidedPackage.sender_phone }}）</span>
                 </p>
                 <p class="meta">
-                  {{ t('payment.detail.receiver') }}：{{ receiverDisplayName(guidedPackage, auth.user?.user_name) }}
+                  {{ t('payment.detail.receiver') }}：{{ receiverDisplayName(guidedPackage, auth.user?.user_name, t) }}
                   <span v-if="guidedPackage.receiver_phone">（{{ guidedPackage.receiver_phone }}）</span>
                 </p>
                 <p class="meta">{{ t('payment.detail.senderAddress') }}：{{ guidedPackage.sender_address || '--' }}</p>
@@ -470,11 +471,11 @@ const payableReasonFor = (pkg: StoredPackage) => {
                   {{ t('payment.detail.dimensions') }}：{{ dimensionsLabel(guidedPackage) }}
                   · {{ t('payment.detail.weight') }}：{{ guidedPackage.weight ?? '--' }} kg
                 </p>
-                <p class="meta">{{ t('payment.detail.delivery') }}：{{ resolveDeliveryLabel(guidedPackage.delivery_time) }}</p>
+                <p class="meta">{{ t('payment.detail.delivery') }}：{{ resolveDeliveryLabel(guidedPackage.delivery_time, t) }}</p>
                 <p class="meta">{{ t('payment.detail.amount') }}：{{ formatMoney(amountFor(guidedPackage)) }} {{ t('payment.currency') }}</p>
                 <p class="meta">{{ t('payment.detail.methodCurrent') }}：{{ methodLabel(resolveMethod(guidedPackage.payment_method)) }}</p>
-                <p v-if="resolveSpecialMarks(guidedPackage).length" class="meta">
-                  {{ t('payment.detail.marks') }}：{{ resolveSpecialMarks(guidedPackage).join('、') }}
+                <p v-if="resolveSpecialMarks(guidedPackage, t).length" class="meta">
+                  {{ t('payment.detail.marks') }}：{{ resolveSpecialMarks(guidedPackage, t).join(listSeparator) }}
                 </p>
                 <p v-if="resolveNotes(guidedPackage)" class="meta">{{ t('payment.detail.notes') }}：{{ resolveNotes(guidedPackage) }}</p>
               </div>
@@ -566,11 +567,11 @@ const payableReasonFor = (pkg: StoredPackage) => {
               <div v-if="expandedIds.has(pkg.id)" class="package-detail">
                 <div class="detail-grid">
                   <p class="meta">
-                    {{ t('payment.detail.sender') }}：{{ senderDisplayName(pkg, auth.user?.user_name) }}
+                    {{ t('payment.detail.sender') }}：{{ senderDisplayName(pkg, auth.user?.user_name, t) }}
                     <span v-if="pkg.sender_phone">（{{ pkg.sender_phone }}）</span>
                   </p>
                   <p class="meta">
-                    {{ t('payment.detail.receiver') }}：{{ receiverDisplayName(pkg, auth.user?.user_name) }}
+                    {{ t('payment.detail.receiver') }}：{{ receiverDisplayName(pkg, auth.user?.user_name, t) }}
                     <span v-if="pkg.receiver_phone">（{{ pkg.receiver_phone }}）</span>
                   </p>
                   <p class="meta">{{ t('payment.detail.senderAddress') }}：{{ pkg.sender_address || '--' }}</p>
@@ -579,11 +580,11 @@ const payableReasonFor = (pkg: StoredPackage) => {
                     {{ t('payment.detail.dimensions') }}：{{ dimensionsLabel(pkg) }}
                     · {{ t('payment.detail.weight') }}：{{ pkg.weight ?? '--' }} kg
                   </p>
-                  <p class="meta">{{ t('payment.detail.delivery') }}：{{ resolveDeliveryLabel(pkg.delivery_time) }}</p>
+                  <p class="meta">{{ t('payment.detail.delivery') }}：{{ resolveDeliveryLabel(pkg.delivery_time, t) }}</p>
                   <p class="meta">{{ t('payment.detail.amount') }}：{{ formatMoney(amountFor(pkg)) }} {{ t('payment.currency') }}</p>
                   <p class="meta">{{ t('payment.detail.methodCurrent') }}：{{ methodLabel(resolveMethod(pkg.payment_method)) }}</p>
-                  <p v-if="resolveSpecialMarks(pkg).length" class="meta">
-                    {{ t('payment.detail.marks') }}：{{ resolveSpecialMarks(pkg).join('、') }}
+                  <p v-if="resolveSpecialMarks(pkg, t).length" class="meta">
+                    {{ t('payment.detail.marks') }}：{{ resolveSpecialMarks(pkg, t).join(listSeparator) }}
                   </p>
                   <p v-if="resolveNotes(pkg)" class="meta">{{ t('payment.detail.notes') }}：{{ resolveNotes(pkg) }}</p>
                 </div>
@@ -648,19 +649,19 @@ const payableReasonFor = (pkg: StoredPackage) => {
               <div v-if="expandedRecordIds.has(recordKeyForPackage(item.package.id))" class="package-detail">
                 <div class="detail-grid">
                   <p class="meta">
-                    {{ t('payment.detail.sender') }}：{{ senderDisplayName(item.package as any, auth.user?.user_name) }}
+                    {{ t('payment.detail.sender') }}：{{ senderDisplayName(item.package as any, auth.user?.user_name, t) }}
                     <span v-if="item.package.sender_phone">（{{ item.package.sender_phone }}）</span>
                   </p>
                   <p class="meta">
-                    {{ t('payment.detail.receiver') }}：{{ receiverDisplayName(item.package as any, auth.user?.user_name) }}
+                    {{ t('payment.detail.receiver') }}：{{ receiverDisplayName(item.package as any, auth.user?.user_name, t) }}
                     <span v-if="item.package.receiver_phone">（{{ item.package.receiver_phone }}）</span>
                   </p>
                   <p class="meta">{{ t('payment.detail.senderAddress') }}：{{ item.package.sender_address || '--' }}</p>
                   <p class="meta">{{ t('payment.detail.receiverAddress') }}：{{ item.package.receiver_address || '--' }}</p>
                   <p class="meta">{{ t('payment.detail.dimensions') }}：{{ dimensionsLabel(item.package as any) }} · {{ t('payment.detail.weight') }}：{{ item.package.weight ?? '--' }} kg</p>
-                  <p class="meta">{{ t('payment.detail.delivery') }}：{{ resolveDeliveryLabel(item.package.delivery_time) }}</p>
-                  <p v-if="resolveSpecialMarks(item.package as any).length" class="meta">
-                    {{ t('payment.detail.marks') }}：{{ resolveSpecialMarks(item.package as any).join('、') }}
+                  <p class="meta">{{ t('payment.detail.delivery') }}：{{ resolveDeliveryLabel(item.package.delivery_time, t) }}</p>
+                  <p v-if="resolveSpecialMarks(item.package as any, t).length" class="meta">
+                    {{ t('payment.detail.marks') }}：{{ resolveSpecialMarks(item.package as any, t).join(listSeparator) }}
                   </p>
                   <p v-if="resolveNotes(item.package as any)" class="meta">{{ t('payment.detail.notes') }}：{{ resolveNotes(item.package as any) }}</p>
                   <p class="meta">{{ t('payment.detail.method') }}：{{ methodLabel(resolveMethod(item.package.payment_method)) }}</p>
