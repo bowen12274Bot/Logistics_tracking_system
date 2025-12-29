@@ -403,7 +403,20 @@ const canPayNow = (pkg: StoredPackage) => {
 }
 
 const payableReasonFor = (pkg: StoredPackage) => {
-  return getPayableSnapshot(pkg)?.reason ?? null
+  const reason = getPayableSnapshot(pkg)?.reason ?? null
+  if (!reason) return null
+  
+  // 翻譯後端返回的英文 reason
+  const reasonMap: Record<string, string> = {
+    'Package not found': t('payment.reason.packageNotFound'),
+    'monthly_billing is only available for prepaid/cod': t('payment.reason.monthlyBillingOnly'),
+    'COD cash at store is payable after delivered at END_STORE_*': t('payment.reason.codStoreAfterDelivered'),
+    'COD cash at home is payable after arrived_delivery': t('payment.reason.codHomeAfterDelivered'),
+    'Cash prepaid at home is payable after arrived_pickup': t('payment.reason.prepaidHomeAfterPickup'),
+    'Unsupported payment_type': t('payment.reason.unsupportedPaymentType'),
+  }
+  
+  return reasonMap[reason] ?? reason
 }
 </script>
 

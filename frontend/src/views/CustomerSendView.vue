@@ -724,11 +724,11 @@ async function copyTracking() {
               <span>{{ t('send.package.weight') }}</span>
               <input
                 v-model.number="form.weight"
-                min="1"
+                min="0.1"
                 required
                 name="weight"
                 type="number"
-                step="1"
+                step="0.1"
                 :placeholder="t('send.package.weightPlaceholder')"
               />
             </label>
@@ -788,7 +788,7 @@ async function copyTracking() {
                 name="declaredValue"
                 type="number"
                 min="0"
-                step="1"
+                step="0.01"
                 :placeholder="t('send.package.declaredPlaceholder')"
               />
             </label>
