@@ -2,6 +2,7 @@ import { OpenAPIRoute } from "chanfana";
 import { z } from "zod";
 import type { AppContext } from "../types";
 import { getTerminalStatus, hasActiveException } from "../lib/packageGuards";
+import { logWarehouse } from "../middlewares/logger";
 
 type AuthUser = { id: string; user_class: string; address: string | null };
 type NodeRow = { id: string; level: number };
@@ -218,6 +219,12 @@ export class WarehouseDispatchNextTask extends OpenAPIRoute {
     )
       .bind(evtId, packageId, `next=${toNodeId}`, now, fromNodeId)
       .run();
+
+    logWarehouse('task_dispatched', 'info', auth.user.id, packageId, {
+      from_location: fromNodeId,
+      to_location: toNodeId,
+      task_id: id
+    });
 
     return c.json({ success: true, task_id: id, assigned_driver_id: assignedDriverId, segment_index: nextIndex });
   }

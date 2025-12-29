@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { AppContext } from "../types";
 import { computeRoute } from "./mapRoute";
 import { requireCustomerService } from "../utils/authUtils";
+import { logException } from "../middlewares/logger";
 
 type NodeRow = { id: string; level: number };
 type EdgeRow = { source: string; target: string };
@@ -618,6 +619,12 @@ export class CustomerServiceExceptionHandle extends OpenAPIRoute {
         .bind(record.package_id)
         .run();
     }
+
+    logException('exception_handled', 'info', auth.user.id, record.package_id, {
+      action: body.action,
+      resume_mode: persistedResumeMode,
+      exception_id: exceptionId
+    });
 
     return c.json({ success: true, event_id: eventId, delivery_failed_event_id: deliveryFailedEventId, action: body.action });
   }

@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { AppContext } from "../types";
 import { requireWarehouse } from "../utils/authUtils";
 import { getTerminalStatus, hasActiveException } from "../lib/packageGuards";
+import { logWarehouse } from "../middlewares/logger";
 
 // POST /api/warehouse/batch-operation - 倉儲批次操作
 export class WarehouseBatchOperation extends OpenAPIRoute {
@@ -101,6 +102,13 @@ export class WarehouseBatchOperation extends OpenAPIRoute {
         results.failed.push({ id: pkgId, reason: "處理失敗" });
       }
     }
+
+    logWarehouse('batch_operation', 'info', auth.user.id, null, {
+      operation: body.operation,
+      location_id: body.location_id,
+      processed: results.success.length,
+      failed: results.failed.length
+    });
 
     return c.json({
       success: true,
