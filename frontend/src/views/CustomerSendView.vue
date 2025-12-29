@@ -712,8 +712,13 @@ async function copyTracking() {
         <section class="send-section">
           <header class="send-section-header">
             <h2 class="send-section-title">{{ t('send.package.title') }}</h2>
-            <p class="hint send-section-hint">{{ t('send.package.hint') }}</p>
+            <div class="send-section-actions">
+              <RouterLink to="/shipping-rules" class="ghost-btn small-btn">
+                📋 運費規則
+              </RouterLink>
+            </div>
           </header>
+          <p class="hint send-section-hint">{{ t('send.package.hint') }}</p>
           <div class="form-grid">
             <label class="form-field">
               <span>{{ t('send.package.weight') }}</span>

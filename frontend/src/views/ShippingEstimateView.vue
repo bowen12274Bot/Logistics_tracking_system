@@ -265,6 +265,13 @@ async function handleSubmit() {
     :lede="t('estimate.lede')"
   >
     <UiCard class="estimator">
+      <!-- Shipping Rules Link -->
+      <div class="rules-link-section">
+        <RouterLink to="/shipping-rules" class="rules-link">
+          📋 查看運費規則說明
+        </RouterLink>
+      </div>
+
       <!-- Location Section -->
       <div class="form-section">
         <h3 class="section-title">{{ t('estimate.from') }} / {{ t('estimate.to') }}</h3>
@@ -414,6 +421,40 @@ async function handleSubmit() {
   max-width: auto;
   margin: 0 auto;
 }
+
+/* Shipping Rules Link */
+.rules-link-section {
+  text-align: center;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(165, 122, 99, 0.1);
+}
+
+.rules-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 18px;
+  border-radius: 12px;
+  background: rgba(244, 182, 194, 0.15);
+  border: 1px solid rgba(244, 182, 194, 0.3);
+  color: rgba(107, 74, 64, 0.9);
+  font-weight: 600;
+  font-size: 14px;
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+.rules-link:hover {
+  background: rgba(244, 182, 194, 0.25);
+  border-color: rgba(244, 182, 194, 0.5);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(170, 124, 105, 0.15);
+}
+
+.rules-link:active {
+  transform: translateY(0);
+}
+
 
 /* Form Sections */
 .form-section {

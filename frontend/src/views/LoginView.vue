@@ -414,10 +414,9 @@ onMounted(() => {
             <p class="hint">{{ t('login.credentials.emptyCustom') }}</p>
           </div>
           <div v-else class="credential-list">
-            <button
+            <div
               v-for="(cred, index) in credentialStorage.credentials"
               :key="index"
-              type="button"
               class="credential-item"
               @click="fillCredential(cred.email, cred.password, cred.label)"
             >
@@ -432,7 +431,7 @@ onMounted(() => {
               >
                 {{ t('login.credentials.delete') }}
               </button>
-            </button>
+            </div>
           </div>
         </div>
 
@@ -442,10 +441,9 @@ onMounted(() => {
             <p class="hint">{{ t('login.credentials.emptyDefault') }}</p>
           </div>
           <div v-else class="credential-list">
-            <button
+            <div
               v-for="acct in testAccounts"
               :key="acct.email"
-              type="button"
               class="credential-item"
               @click="fillCredential(acct.email, acct.password, t(acct.roleKey))"
             >
@@ -453,7 +451,7 @@ onMounted(() => {
                 <strong>{{ t(acct.roleKey) }}</strong>
                 <span class="credential-item-email">{{ acct.email }}</span>
               </div>
-            </button>
+            </div>
           </div>
         </div>
 
@@ -463,10 +461,9 @@ onMounted(() => {
             <p class="hint">{{ t('login.credentials.emptyDemo') }}</p>
           </div>
           <div v-else class="credential-list">
-            <button
+            <div
               v-for="acct in quickAccounts"
               :key="acct.email"
-              type="button"
               class="credential-item"
               @click="fillCredential(acct.email, acct.password, t(acct.roleKey))"
             >
@@ -474,7 +471,7 @@ onMounted(() => {
                 <strong>{{ t(acct.roleKey) }}</strong>
                 <span class="credential-item-email">{{ acct.email }}</span>
               </div>
-            </button>
+            </div>
           </div>
         </div>
       </div>

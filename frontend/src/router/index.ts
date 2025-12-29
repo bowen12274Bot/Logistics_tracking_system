@@ -45,6 +45,11 @@ const router = createRouter({
       meta: { roles: DRIVER_ROLES },
     },
     { path: '/shipping/estimate', name: 'shipping-estimate', component: ShippingEstimateView },
+    {
+      path: '/shipping-rules',
+      name: 'shipping-rules',
+      component: () => import('../views/ShippingRulesView.vue'),
+    },
     { path: '/track', name: 'public-track', component: PublicTrackView },
 
     {
