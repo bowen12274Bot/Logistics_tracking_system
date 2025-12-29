@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, onUnmounted, ref, watch } from "vue";
+import { nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { i18n } from "../../i18n";
 
 type Props = {
@@ -25,6 +25,27 @@ const emit = defineEmits<{
 const cardEl = ref<HTMLElement | null>(null);
 const titleId = `ui-modal-title-${Math.random().toString(16).slice(2)}`;
 let lastFocusedEl: Element | null = null;
+
+type TeleportTarget = string | HTMLElement;
+const teleportTo = ref<TeleportTarget>("body");
+
+function getFullscreenElement(): HTMLElement | null {
+  const anyDoc = document as unknown as {
+    fullscreenElement?: Element | null;
+    webkitFullscreenElement?: Element | null;
+    msFullscreenElement?: Element | null;
+  };
+  return (
+    (anyDoc.fullscreenElement as HTMLElement | null) ??
+    (anyDoc.webkitFullscreenElement as HTMLElement | null) ??
+    (anyDoc.msFullscreenElement as HTMLElement | null) ??
+    null
+  );
+}
+
+function updateTeleportTarget() {
+  teleportTo.value = getFullscreenElement() ?? "body";
+}
 
 function close() {
   emit("update:modelValue", false);
@@ -81,6 +102,7 @@ watch(
   () => props.modelValue,
   async (open) => {
     if (open) {
+      updateTeleportTarget();
       lastFocusedEl = document.activeElement;
       document.addEventListener("keydown", onDocumentKeydown, true);
       await nextTick();
@@ -93,8 +115,18 @@ watch(
   },
 );
 
+onMounted(() => {
+  updateTeleportTarget();
+  document.addEventListener("fullscreenchange", updateTeleportTarget);
+  document.addEventListener("webkitfullscreenchange", updateTeleportTarget);
+  document.addEventListener("MSFullscreenChange", updateTeleportTarget);
+});
+
 onUnmounted(() => {
   document.removeEventListener("keydown", onDocumentKeydown, true);
+  document.removeEventListener("fullscreenchange", updateTeleportTarget);
+  document.removeEventListener("webkitfullscreenchange", updateTeleportTarget);
+  document.removeEventListener("MSFullscreenChange", updateTeleportTarget);
 });
 
 function onBackdropClick() {
@@ -104,7 +136,7 @@ function onBackdropClick() {
 </script>
 
 <template>
-  <Teleport to="body">
+  <Teleport :to="teleportTo">
     <div
       v-if="modelValue"
       class="ui-modal"
@@ -133,4 +165,3 @@ function onBackdropClick() {
     </div>
   </Teleport>
 </template>
-

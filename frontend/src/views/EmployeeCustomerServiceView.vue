@@ -15,6 +15,7 @@ import UiPageShell from '../components/ui/UiPageShell.vue'
 import UiButton from '../components/ui/UiButton.vue'
 import { useToasts } from "../components/ui/toast";
 import { toastFromApiError } from "../services/errorToast";
+import { roleLabelKey } from "../services/roleLabels";
 
 type TaskKind = "exception" | "contract";
 type ViewKey = "exceptions" | "contracts" | "handled";
@@ -80,6 +81,11 @@ const normalizeKey = (kind: TaskKind, id: string) => `${kind}:${id}`;
 
 const reasonLabel = (code?: string | null) => exceptionReasonLabel(code, t);
 
+const roleLabel = (role?: string | null) => {
+  const key = roleLabelKey(role as never);
+  return key ? t(key) : (role ? String(role) : "-");
+};
+
 const contractStatusLabel = (status?: string | null) => {
   const s = String(status ?? "").trim().toLowerCase();
   if (s === "approved") return t("cs.contract.status.approved");
@@ -112,7 +118,7 @@ const exceptionUnhandledTasks = computed<ExceptionTask[]>(() => {
       id,
       title: ex.tracking_number || ex.package_id,
       pill: { text: t("cs.exception.pill.pending"), tone: "warning" },
-      meta: `${t("cs.labels.reason")}：${reasonLabel(ex.reason_code)} · ${t("cs.labels.reportedBy")}：${ex.reported_role || "-"}`,
+      meta: `${t("cs.labels.reason")}：${reasonLabel(ex.reason_code)} · ${t("cs.labels.reportedBy")}：${roleLabel(ex.reported_role)}`,
       createdAt: ex.reported_at ?? null,
       raw: ex,
     });
@@ -132,7 +138,7 @@ const exceptionHandledTasks = computed<ExceptionTask[]>(() => {
       id,
       title: ex.tracking_number || ex.package_id,
       pill: { text: t("cs.exception.pill.done"), tone: "done" },
-      meta: `${t("cs.labels.reason")}：${reasonLabel(ex.reason_code)} · ${t("cs.labels.reportedBy")}：${ex.reported_role || "-"}`,
+      meta: `${t("cs.labels.reason")}：${reasonLabel(ex.reason_code)} · ${t("cs.labels.reportedBy")}：${roleLabel(ex.reported_role)}`,
       createdAt: ex.handled_at ?? ex.reported_at ?? null,
       raw: ex,
     });
@@ -837,7 +843,7 @@ onUnmounted(() => {
                 </div>
                 <div class="detail-item">
                   <p class="detail-label">{{ t('cs.labels.reportedBy') }}</p>
-                  <p class="detail-value">{{ selectedTask.raw.reported_role || '-' }}</p>
+                  <p class="detail-value">{{ roleLabel(selectedTask.raw.reported_role) }}</p>
                 </div>
                 <div class="detail-item">
                   <p class="detail-label">{{ t('cs.labels.onVehicle') }}</p>
