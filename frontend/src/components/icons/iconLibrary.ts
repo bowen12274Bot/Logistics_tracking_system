@@ -37,6 +37,8 @@ export type IconName =
     | 'more-vertical'
     | 'user'
     | 'logout'
+    | 'eye'
+    | 'eye-off'
     // Business
     | 'package'
     | 'truck'
@@ -181,9 +183,21 @@ export const ICONS: Record<IconName, IconDefinition> = {
     },
     logout: {
         paths: [
-            'M10 17v-2h4V9h-4V7h4a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2h-4Z',
-            'M8.59 16.59 10 18l-6-6 6-6-1.41 1.41L4.83 11H14v2H4.83l3.76 3.59Z',
-            'M20 3h-8v2h8v14h-8v2h8a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2Z',
+            'M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4',
+            'M16 17l5-5-5-5',
+            'M21 12H9',
+        ],
+    },
+    eye: {
+        paths: [
+            'M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z',
+            'M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z',
+        ],
+    },
+    'eye-off': {
+        paths: [
+            'M17.94 17.94A10.07 10.07 0 0 1 12 19c-7 0-10-7-10-7a15.16 15.16 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 10 7 10 7a15.16 15.16 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24',
+            'M1 1l22 22',
         ],
     },
 
@@ -203,8 +217,9 @@ export const ICONS: Record<IconName, IconDefinition> = {
     },
     billing: {
         paths: [
-            'M7 3h10a2 2 0 0 1 2 2v1h-2V5H7v14h10v-1h2v1a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z',
-            'M9 7h8v2H9V7Zm0 4h8v2H9v-2Zm0 4h6v2H9v-2Z',
+            'M19 5H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2Z',
+            'M3 10h18',
+            'M7 15h4',
         ],
     },
     contract: {

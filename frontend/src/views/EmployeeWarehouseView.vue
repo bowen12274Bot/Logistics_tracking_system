@@ -1592,6 +1592,15 @@ watch(
   align-items: center;
   gap: 8px;
   font-weight: 800;
+  transition: all 0.2s ease;
+}
+
+.wh-view-btn:hover:not(.active):not(:disabled) {
+  background: rgba(244, 182, 194, 0.15);
+}
+
+.wh-view-btn:active:not(.active):not(:disabled) {
+  background: rgba(244, 182, 194, 0.25);
 }
 
 .wh-view-btn.active {

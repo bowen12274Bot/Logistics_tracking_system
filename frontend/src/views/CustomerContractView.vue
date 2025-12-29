@@ -566,6 +566,16 @@ onMounted(() => {
   border: none;
   cursor: pointer;
   text-align: left;
+  transition: all 0.2s ease;
+  color: inherit;
+}
+
+.row-btn:hover {
+  background: rgba(244, 182, 194, 0.08);
+}
+
+.row-btn:active {
+  background: rgba(244, 182, 194, 0.15);
 }
 
 .tracking {
@@ -589,6 +599,18 @@ onMounted(() => {
   border-top: 1px dashed #e5e7eb;
   display: grid;
   gap: 10px;
+  animation: slideDown 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .detail-grid {

@@ -924,6 +924,16 @@ watch(
   background: transparent;
   padding: 12px 14px;
   cursor: pointer;
+  transition: all 0.2s ease;
+  color: inherit;
+}
+
+.row-btn:hover {
+  background: rgba(244, 182, 194, 0.08);
+}
+
+.row-btn:active {
+  background: rgba(244, 182, 194, 0.15);
 }
 
 .tracking {
