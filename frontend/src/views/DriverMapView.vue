@@ -9,6 +9,7 @@ import UiCard from "../components/ui/UiCard.vue";
 import UiModal from "../components/ui/UiModal.vue";
 import UiNotice from "../components/ui/UiNotice.vue";
 import UiPageShell from "../components/ui/UiPageShell.vue";
+import UiButton from "../components/ui/UiButton.vue";
 import { useToasts } from "../components/ui/toast";
 import { toastFromApiError } from "../services/errorToast";
 const truckIconUrl = new URL("../assets/truck.png", import.meta.url).href;
@@ -16,7 +17,7 @@ const truckIconUrl = new URL("../assets/truck.png", import.meta.url).href;
 type ViewBox = { x: number; y: number; w: number; h: number };
 
 const route = useRoute();
-const { t } = useI18n();
+const { t, locale } = useI18n();
 
 const loading = ref(true);
 const error = ref<string | null>(null);
@@ -481,7 +482,8 @@ async function refreshArriveData() {
     assignedTasks.value = assignedRes.tasks ?? [];
     handoffTasks.value = handoffRes.tasks ?? [];
     cargo.value = cargoRes.cargo ?? [];
-    lastSyncAt.value = new Date().toLocaleString();
+    const targetLocale = locale.value === 'en-US' ? 'en-US' : 'zh-TW';
+    lastSyncAt.value = new Date().toLocaleString(targetLocale);
   } catch (e: any) {
     arriveError.value = String(e?.message ?? e);
     toastFromApiError(e, arriveError.value);
@@ -1019,30 +1021,33 @@ onMounted(async () => {
       <div class="map-stage" :class="{ 'sidebar-collapsed': sidebarCollapsed }">
         <div class="map-main">
           <div class="map-controls">
-            <button
+            <UiButton
               v-if="fullscreenSupported"
-              class="ghost-btn"
+              :icon="isFullscreen ? 'fullscreen-exit' : 'fullscreen'"
+              variant="ghost"
               type="button"
               @click="toggleFullscreen"
             >
               {{ isFullscreen ? t("driver.map.controls.fullscreen.exit") : t("driver.map.controls.fullscreen.enter") }}
-            </button>
-            <button
+            </UiButton>
+            <UiButton
               v-if="sidebarCollapsed"
-              class="ghost-btn"
+              icon="chevron-left"
+              variant="ghost"
               type="button"
               @click="openTaskList()"
             >
               {{ t("driver.map.controls.sidebar.expand") }}
-            </button>
-            <button
+            </UiButton>
+            <UiButton
               v-else
-              class="ghost-btn"
+              icon="chevron-right"
+              variant="ghost"
               type="button"
               @click="collapseSidebar"
             >
               {{ t("driver.map.controls.sidebar.collapse") }}
-            </button>
+            </UiButton>
           </div>
 
           <svg
@@ -1217,9 +1222,9 @@ onMounted(async () => {
                 <p class="eyebrow">{{ t("driver.map.taskList.title") }}</p>
               </div>
               <div class="task-header-actions">
-                <button class="ghost-btn" type="button" :disabled="arriveBusy" @click="refreshArriveData">
+                <UiButton icon="refresh" variant="ghost" type="button" :disabled="arriveBusy" @click="refreshArriveData">
                   {{ t("driver.map.taskList.refresh") }}
-                </button>
+                </UiButton>
               </div>
             </div>
 

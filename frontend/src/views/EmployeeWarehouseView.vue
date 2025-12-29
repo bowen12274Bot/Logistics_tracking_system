@@ -6,11 +6,13 @@ import { useI18n } from "vue-i18n";
 import { api, type WarehouseExceptionRecord, type WarehousePackageRecord } from "../services/api";
 import { useFullscreen } from "../composables/useFullscreen";
 import { exceptionReasonLabel, selectableReasonsFor } from "../lib/exceptionReasons";
+import { formatDateTime } from "../utils/packageDisplay";
 import UiCard from "../components/ui/UiCard.vue";
 import UiList from "../components/ui/UiList.vue";
 import UiModal from "../components/ui/UiModal.vue";
 import UiNotice from "../components/ui/UiNotice.vue";
 import UiPageShell from "../components/ui/UiPageShell.vue";
+import UiButton from "../components/ui/UiButton.vue";
 import { useToasts } from "../components/ui/toast";
 import { toastFromApiError } from "../services/errorToast";
 
@@ -20,7 +22,7 @@ const loading = ref(true);
 const busy = ref(false);
 const error = ref<string | null>(null);
 const toast = useToasts();
-const { t } = useI18n();
+const { t, locale } = useI18n();
 
 const activeTab = ref<WarehouseTab>("await_receive");
 
@@ -645,13 +647,8 @@ watch(
             </div>
           </div>
           <div class="wh-bar__actions">
-            <RouterLink class="ghost-btn" to="/map">
-              <span class="wh-btn-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
-                  <path d="M15 4 9 2 3 4v17l6-2 6 2 6-2V2l-6 2ZM9 4.1l6 2v13.8l-6-2V4.1Z" />
-                </svg>
-              </span>
-              {{ t("warehouse.actions.map") }}
+            <RouterLink to="/map">
+              <UiButton icon="map" variant="ghost">{{ t("warehouse.actions.map") }}</UiButton>
             </RouterLink>
           </div>
         </div>
@@ -758,37 +755,19 @@ watch(
             </div>
 
             <div class="wh-header-actions">
-              <button class="ghost-btn small-btn wh-refresh-btn" type="button" :disabled="loading || busy" @click="refresh">
-                <span class="wh-btn-icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-                    <path
-                      d="M12 6V3L8 7l4 4V8a4 4 0 1 1-3.9 5H6a6 6 0 1 0 6-7Z"
-                    />
-                  </svg>
-                </span>
+              <UiButton icon="refresh" variant="ghost" size="small" :disabled="loading || busy" @click="refresh">
                 {{ t("warehouse.actions.refresh") }}
-              </button>
-              <button
+              </UiButton>
+              <UiButton
                 v-if="mainFullscreenSupported"
-                class="ghost-btn small-btn"
-                type="button"
+                :icon="mainIsFullscreen ? 'fullscreen-exit' : 'fullscreen'"
+                variant="ghost"
+                size="small"
                 :disabled="busy"
                 @click="toggleMainFullscreen"
               >
-                <span class="wh-btn-icon" aria-hidden="true">
-                  <svg v-if="!mainIsFullscreen" viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-                    <path
-                      d="M4 4h6v2H6v4H4V4Zm14 0h2v6h-2V6h-4V4h4ZM4 14h2v4h4v2H4v-6Zm14 0h2v6h-6v-2h4v-4Z"
-                    />
-                  </svg>
-                  <svg v-else viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-                    <path
-                      d="M10 4v2H6v4H4V4h6Zm10 0v6h-2V6h-4V4h6ZM4 14h2v4h4v2H4v-6Zm16 0v6h-6v-2h4v-4h2Z"
-                    />
-                  </svg>
-                </span>
                 {{ mainIsFullscreen ? t("warehouse.actions.fullscreen.exit") : t("warehouse.actions.fullscreen.enter") }}
-              </button>
+              </UiButton>
             </div>
           </div>
 
@@ -864,12 +843,13 @@ watch(
                           d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm0 6a1 1 0 0 1 1 1v3.6l2.2 1.3a1 1 0 0 1-1 1.7l-2.7-1.6A1 1 0 0 1 11 13V9a1 1 0 0 1 1-1Z"
                         />
                       </svg>
-                      {{ p.latest_event.events_at ?? "-" }}
+                      {{ formatDateTime(p.latest_event.events_at, locale) }}
                     </span>
                   </div>
                   <button class="ghost-btn small-btn" type="button" :disabled="busy" @click="startException(p)">{{ t("warehouse.actions.exception") }}</button>
                 </div>
               </div>
+              <!--
               <div class="hint wh-wrap wh-receive-route">
                 <svg class="wh-inline-icon" viewBox="0 0 24 24" aria-hidden="true">
                   <path
@@ -908,6 +888,7 @@ watch(
                   `${p.sender_address ?? "-"} → ${p.receiver_address ?? "-"}`
                 }}
               </div>
+              -->
             </li>
           </UiList>
         </UiCard>
@@ -1309,12 +1290,12 @@ watch(
                         d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm0 6a1 1 0 0 1 1 1v3.6l2.2 1.3a1 1 0 0 1-1 1.7l-2.7-1.6A1 1 0 0 1 11 13V9a1 1 0 0 1 1-1Z"
                       />
                     </svg>
-                    {{ p.latest_event.events_at ?? "-" }}
+                    {{ formatDateTime(p.latest_event.events_at, locale) }}
                   </span>
                   <button class="ghost-btn small-btn" type="button" :disabled="busy" @click="startException(p)">{{ t("warehouse.actions.exception") }}</button>
                 </div>
               </div>
-              <div class="hint wh-wrap">{{ p.latest_event.delivery_details ?? "-" }}</div>
+              <!--<div class="hint wh-wrap">{{ p.latest_event.delivery_details ?? "-" }}</div>-->
             </li>
           </UiList>
         </UiCard>

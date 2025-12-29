@@ -19,7 +19,7 @@ type Link = {
   muted?: boolean
 }
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const packageStore = usePackageStore()
 const auth = useAuthStore()
 
@@ -191,8 +191,8 @@ onMounted(() => {
                 </span>
               </p>
               <p class="hint" style="margin: 0">
-                {{ t('customer.dashboard.summary.createdAt') }}：{{ formatDateTime(pkg.created_at) }}
-                <span v-if="pkg.estimated_delivery"> · {{ t('customer.dashboard.summary.eta') }}：{{ formatDateTime(pkg.estimated_delivery) }}</span>
+                {{ t('customer.dashboard.summary.createdAt') }}：{{ formatDateTime(pkg.created_at, locale) }}
+                <span v-if="pkg.estimated_delivery">  · {{ t('customer.dashboard.summary.eta') }}：{{ formatDateTime(pkg.estimated_delivery, locale) }}</span>
               </p>
             </div>
             <div class="recent-actions">

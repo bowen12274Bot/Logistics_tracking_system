@@ -6,7 +6,7 @@ import UiCard from "../components/ui/UiCard.vue";
 import UiPageShell from "../components/ui/UiPageShell.vue";
 import { toastFromApiError } from "../services/errorToast";
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
 
 const trackingNumber = ref("");
 const isLoading = ref(false);
@@ -33,7 +33,8 @@ const formatDateTime = (value?: string | null) => {
   if (!value) return "-";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString();
+  const targetLocale = locale.value === 'en-US' ? 'en-US' : 'zh-TW';
+  return date.toLocaleString(targetLocale);
 };
 
 const lookup = async () => {

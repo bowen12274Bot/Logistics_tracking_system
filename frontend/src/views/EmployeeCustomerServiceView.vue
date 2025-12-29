@@ -7,10 +7,12 @@ import {
   type CustomerServiceExceptionRecord,
 } from "../services/api";
 import { EXCEPTION_REASONS, exceptionReasonLabel } from "../lib/exceptionReasons";
-import UiCard from "../components/ui/UiCard.vue";
-import UiNotice from "../components/ui/UiNotice.vue";
-import UiModal from "../components/ui/UiModal.vue";
-import UiPageShell from "../components/ui/UiPageShell.vue";
+import UiCard from '../components/ui/UiCard.vue'
+import UiList from '../components/ui/UiList.vue'
+import UiModal from '../components/ui/UiModal.vue'
+import UiNotice from '../components/ui/UiNotice.vue'
+import UiPageShell from '../components/ui/UiPageShell.vue'
+import UiButton from '../components/ui/UiButton.vue'
 import { useToasts } from "../components/ui/toast";
 import { toastFromApiError } from "../services/errorToast";
 
@@ -35,7 +37,7 @@ type TaskItem = ExceptionTask | ContractTask;
 const activeView = ref<ViewKey>("exceptions");
 const selectedKey = ref<string | null>(null);
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
 
 const viewOrder: ViewKey[] = ["exceptions", "contracts", "handled"];
 const exceptionsTabRef = ref<HTMLButtonElement | null>(null);
@@ -89,7 +91,8 @@ const formatDateTime = (value?: string | null) => {
   if (!value) return "-";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString();
+  const targetLocale = locale.value === 'en-US' ? 'en-US' : 'zh-TW';
+  return date.toLocaleString(targetLocale);
 };
 
 const normalizeReasonCode = (code?: string | null) => {
@@ -696,12 +699,17 @@ onUnmounted(() => {
             <router-link class="ghost-btn small-btn" to="/cs/packages">
               {{ t('cs.actions.packageSearch') }}
             </router-link>
-            <button class="ghost-btn small-btn" type="button" :disabled="isLoading" @click="refresh">
+            <UiButton icon="refresh" variant="ghost" size="small" :disabled="isLoading" @click="refresh">
               {{ isLoading ? t('cs.actions.refreshing') : t('cs.actions.refresh') }}
-            </button>
-            <button class="ghost-btn small-btn" type="button" @click="toggleFullscreen">
+            </UiButton>
+            <UiButton
+              :icon="isFullscreen ? 'fullscreen-exit' : 'fullscreen'"
+              variant="ghost"
+              size="small"
+              @click="toggleFullscreen"
+            >
               {{ isFullscreen ? t('cs.actions.exitFullscreen') : t('cs.actions.enterFullscreen') }}
-            </button>
+            </UiButton>
           </div>
         </div>
       </div>

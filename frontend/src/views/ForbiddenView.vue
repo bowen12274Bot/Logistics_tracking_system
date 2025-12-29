@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import UiCard from '../components/ui/UiCard.vue'
 import UiPageShell from '../components/ui/UiPageShell.vue'
+import UiButton from '../components/ui/UiButton.vue'
 import { useAuthStore } from '../stores/auth'
 import type { Role } from '../types/router'
 import { roleLabelKey } from '../services/roleLabels'
@@ -61,8 +62,8 @@ const goBack = () => {
         {{ t('forbidden.target', { target: blockedTarget }) }}
       </p>
       <div style="display: flex; gap: 10px; flex-wrap: wrap">
-        <button class="ghost-btn" type="button" @click="goBack">{{ t('forbidden.actions.back') }}</button>
-        <button class="ghost-btn" type="button" @click="router.push('/')">{{ t('forbidden.actions.home') }}</button>
+        <UiButton icon="back" variant="ghost" type="button" @click="goBack">{{ t('forbidden.actions.back') }}</UiButton>
+        <UiButton icon="home" variant="ghost" type="button" @click="router.push('/')">{{ t('forbidden.actions.home') }}</UiButton>
         <button v-if="auth.isLoggedIn" class="primary-btn" type="button" @click="router.push(roleHome)">
           {{ t('forbidden.actions.goRoleHome') }}
         </button>

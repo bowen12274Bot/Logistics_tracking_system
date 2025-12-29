@@ -1095,5 +1095,8 @@
   "cs.views.aria": "Views",
   "cs.views.contracts": "Contracts",
   "cs.views.exceptions": "Exceptions",
-  "cs.views.handled": "Handled"
+  "cs.views.handled": "Handled",
+  "home.actions.mapDesc": "Explore the virtual logistics network",
+  "home.actions.trackDesc": "Track your package in real-time",
+  "home.actions.estimateDesc": "Calculate shipping costs instantly"
 }
