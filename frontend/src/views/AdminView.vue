@@ -2,6 +2,11 @@
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useAuthStore } from "../stores/auth";
+import UiCard from "../components/ui/UiCard.vue";
+import UiList from "../components/ui/UiList.vue";
+import UiNotice from "../components/ui/UiNotice.vue";
+import UiPageShell from "../components/ui/UiPageShell.vue";
+import { useFullscreen } from "../composables/useFullscreen";
 import {
   api,
   type AdminContractApplication,
@@ -13,9 +18,7 @@ import {
 const { t, locale } = useI18n();
 const auth = useAuthStore();
 
-const adminName = computed(() => auth.user?.user_name || t("admin.hero.fallbackName"));
-const adminEmail = computed(() => auth.user?.email || "admin@example.com");
-const envMode = import.meta.env.MODE || "development";
+// Admin overview is always visible; the workbench switches between sections below.
 
 const buildSampleUsers = (): AdminUserRecord[] => [
   { id: "u-driver", user_name: t("admin.samples.driver"), email: "driver_hub_1@example.com", user_class: "driver", user_type: "employee", address: "HUB_1", status: "active" },
@@ -115,6 +118,30 @@ const createForm = reactive({
 
 const userStats = ref<{ tasks_completed: number; packages_processed: number; exceptions_reported: number } | null>(null);
 const userActionLoading = ref(false);
+
+const pendingContractsCount = computed(() => contracts.list.filter((c) => c.status === "pending").length);
+const unresolvedErrorsCount = computed(() => errors.list.filter((e) => !e.resolved).length);
+
+async function refreshAll() {
+  await Promise.all([loadUsers(), loadContracts(), loadErrors()]);
+}
+
+type AdminWorkbenchTab = "billing" | "errors" | "contracts" | "users";
+const workbenchTab = ref<AdminWorkbenchTab>("contracts");
+
+const workbenchEl = ref<HTMLElement | null>(null);
+const { isSupported: workbenchFullscreenSupported, isFullscreen: workbenchFullscreen, toggle: toggleWorkbenchFullscreen } =
+  useFullscreen(workbenchEl);
+
+const selectWorkbenchTab = (tab: AdminWorkbenchTab) => {
+  workbenchTab.value = tab;
+  users.selectedId = "";
+  contracts.expandedId = "";
+  userStats.value = null;
+  contracts.feedback = "";
+  contracts.error = "";
+  errors.error = "";
+};
 
 const userClassLabel = (role: string) => t(`admin.userClass.${role}`, role);
 const statusLabel = (status?: string) => t(`admin.status.${status ?? "active"}`, status ?? "");
@@ -361,106 +388,142 @@ watch(
 </script>
 
 <template>
-  <section class="page-shell admin-hero">
-    <div class="hero-copy">
-      <p class="eyebrow">{{ t('admin.hero.eyebrow') }}</p>
-      <h1>{{ t('admin.hero.title') }}</h1>
-      <p class="lede">{{ t('admin.hero.lede') }}</p>
-      <div class="pill-row">
-        <span class="pill">{{ t('admin.hero.login', { email: adminEmail }) }}</span>
-        <span class="pill pill--success">{{ t('admin.hero.role', { role: auth.user?.user_class ?? 'admin' }) }}</span>
-        <span class="pill pill--muted">{{ t('admin.hero.env', { env: envMode }) }}</span>
-      </div>
-    </div>
-    <div class="card hero-side">
-      <p class="eyebrow">{{ t('admin.hero.quick') }}</p>
-      <ul class="hero-list">
-        <li>{{ t('admin.hero.stats.cycle', { cycle: billing.cycle }) }}</li>
-        <li>{{ t('admin.hero.stats.pendingContracts', { count: contracts.list.filter((c) => c.status === 'pending').length }) }}</li>
-        <li>{{ t('admin.hero.stats.users', { count: users.list.length || 0 }) }}</li>
-      </ul>
-      <button class="ghost-btn small-btn" type="button" :disabled="errors.loading" @click="loadErrors">
-        {{ t('admin.actions.refreshErrors') }}
-      </button>
-    </div>
-  </section>
+  <UiPageShell :eyebrow="t('admin.hero.eyebrow')" :title="t('admin.hero.title')" :lede="t('admin.hero.lede')">
 
-  <section class="page-shell grid two-col">
-    <div class="card">
-      <div class="card-head">
-        <div>
+    <section style="margin-top: 12px">
+      <div class="admin-mini-stats" :aria-label="t('admin.tabs.overview')">
+        <div class="mini-stat" role="group">
           <p class="eyebrow">{{ t('admin.billing.eyebrow') }}</p>
-          <h2>{{ t('admin.billing.title') }}</h2>
-          <p class="hint">{{ t('admin.billing.hint') }}</p>
+          <p class="stat-value">{{ billing.cycle }}</p>
         </div>
-        <button class="primary-btn small-btn" type="button" :disabled="billing.loading" @click="settleBilling">
-          {{ billing.loading ? t('common.submitting') : t('admin.billing.cta') }}
-        </button>
-      </div>
-      <div class="form-row">
-        <label class="form-field">
-          <span>{{ t('admin.billing.fields.cycle') }}</span>
-          <input v-model="billing.cycle" type="month" />
-        </label>
-      </div>
-      <p v-if="billing.message" class="hint success">{{ billing.message }}</p>
-      <p v-if="billing.error" class="hint error">{{ billing.error }}</p>
-    </div>
-
-    <div class="card">
-      <div class="card-head">
-        <div>
+        <div class="mini-stat" role="group">
           <p class="eyebrow">{{ t('admin.errors.eyebrow') }}</p>
-          <h2>{{ t('admin.errors.title') }}</h2>
+          <p class="stat-value">{{ unresolvedErrorsCount }}</p>
         </div>
-        <button class="ghost-btn small-btn" type="button" :disabled="errors.loading" @click="loadErrors">
-          {{ t('admin.actions.refreshErrors') }}
-        </button>
+        <div class="mini-stat" role="group">
+          <p class="eyebrow">{{ t('admin.contracts.eyebrow') }}</p>
+          <p class="stat-value">{{ pendingContractsCount }}</p>
+        </div>
+        <div class="mini-stat" role="group">
+          <p class="eyebrow">{{ t('admin.users.eyebrow') }}</p>
+          <p class="stat-value">{{ users.list.length || 0 }}</p>
+        </div>
       </div>
-      <div class="filters">
-        <select v-model="errors.level">
-          <option value="all">{{ t('admin.errors.filters.level.all') }}</option>
-          <option value="info">{{ t('admin.errors.filters.level.info') }}</option>
-          <option value="warning">{{ t('admin.errors.filters.level.warning') }}</option>
-          <option value="error">{{ t('admin.errors.filters.level.error') }}</option>
-          <option value="critical">{{ t('admin.errors.filters.level.critical') }}</option>
-        </select>
-        <select v-model="errors.resolved">
-          <option value="all">{{ t('admin.errors.filters.resolved.all') }}</option>
-          <option value="false">{{ t('admin.errors.filters.resolved.false') }}</option>
-          <option value="true">{{ t('admin.errors.filters.resolved.true') }}</option>
-        </select>
-        <button class="ghost-btn small-btn" type="button" :disabled="errors.loading" @click="loadErrors">
-          {{ t('admin.actions.applyFilters') }}
-        </button>
-      </div>
-      <p v-if="errors.loading" class="hint">{{ t('common.loading') }}</p>
-      <p v-if="errors.error" class="hint error">{{ errors.error }}</p>
-      <template v-if="!errors.loading && errors.list.length">
-        <ul class="list">
-          <li v-for="err in errors.list" :key="err.id" class="row">
-            <div>
-              <strong>{{ err.code }}</strong>
-              <p class="hint">{{ err.message }}</p>
-              <p class="hint">{{ t('admin.errors.occurredAt', { time: formatDateTime(err.occurred_at) }) }}</p>
-              <p v-if="err.details" class="hint">{{ t('admin.errors.detail', { detail: err.details }) }}</p>
-            </div>
-            <div class="pill-stack">
-              <span class="pill pill--muted">{{ err.level }}</span>
-              <span :class="['pill', err.resolved ? 'pill--success' : 'pill--alert']">
-                {{ err.resolved ? t('admin.errors.resolved') : t('admin.errors.unresolved') }}
-              </span>
-            </div>
-          </li>
-        </ul>
-      </template>
-      <p v-else-if="!errors.loading" class="hint">{{ t('admin.errors.empty') }}</p>
-    </div>
-  </section>
+    </section>
 
-  <section class="page-shell">
-    <header class="section-head">
-      <div>
+    <div ref="workbenchEl" class="admin-workbench-shell" :class="{ fullscreen: workbenchFullscreen }">
+      <div class="admin-tabs" style="margin-top: 12px">
+        <div class="admin-workbench-bar">
+          <div class="tab-switch" role="tablist" aria-label="admin workbench">
+            <button type="button" :class="{ active: workbenchTab === 'billing' }" @click="selectWorkbenchTab('billing')">
+              {{ t('admin.billing.title') }}
+            </button>
+            <button type="button" :class="{ active: workbenchTab === 'errors' }" @click="selectWorkbenchTab('errors')">
+              {{ t('admin.errors.title') }}
+              <span v-if="unresolvedErrorsCount > 0" class="tab-count">{{ unresolvedErrorsCount }}</span>
+            </button>
+            <button type="button" :class="{ active: workbenchTab === 'contracts' }" @click="selectWorkbenchTab('contracts')">
+              {{ t('admin.contracts.title') }}
+              <span v-if="pendingContractsCount > 0" class="tab-count">{{ pendingContractsCount }}</span>
+            </button>
+            <button type="button" :class="{ active: workbenchTab === 'users' }" @click="selectWorkbenchTab('users')">
+              {{ t('admin.users.title') }}
+            </button>
+          </div>
+          <div class="admin-workbench-actions">
+            <button class="ghost-btn small-btn" type="button" @click="refreshAll">
+              {{ t('admin.overview.actions.refresh') }}
+            </button>
+            <button
+              v-if="workbenchFullscreenSupported"
+              class="ghost-btn small-btn"
+              type="button"
+              @click="toggleWorkbenchFullscreen"
+            >
+              {{ t(workbenchFullscreen ? 'map.fullscreen.exit' : 'map.fullscreen.enter') }}
+            </button>
+          </div>
+        </div>
+      </div>
+
+    <section v-if="workbenchTab === 'billing'" style="margin-top: 12px">
+      <UiCard>
+        <div class="card-head">
+          <div>
+            <p class="eyebrow">{{ t('admin.billing.eyebrow') }}</p>
+            <h2>{{ t('admin.billing.title') }}</h2>
+            <p class="hint">{{ t('admin.billing.hint') }}</p>
+          </div>
+          <button class="primary-btn small-btn" type="button" :disabled="billing.loading" @click="settleBilling">
+            {{ billing.loading ? t('common.submitting') : t('admin.billing.cta') }}
+          </button>
+        </div>
+        <div class="form-row">
+          <label class="form-field">
+            <span>{{ t('admin.billing.fields.cycle') }}</span>
+            <input v-model="billing.cycle" type="month" />
+          </label>
+        </div>
+        <UiNotice v-if="billing.message" tone="success" style="margin-top: 10px">{{ billing.message }}</UiNotice>
+        <UiNotice v-if="billing.error" tone="error" role="alert" style="margin-top: 10px">{{ billing.error }}</UiNotice>
+      </UiCard>
+    </section>
+
+    <section v-else-if="workbenchTab === 'errors'" style="margin-top: 12px">
+      <UiCard>
+        <div class="card-head">
+          <div>
+            <p class="eyebrow">{{ t('admin.errors.eyebrow') }}</p>
+            <h2>{{ t('admin.errors.title') }}</h2>
+          </div>
+          <button class="ghost-btn small-btn" type="button" :disabled="errors.loading" @click="loadErrors">
+            {{ t('admin.actions.refreshErrors') }}
+          </button>
+        </div>
+        <div class="filters">
+          <select v-model="errors.level">
+            <option value="all">{{ t('admin.errors.filters.level.all') }}</option>
+            <option value="info">{{ t('admin.errors.filters.level.info') }}</option>
+            <option value="warning">{{ t('admin.errors.filters.level.warning') }}</option>
+            <option value="error">{{ t('admin.errors.filters.level.error') }}</option>
+            <option value="critical">{{ t('admin.errors.filters.level.critical') }}</option>
+          </select>
+          <select v-model="errors.resolved">
+            <option value="all">{{ t('admin.errors.filters.resolved.all') }}</option>
+            <option value="false">{{ t('admin.errors.filters.resolved.false') }}</option>
+            <option value="true">{{ t('admin.errors.filters.resolved.true') }}</option>
+          </select>
+          <button class="ghost-btn small-btn" type="button" :disabled="errors.loading" @click="loadErrors">
+            {{ t('admin.actions.applyFilters') }}
+          </button>
+        </div>
+        <p v-if="errors.loading" class="hint">{{ t('common.loading') }}</p>
+        <UiNotice v-if="errors.error" tone="error" role="alert" style="margin-top: 10px">{{ errors.error }}</UiNotice>
+        <template v-if="!errors.loading && errors.list.length">
+          <UiList variant="plain" as="ul" style="margin-top: 10px">
+            <li v-for="err in errors.list" :key="err.id" class="row">
+              <div>
+                <strong>{{ err.code }}</strong>
+                <p class="hint">{{ err.message }}</p>
+                <p class="hint">{{ t('admin.errors.occurredAt', { time: formatDateTime(err.occurred_at) }) }}</p>
+                <p v-if="err.details" class="hint">{{ t('admin.errors.detail', { detail: err.details }) }}</p>
+              </div>
+              <div class="pill-stack">
+                <span class="pill pill--muted">{{ err.level }}</span>
+                <span :class="['pill', err.resolved ? 'pill--success' : 'pill--alert']">
+                  {{ err.resolved ? t('admin.errors.resolved') : t('admin.errors.unresolved') }}
+                </span>
+              </div>
+            </li>
+          </UiList>
+        </template>
+        <p v-else-if="!errors.loading" class="hint">{{ t('admin.errors.empty') }}</p>
+      </UiCard>
+    </section>
+
+  <section v-else-if="workbenchTab === 'contracts'" style="margin-top: 12px">
+    <header class="admin-section-head">
+      <div class="section-header" style="margin: 0">
         <p class="eyebrow">{{ t('admin.contracts.eyebrow') }}</p>
         <h2>{{ t('admin.contracts.title') }}</h2>
         <p class="hint">{{ t('admin.contracts.hint') }}</p>
@@ -478,9 +541,10 @@ watch(
       </div>
     </header>
     <p v-if="contracts.loading" class="hint">{{ t('common.loading') }}</p>
-    <p v-if="contracts.error" class="hint error">{{ contracts.error }}</p>
+    <UiNotice v-if="contracts.error" tone="error" role="alert" style="margin-top: 10px">{{ contracts.error }}</UiNotice>
     <template v-if="!contracts.loading && contracts.list.length">
-      <div class="card list">
+      <UiCard style="margin-top: 10px">
+        <UiList variant="plain" as="div">
         <div
           v-for="app in contracts.list"
           :key="app.id"
@@ -528,17 +592,18 @@ watch(
               </div>
             </div>
             <p v-else class="hint">{{ t('admin.contracts.completed', { status: app.status }) }}</p>
-            <p v-if="contracts.feedback" class="hint success">{{ contracts.feedback }}</p>
+            <UiNotice v-if="contracts.feedback" tone="success" style="margin-top: 10px">{{ contracts.feedback }}</UiNotice>
           </div>
         </div>
-      </div>
+        </UiList>
+      </UiCard>
     </template>
     <p v-else-if="!contracts.loading" class="hint">{{ t('admin.contracts.empty') }}</p>
   </section>
 
-  <section class="page-shell">
-    <header class="section-head">
-      <div>
+  <section v-else-if="workbenchTab === 'users'" style="margin-top: 12px">
+    <header class="admin-section-head">
+      <div class="section-header" style="margin: 0">
         <p class="eyebrow">{{ t('admin.users.eyebrow') }}</p>
         <h2>{{ t('admin.users.title') }}</h2>
         <p class="hint">{{ t('admin.users.hint') }}</p>
@@ -564,7 +629,8 @@ watch(
       </div>
     </header>
 
-    <div class="card">
+    <div class="admin-stack" style="margin-top: 10px">
+    <UiCard>
       <p class="eyebrow">{{ t('admin.users.create.title') }}</p>
       <div class="form-grid">
         <label class="form-field">
@@ -601,82 +667,89 @@ watch(
         <button class="primary-btn" type="button" :disabled="users.creating" @click="createUser">
           {{ users.creating ? t('common.submitting') : t('admin.users.create.cta') }}
         </button>
-        <p v-if="users.actionMessage" class="hint success">{{ users.actionMessage }}</p>
-        <p v-if="users.actionError" class="hint error">{{ users.actionError }}</p>
       </div>
-    </div>
+      <UiNotice v-if="users.actionMessage" tone="success" style="margin-top: 10px">{{ users.actionMessage }}</UiNotice>
+      <UiNotice v-if="users.actionError" tone="error" role="alert" style="margin-top: 10px">{{ users.actionError }}</UiNotice>
+    </UiCard>
 
-    <div class="card list">
+    <UiCard>
       <p v-if="users.loading" class="hint">{{ t('common.loading') }}</p>
-      <p v-if="users.error" class="hint error">{{ users.error }}</p>
+      <UiNotice v-if="users.error" tone="error" role="alert" style="margin-top: 10px">{{ users.error }}</UiNotice>
       <template v-if="!users.loading && users.list.length">
-        <div
-          v-for="user in users.list"
-          :key="user.id"
-          class="row user-row"
-          :class="{ active: users.selectedId === user.id }"
-        >
-          <button class="row-btn" type="button" @click="selectUser(user.id)">
-            <div>
-              <strong>{{ user.user_name }}</strong>
-              <p class="hint">{{ user.email }}</p>
-              <p class="hint">{{ t('admin.users.node', { node: user.address || '--' }) }}</p>
-            </div>
-            <div class="pill-stack">
-              <span class="pill pill--muted">{{ userClassLabel(user.user_class) || user.user_class }}</span>
-              <span :class="['pill', statusTone(user.status)]">{{ statusLabel(user.status) || user.status }}</span>
-            </div>
-          </button>
+        <UiList variant="plain" as="div">
+          <div
+            v-for="user in users.list"
+            :key="user.id"
+            class="row user-row"
+            :class="{ active: users.selectedId === user.id }"
+          >
+            <button class="row-btn" type="button" @click="selectUser(user.id)">
+              <div>
+                <strong>{{ user.user_name }}</strong>
+                <p class="hint">{{ user.email }}</p>
+                <p class="hint">{{ t('admin.users.node', { node: user.address || '--' }) }}</p>
+              </div>
+              <div class="pill-stack">
+                <span class="pill pill--muted">{{ userClassLabel(user.user_class) || user.user_class }}</span>
+                <span :class="['pill', statusTone(user.status)]">{{ statusLabel(user.status) || user.status }}</span>
+              </div>
+            </button>
 
-          <div v-if="users.selectedId === user.id" class="panel">
-            <div class="actions">
-              <button class="ghost-btn small-btn" type="button" :disabled="userActionLoading" @click="toggleUserStatus(user)">
-                {{ user.status === 'active' ? t('admin.users.actions.suspend') : t('admin.users.actions.activate') }}
-              </button>
-              <button class="ghost-btn small-btn" type="button" :disabled="userActionLoading" @click="resetPassword(user)">
-                {{ t('admin.users.actions.resetPassword') }}
-              </button>
-              <button
-                class="ghost-btn small-btn"
-                type="button"
-                :disabled="userActionLoading || user.user_class !== 'driver'"
-                @click="assignVehicle(user)"
-              >
-                {{ t('admin.users.actions.assignVehicle') }}
-              </button>
-              <button class="ghost-btn small-btn" type="button" :disabled="userActionLoading" @click="fetchUserStats(user)">
-                {{ t('admin.users.actions.stats') }}
-              </button>
-            </div>
-            <p v-if="users.actionMessage" class="hint success">{{ users.actionMessage }}</p>
-            <p v-if="users.actionError" class="hint error">{{ users.actionError }}</p>
-            <div v-if="userStats" class="stats">
-              <p class="hint">{{ t('admin.users.stats.tasks', { count: userStats.tasks_completed }) }}</p>
-              <p class="hint">{{ t('admin.users.stats.packages', { count: userStats.packages_processed }) }}</p>
-              <p class="hint">{{ t('admin.users.stats.exceptions', { count: userStats.exceptions_reported }) }}</p>
+            <div v-if="users.selectedId === user.id" class="panel">
+              <div class="actions">
+                <button
+                  class="ghost-btn small-btn"
+                  type="button"
+                  :disabled="userActionLoading"
+                  @click="toggleUserStatus(user)"
+                >
+                  {{ user.status === 'active' ? t('admin.users.actions.suspend') : t('admin.users.actions.activate') }}
+                </button>
+                <button
+                  class="ghost-btn small-btn"
+                  type="button"
+                  :disabled="userActionLoading"
+                  @click="resetPassword(user)"
+                >
+                  {{ t('admin.users.actions.resetPassword') }}
+                </button>
+                <button
+                  class="ghost-btn small-btn"
+                  type="button"
+                  :disabled="userActionLoading || user.user_class !== 'driver'"
+                  @click="assignVehicle(user)"
+                >
+                  {{ t('admin.users.actions.assignVehicle') }}
+                </button>
+                <button
+                  class="ghost-btn small-btn"
+                  type="button"
+                  :disabled="userActionLoading"
+                  @click="fetchUserStats(user)"
+                >
+                  {{ t('admin.users.actions.stats') }}
+                </button>
+              </div>
+              <UiNotice v-if="users.actionMessage" tone="success" style="margin-top: 10px">{{ users.actionMessage }}</UiNotice>
+              <UiNotice v-if="users.actionError" tone="error" role="alert" style="margin-top: 10px">{{ users.actionError }}</UiNotice>
+              <div v-if="userStats" class="stats" style="margin-top: 10px">
+                <p class="hint">{{ t('admin.users.stats.tasks', { count: userStats.tasks_completed }) }}</p>
+                <p class="hint">{{ t('admin.users.stats.packages', { count: userStats.packages_processed }) }}</p>
+                <p class="hint">{{ t('admin.users.stats.exceptions', { count: userStats.exceptions_reported }) }}</p>
+              </div>
             </div>
           </div>
-        </div>
+        </UiList>
       </template>
       <p v-else-if="!users.loading" class="hint">{{ t('admin.users.empty') }}</p>
+    </UiCard>
     </div>
   </section>
+  </div>
+  </UiPageShell>
 </template>
 
 <style scoped>
-.admin-hero {
-  display: grid;
-  grid-template-columns: 2fr 1fr;
-  gap: 14px;
-}
-
-.pill-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin: 10px 0 12px;
-}
-
 .pill {
   display: inline-flex;
   align-items: center;
@@ -703,23 +776,109 @@ watch(
   background: rgba(255, 255, 255, 0.55);
 }
 
-.hero-side {
+.admin-tabs {
+  display: flex;
+  justify-content: flex-start;
+  width: 100%;
+}
+
+.admin-workbench-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+.admin-workbench-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: flex-end;
+  flex: 0 0 auto;
+}
+
+.admin-workbench-shell.fullscreen {
+  margin-top: 0;
+  height: 100vh;
+  padding: 14px;
+  background: var(--surface-card);
+  overflow: auto;
+}
+
+.tab-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(200, 64, 93, 0.35);
+  background: rgba(239, 72, 111, 0.12);
+  color: var(--text-main);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.admin-mini-stats {
   display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 10px;
 }
 
-.hero-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: grid;
-  gap: 6px;
+.mini-stat {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--surface-stroke);
+  background: rgba(255, 255, 255, 0.78);
+  text-align: center;
 }
 
-.grid.two-col {
+.mini-stat:hover {
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.mini-stat:focus-visible {
+  outline: 2px solid rgba(165, 122, 99, 0.35);
+  outline-offset: 2px;
+}
+
+.mini-stat .eyebrow {
+  margin: 0;
+}
+
+.mini-stat .stat-value {
+  margin: 6px 0 0;
+  font-size: 20px;
+  font-weight: 800;
+  color: #3f2620;
+}
+
+.admin-mini-main {
+  min-width: 0;
+}
+
+.admin-mini-main strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-mini-main .hint {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   gap: 12px;
+}
+
+.admin-grid--two-col {
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
 }
 
 .card-head {
@@ -751,30 +910,22 @@ watch(
   gap: 10px;
 }
 
-.form-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 10px;
-}
-
-.form-field {
-  display: grid;
-  gap: 6px;
-}
-
-.form-field input,
-.form-field select,
-.form-field textarea {
-  padding: 10px 12px;
-  border-radius: 10px;
-  border: 1px solid var(--surface-stroke);
-  background: rgba(255, 255, 255, 0.86);
-  color: var(--text-main);
-}
-
 .form-field span {
   font-size: 13px;
   color: var(--text-muted);
+}
+
+.admin-section-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.admin-stack {
+  display: grid;
+  gap: 12px;
 }
 
 .actions {
@@ -783,14 +934,6 @@ watch(
   flex-wrap: wrap;
   align-items: center;
   margin-top: 8px;
-}
-
-.list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: grid;
-  gap: 8px;
 }
 
 .row {
@@ -851,19 +994,7 @@ watch(
   gap: 6px;
 }
 
-.hint.success {
-  color: #166534;
-}
-
-.hint.error {
-  color: #b91c1c;
-}
-
 @media (max-width: 860px) {
-  .admin-hero {
-    grid-template-columns: 1fr;
-  }
-
   .row-btn {
     align-items: flex-start;
   }

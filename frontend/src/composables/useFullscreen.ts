@@ -5,7 +5,21 @@ export function useFullscreen(targetEl: Ref<HTMLElement | null>) {
 
   const isSupported = computed(() => {
     const el = targetEl.value;
-    return Boolean(el?.requestFullscreen && document.exitFullscreen);
+    if (!el) return false;
+    const anyEl = el as unknown as {
+      requestFullscreen?: () => Promise<void> | void;
+      webkitRequestFullscreen?: () => Promise<void> | void;
+      msRequestFullscreen?: () => Promise<void> | void;
+    };
+    const anyDoc = document as unknown as {
+      exitFullscreen?: () => Promise<void> | void;
+    };
+    return Boolean(
+      (typeof anyEl.requestFullscreen === "function" ||
+        typeof anyEl.webkitRequestFullscreen === "function" ||
+        typeof anyEl.msRequestFullscreen === "function") &&
+        typeof anyDoc.exitFullscreen === "function",
+    );
   });
 
   const update = () => {
@@ -15,13 +29,22 @@ export function useFullscreen(targetEl: Ref<HTMLElement | null>) {
 
   const enter = async () => {
     const el = targetEl.value;
-    if (!el || !el.requestFullscreen) return;
-    await el.requestFullscreen();
+    if (!el) return;
+    const anyEl = el as unknown as {
+      requestFullscreen?: () => Promise<void> | void;
+      webkitRequestFullscreen?: () => Promise<void> | void;
+      msRequestFullscreen?: () => Promise<void> | void;
+    };
+
+    if (typeof anyEl.requestFullscreen === "function") return await anyEl.requestFullscreen();
+    if (typeof anyEl.webkitRequestFullscreen === "function") return await anyEl.webkitRequestFullscreen();
+    if (typeof anyEl.msRequestFullscreen === "function") return await anyEl.msRequestFullscreen();
   };
 
   const exit = async () => {
-    if (!document.exitFullscreen) return;
-    await document.exitFullscreen();
+    const anyDoc = document as unknown as { exitFullscreen?: () => Promise<void> | void };
+    if (typeof anyDoc.exitFullscreen !== "function") return;
+    await anyDoc.exitFullscreen();
   };
 
   const toggle = async () => {
