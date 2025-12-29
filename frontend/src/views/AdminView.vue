@@ -6,6 +6,7 @@ import UiCard from "../components/ui/UiCard.vue";
 import UiList from "../components/ui/UiList.vue";
 import UiNotice from "../components/ui/UiNotice.vue";
 import UiPageShell from "../components/ui/UiPageShell.vue";
+import { useFullscreen } from "../composables/useFullscreen";
 import {
   api,
   type AdminContractApplication,
@@ -127,6 +128,10 @@ async function refreshAll() {
 
 type AdminWorkbenchTab = "billing" | "errors" | "contracts" | "users";
 const workbenchTab = ref<AdminWorkbenchTab>("contracts");
+
+const workbenchEl = ref<HTMLElement | null>(null);
+const { isSupported: workbenchFullscreenSupported, isFullscreen: workbenchFullscreen, toggle: toggleWorkbenchFullscreen } =
+  useFullscreen(workbenchEl);
 
 const selectWorkbenchTab = (tab: AdminWorkbenchTab) => {
   workbenchTab.value = tab;
@@ -406,29 +411,40 @@ watch(
       </div>
     </section>
 
-    <div class="admin-tabs" style="margin-top: 12px">
-      <div class="admin-workbench-bar">
-        <div class="tab-switch" role="tablist" aria-label="admin workbench">
-          <button type="button" :class="{ active: workbenchTab === 'billing' }" @click="selectWorkbenchTab('billing')">
-            {{ t('admin.billing.title') }}
-          </button>
-          <button type="button" :class="{ active: workbenchTab === 'errors' }" @click="selectWorkbenchTab('errors')">
-            {{ t('admin.errors.title') }}
-            <span v-if="unresolvedErrorsCount > 0" class="tab-count">{{ unresolvedErrorsCount }}</span>
-          </button>
-          <button type="button" :class="{ active: workbenchTab === 'contracts' }" @click="selectWorkbenchTab('contracts')">
-            {{ t('admin.contracts.title') }}
-            <span v-if="pendingContractsCount > 0" class="tab-count">{{ pendingContractsCount }}</span>
-          </button>
-          <button type="button" :class="{ active: workbenchTab === 'users' }" @click="selectWorkbenchTab('users')">
-            {{ t('admin.users.title') }}
-          </button>
+    <div ref="workbenchEl" class="admin-workbench-shell" :class="{ fullscreen: workbenchFullscreen }">
+      <div class="admin-tabs" style="margin-top: 12px">
+        <div class="admin-workbench-bar">
+          <div class="tab-switch" role="tablist" aria-label="admin workbench">
+            <button type="button" :class="{ active: workbenchTab === 'billing' }" @click="selectWorkbenchTab('billing')">
+              {{ t('admin.billing.title') }}
+            </button>
+            <button type="button" :class="{ active: workbenchTab === 'errors' }" @click="selectWorkbenchTab('errors')">
+              {{ t('admin.errors.title') }}
+              <span v-if="unresolvedErrorsCount > 0" class="tab-count">{{ unresolvedErrorsCount }}</span>
+            </button>
+            <button type="button" :class="{ active: workbenchTab === 'contracts' }" @click="selectWorkbenchTab('contracts')">
+              {{ t('admin.contracts.title') }}
+              <span v-if="pendingContractsCount > 0" class="tab-count">{{ pendingContractsCount }}</span>
+            </button>
+            <button type="button" :class="{ active: workbenchTab === 'users' }" @click="selectWorkbenchTab('users')">
+              {{ t('admin.users.title') }}
+            </button>
+          </div>
+          <div class="admin-workbench-actions">
+            <button class="ghost-btn small-btn" type="button" @click="refreshAll">
+              {{ t('admin.overview.actions.refresh') }}
+            </button>
+            <button
+              v-if="workbenchFullscreenSupported"
+              class="ghost-btn small-btn"
+              type="button"
+              @click="toggleWorkbenchFullscreen"
+            >
+              {{ t(workbenchFullscreen ? 'map.fullscreen.exit' : 'map.fullscreen.enter') }}
+            </button>
+          </div>
         </div>
-        <button class="ghost-btn small-btn" type="button" @click="refreshAll">
-          {{ t('admin.overview.actions.refresh') }}
-        </button>
       </div>
-    </div>
 
     <section v-if="workbenchTab === 'billing'" style="margin-top: 12px">
       <UiCard>
@@ -729,6 +745,7 @@ watch(
     </UiCard>
     </div>
   </section>
+  </div>
   </UiPageShell>
 </template>
 
@@ -762,13 +779,32 @@ watch(
 .admin-tabs {
   display: flex;
   justify-content: flex-start;
+  width: 100%;
 }
 
 .admin-workbench-bar {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 10px;
   flex-wrap: wrap;
+  width: 100%;
+}
+
+.admin-workbench-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: flex-end;
+  flex: 0 0 auto;
+}
+
+.admin-workbench-shell.fullscreen {
+  margin-top: 0;
+  height: 100vh;
+  padding: 14px;
+  background: var(--surface-card);
+  overflow: auto;
 }
 
 .tab-count {
