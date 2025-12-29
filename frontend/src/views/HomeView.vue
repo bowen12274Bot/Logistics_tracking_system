@@ -56,7 +56,7 @@ const { t } = useI18n()
 
 <style scoped>
 .home-page {
-  min-height: 100vh;
+  min-height: 75vh;
   display: flex;
   align-items: center;
   justify-content: center;
