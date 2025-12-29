@@ -6,6 +6,7 @@ import { useI18n } from "vue-i18n";
 import { api, type WarehouseExceptionRecord, type WarehousePackageRecord } from "../services/api";
 import { useFullscreen } from "../composables/useFullscreen";
 import { exceptionReasonLabel, selectableReasonsFor } from "../lib/exceptionReasons";
+import { formatDateTime } from "../utils/packageDisplay";
 import UiCard from "../components/ui/UiCard.vue";
 import UiList from "../components/ui/UiList.vue";
 import UiModal from "../components/ui/UiModal.vue";
@@ -21,7 +22,7 @@ const loading = ref(true);
 const busy = ref(false);
 const error = ref<string | null>(null);
 const toast = useToasts();
-const { t } = useI18n();
+const { t, locale } = useI18n();
 
 const activeTab = ref<WarehouseTab>("await_receive");
 
@@ -842,12 +843,13 @@ watch(
                           d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm0 6a1 1 0 0 1 1 1v3.6l2.2 1.3a1 1 0 0 1-1 1.7l-2.7-1.6A1 1 0 0 1 11 13V9a1 1 0 0 1 1-1Z"
                         />
                       </svg>
-                      {{ p.latest_event.events_at ?? "-" }}
+                      {{ formatDateTime(p.latest_event.events_at, locale) }}
                     </span>
                   </div>
                   <button class="ghost-btn small-btn" type="button" :disabled="busy" @click="startException(p)">{{ t("warehouse.actions.exception") }}</button>
                 </div>
               </div>
+              <!--
               <div class="hint wh-wrap wh-receive-route">
                 <svg class="wh-inline-icon" viewBox="0 0 24 24" aria-hidden="true">
                   <path
@@ -886,6 +888,7 @@ watch(
                   `${p.sender_address ?? "-"} → ${p.receiver_address ?? "-"}`
                 }}
               </div>
+              -->
             </li>
           </UiList>
         </UiCard>
@@ -1287,12 +1290,12 @@ watch(
                         d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm0 6a1 1 0 0 1 1 1v3.6l2.2 1.3a1 1 0 0 1-1 1.7l-2.7-1.6A1 1 0 0 1 11 13V9a1 1 0 0 1 1-1Z"
                       />
                     </svg>
-                    {{ p.latest_event.events_at ?? "-" }}
+                    {{ formatDateTime(p.latest_event.events_at, locale) }}
                   </span>
                   <button class="ghost-btn small-btn" type="button" :disabled="busy" @click="startException(p)">{{ t("warehouse.actions.exception") }}</button>
                 </div>
               </div>
-              <div class="hint wh-wrap">{{ p.latest_event.delivery_details ?? "-" }}</div>
+              <!--<div class="hint wh-wrap">{{ p.latest_event.delivery_details ?? "-" }}</div>-->
             </li>
           </UiList>
         </UiCard>

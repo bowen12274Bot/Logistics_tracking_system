@@ -37,7 +37,7 @@ type TaskItem = ExceptionTask | ContractTask;
 const activeView = ref<ViewKey>("exceptions");
 const selectedKey = ref<string | null>(null);
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
 
 const viewOrder: ViewKey[] = ["exceptions", "contracts", "handled"];
 const exceptionsTabRef = ref<HTMLButtonElement | null>(null);
@@ -91,7 +91,8 @@ const formatDateTime = (value?: string | null) => {
   if (!value) return "-";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString();
+  const targetLocale = locale.value === 'en-US' ? 'en-US' : 'zh-TW';
+  return date.toLocaleString(targetLocale);
 };
 
 const normalizeReasonCode = (code?: string | null) => {

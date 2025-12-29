@@ -5,13 +5,14 @@ export const formatMoney = (value?: number | null) => {
   return new Intl.NumberFormat().format(Number.isFinite(amount) ? amount : 0);
 };
 
-export const formatDateTime = (value?: string | null) => {
+export const formatDateTime = (value?: string | null, locale?: string) => {
   const raw = String(value ?? "").trim();
   if (!raw) return "--";
   const normalized = raw.includes("T") ? raw : raw.replace(" ", "T");
   const date = new Date(normalized);
   if (Number.isNaN(date.getTime())) return raw;
-  return date.toLocaleString();
+  const targetLocale = locale === 'en-US' ? 'en-US' : 'zh-TW';
+  return date.toLocaleString(targetLocale);
 };
 
 export const getDescription = (pkg: PackageRecord): Record<string, any> => {

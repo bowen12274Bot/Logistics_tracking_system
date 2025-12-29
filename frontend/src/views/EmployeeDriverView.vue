@@ -12,7 +12,7 @@ import { selectableReasonsFor } from "../lib/exceptionReasons";
 import { toastFromApiError } from "../services/errorToast";
 import { formatDateTime, formatMoney } from "../utils/packageDisplay";
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
 const router = useRouter();
 
 const loading = ref(true);
@@ -278,7 +278,7 @@ onMounted(() => {
                   <template v-if="r.description"> · {{ r.description }}</template>
                 </div>
                 <div class="hint">
-                  {{ t("driver.exceptions.reportedAt", { time: formatDateTime(r.reported_at) }) }}
+                  {{ t("driver.exceptions.reportedAt", { time: formatDateTime(r.reported_at, locale) }) }}
                   ·
                   {{
                     t("driver.exceptions.status", {
@@ -306,7 +306,7 @@ onMounted(() => {
                   <template v-if="r.description"> · {{ r.description }}</template>
                 </div>
                 <div class="hint">
-                  {{ t("driver.exceptions.reportedAt", { time: formatDateTime(r.reported_at) }) }}
+                  {{ t("driver.exceptions.reportedAt", { time: formatDateTime(r.reported_at, locale) }) }}
                   ·
                   {{
                     t("driver.exceptions.status", {
@@ -339,7 +339,7 @@ onMounted(() => {
                   {{ c.package_status === "exception" ? t("driver.exceptions.exception") : t("driver.cargo.inTransit") }}
                 </span>
               </div>
-              <div class="hint">{{ t("driver.cargo.loadedAt", { time: formatDateTime(c.loaded_at) }) }}</div>
+              <div class="hint">{{ t("driver.cargo.loadedAt", { time: formatDateTime(c.loaded_at, locale) }) }}</div>
             </li>
           </UiList>
         </div>

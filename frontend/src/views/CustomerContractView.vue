@@ -379,7 +379,7 @@ onMounted(() => {
               >
                 <button type="button" class="row-btn" @click="toggleItem(item.package_id)">
                   <span class="tracking">{{ t('contract.bill.packages.prefix') }} | {{ trackingLabel(item.tracking_number) }}</span>
-                  <span class="meta">{{ item.shipped_at ? formatDateTime(item.shipped_at) : '--' }}</span>
+                  <span class="meta">{{ item.shipped_at ? formatDateTime(item.shipped_at, locale) : '--' }}</span>
                 </button>
 
                 <div v-if="expandedItemIds.has(item.package_id)" class="package-detail">
@@ -419,7 +419,7 @@ onMounted(() => {
                           {{ t('contract.bill.packages.notes') }}：{{ resolveNotes(packageDetails[item.package_id]!) }}
                         </p>
                         <p class="meta">{{ t('contract.bill.packages.cost') }}：{{ formatMoney(item.cost) }} {{ t('payment.currency') }}</p>
-                        <p class="meta">{{ t('contract.bill.packages.shippedAt') }}：{{ item.shipped_at ? formatDateTime(item.shipped_at) : '--' }}</p>
+                        <p class="meta">{{ t('contract.bill.packages.shippedAt') }}：{{ item.shipped_at ? formatDateTime(item.shipped_at, locale) : '--' }}</p>
                       </template>
                     </div>
                   </template>

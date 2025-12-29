@@ -307,7 +307,8 @@ const formatCreatedAt = (value?: string | number | Date) => {
   if (Number.isNaN(date.getTime())) {
     return typeof value === 'string' ? value : t('payment.justCreated')
   }
-  return date.toLocaleString()
+  const targetLocale = locale.value === 'en-US' ? 'en-US' : 'zh-TW'
+  return date.toLocaleString(targetLocale)
 }
 
 const resolveCreatedAt = (pkg: StoredPackage) => {

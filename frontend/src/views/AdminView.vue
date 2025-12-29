@@ -151,7 +151,8 @@ const formatDateTime = (value?: string | null) => {
   if (!value) return "--";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString();
+  const targetLocale = locale.value === 'en-US' ? 'en-US' : 'zh-TW';
+  return date.toLocaleString(targetLocale);
 };
 
 const loadUsers = async () => {

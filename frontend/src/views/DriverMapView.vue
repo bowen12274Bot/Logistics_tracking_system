@@ -17,7 +17,7 @@ const truckIconUrl = new URL("../assets/truck.png", import.meta.url).href;
 type ViewBox = { x: number; y: number; w: number; h: number };
 
 const route = useRoute();
-const { t } = useI18n();
+const { t, locale } = useI18n();
 
 const loading = ref(true);
 const error = ref<string | null>(null);
@@ -482,7 +482,8 @@ async function refreshArriveData() {
     assignedTasks.value = assignedRes.tasks ?? [];
     handoffTasks.value = handoffRes.tasks ?? [];
     cargo.value = cargoRes.cargo ?? [];
-    lastSyncAt.value = new Date().toLocaleString();
+    const targetLocale = locale.value === 'en-US' ? 'en-US' : 'zh-TW';
+    lastSyncAt.value = new Date().toLocaleString(targetLocale);
   } catch (e: any) {
     arriveError.value = String(e?.message ?? e);
     toastFromApiError(e, arriveError.value);
