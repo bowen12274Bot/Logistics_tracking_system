@@ -24,7 +24,6 @@ describe('AdminView i18n', () => {
   beforeEach(() => {
     const pinia = createPinia()
     setActivePinia(pinia)
-    // default tests run with zh-TW from setup file
   })
 
   it('updates fallback data text when locale switches', async () => {
@@ -39,6 +38,12 @@ describe('AdminView i18n', () => {
       },
     })
 
+    const selectTab = (wrapper.vm as any).selectWorkbenchTab
+    if (typeof selectTab === 'function') {
+      selectTab('users')
+      await nextTick()
+    }
+
     const reload = (wrapper.vm as any).loadUsers
     if (typeof reload === 'function') {
       await reload()
@@ -49,18 +54,20 @@ describe('AdminView i18n', () => {
       await nextTick()
     }
 
-    const firstUser = wrapper.find('.user-row strong')
-    const statusPill = wrapper.find('.user-row .pill-stack .pill:nth-child(2)')
+    expect(wrapper.find('.user-row strong').exists()).toBe(true)
+    expect(wrapper.find('.user-row strong').text()).toContain('司機')
+    expect(wrapper.find('.user-row .pill-stack .pill:nth-child(2)').text()).toContain('啟用')
 
-    expect(firstUser.exists()).toBe(true)
-    expect(firstUser.text()).toContain('司機')
-    expect(statusPill.text()).toContain('啟用')
-
+    const previousLocale = i18n.global.locale.value
     i18n.global.locale.value = 'en-US'
     await nextTick()
     await flushPromises()
+    await nextTick()
 
     expect(wrapper.find('.user-row strong').text()).toContain('Driver')
     expect(wrapper.find('.user-row .pill-stack .pill:nth-child(2)').text()).toContain('Active')
+
+    i18n.global.locale.value = previousLocale
   })
 })
+
