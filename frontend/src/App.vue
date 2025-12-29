@@ -48,6 +48,9 @@ const userRoleLabel = computed(() => {
   return key ? t(key) : ''
 })
 
+const isNavOpen = ref(false)
+const topbarRoot = ref<HTMLElement | null>(null)
+
 const isMenuOpen = ref(false)
 const menuRoot = ref<HTMLElement | null>(null)
 
@@ -60,21 +63,40 @@ const closeMenu = () => {
   isMenuOpen.value = false
 }
 
+const closeNav = () => {
+  isNavOpen.value = false
+}
+
 const toggleMenu = () => {
   isMenuOpen.value = !isMenuOpen.value
 }
 
+const toggleNav = () => {
+  isNavOpen.value = !isNavOpen.value
+  if (isNavOpen.value) closeMenu()
+}
+
 const onDocumentPointerDown = (event: MouseEvent) => {
-  if (!isMenuOpen.value) return
-  const root = menuRoot.value
-  if (!root) return
-  if (event.target instanceof Node && root.contains(event.target)) return
-  closeMenu()
+  const target = event.target instanceof Node ? event.target : null
+  if (!target) return
+
+  if (isMenuOpen.value) {
+    const root = menuRoot.value
+    if (root && root.contains(target)) return
+    closeMenu()
+  }
+
+  if (isNavOpen.value) {
+    const root = topbarRoot.value
+    if (root && root.contains(target)) return
+    closeNav()
+  }
 }
 
 const onDocumentKeyDown = (event: KeyboardEvent) => {
-  if (!isMenuOpen.value) return
-  if (event.key === 'Escape') closeMenu()
+  if (event.key !== 'Escape') return
+  closeMenu()
+  closeNav()
 }
 
 onMounted(() => {
@@ -90,20 +112,37 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="app-shell">
-    <header class="topbar">
+    <header ref="topbarRoot" class="topbar">
       <div class="topbar-inner">
         <RouterLink to="/" class="brand" :aria-label="t('aria.brand')">
           <span class="brand-mark">{{ t('brand.name') }}</span>
           <span class="brand-sub">{{ t('brand.sub') }}</span>
         </RouterLink>
 
-        <nav class="nav-links" :aria-label="t('aria.mainNav')">
-          <RouterLink to="/">{{ t('nav.home') }}</RouterLink>
-          <RouterLink v-if="!isLoggedIn" to="/login">{{ t('nav.login') }}</RouterLink>
-          <RouterLink v-if="isLoggedIn && roleNav" :to="roleNav.to">{{ t(roleNav.labelKey) }}</RouterLink>
+        <nav id="topbar-nav" class="nav-links" :class="{ open: isNavOpen }" :aria-label="t('aria.mainNav')">
+          <RouterLink to="/" @click="closeNav">{{ t('nav.home') }}</RouterLink>
+          <RouterLink v-if="!isLoggedIn" to="/login" @click="closeNav">{{ t('nav.login') }}</RouterLink>
+          <RouterLink v-if="isLoggedIn && roleNav" :to="roleNav.to" @click="closeNav">{{ t(roleNav.labelKey) }}</RouterLink>
         </nav>
 
         <div class="topbar-actions">
+          <button
+            class="nav-toggle"
+            type="button"
+            :aria-label="t('aria.mainNav')"
+            aria-controls="topbar-nav"
+            :aria-expanded="isNavOpen"
+            @click="toggleNav"
+          >
+            <svg v-if="!isNavOpen" viewBox="0 0 24 24" fill="currentColor" width="18" height="18" aria-hidden="true">
+              <path d="M3 6h18v2H3V6Zm0 5h18v2H3v-2Zm0 5h18v2H3v-2Z" />
+            </svg>
+            <svg v-else viewBox="0 0 24 24" fill="currentColor" width="18" height="18" aria-hidden="true">
+              <path
+                d="M18.3 5.71 12 12l6.3 6.29-1.41 1.42L10.59 13.4 4.29 19.71 2.88 18.3 9.17 12 2.88 5.71 4.29 4.29l6.3 6.3 6.3-6.3 1.41 1.42Z"
+              />
+            </svg>
+          </button>
           <label class="locale-switch">
             <span class="sr-only">{{ t('aria.localeSwitch') }}</span>
             <select v-model="locale">
@@ -159,7 +198,6 @@ onBeforeUnmount(() => {
               </button>
             </div>
           </div>
-          <RouterLink v-else to="/login" class="primary-btn small-btn">{{ t('nav.login') }}</RouterLink>
         </div>
       </div>
     </header>
@@ -259,6 +297,23 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 10px;
   justify-self: end;
+}
+
+.nav-toggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 36px;
+  border-radius: 999px;
+  border: 1px solid rgba(244, 182, 194, 0.55);
+  background: rgba(244, 182, 194, 0.22);
+  color: #3f2620;
+  cursor: pointer;
+}
+
+.nav-toggle:hover {
+  background: rgba(244, 182, 194, 0.35);
 }
 
 .locale-switch select {
@@ -394,18 +449,67 @@ onBeforeUnmount(() => {
 
 @media (max-width: 768px) {
   .topbar-inner {
-    grid-template-columns: 1fr;
-    justify-items: start;
+    padding: 10px 14px;
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      'brand actions'
+      'nav nav';
+    row-gap: 10px;
+  }
+
+  .brand {
+    grid-area: brand;
+  }
+
+  .brand-sub {
+    display: none;
   }
 
   .nav-links {
-    flex-wrap: wrap;
+    grid-area: nav;
+    display: none;
+    justify-self: stretch;
+    border-radius: 16px;
+    border: 1px solid rgba(165, 122, 99, 0.18);
+    background: rgba(255, 255, 255, 0.65);
+    padding: 8px;
+  }
+
+  .nav-links.open {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .nav-links a {
+    width: 100%;
     justify-content: flex-start;
-    justify-self: start;
+    padding: 10px 12px;
   }
 
   .topbar-actions {
-    justify-self: start;
+    grid-area: actions;
+    justify-self: end;
+    gap: 8px;
+  }
+
+  .nav-toggle {
+    display: inline-flex;
+  }
+
+  .locale-switch select {
+    height: 36px;
+  }
+
+  .user-role {
+    display: none;
+  }
+
+  .user-name {
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 }
 </style>
