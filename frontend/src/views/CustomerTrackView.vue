@@ -5,7 +5,9 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { api, type MapNode, type PackageEventRecord, type TrackingSearchResponse } from '../services/api'
 import { useAuthStore } from '../stores/auth'
+import UiButton from '../components/ui/UiButton.vue'
 import { exceptionReasonLabel } from '../lib/exceptionReasons'
+
 
 type Filters = {
   tracking_number: string
@@ -657,9 +659,9 @@ watch(
             <button class="primary-btn" type="submit" :disabled="isLoading">
               {{ isLoading ? t('track.filters.loading') : t('track.filters.apply') }}
             </button>
-            <button class="ghost-btn" type="button" @click="clearFilters" :disabled="isLoading">
+            <UiButton icon="clear" variant="ghost" type="button" @click="clearFilters" :disabled="isLoading">
               {{ t('track.filters.clear') }}
-            </button>
+            </UiButton>
           </div>
         </div>
 
