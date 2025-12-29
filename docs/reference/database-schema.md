@@ -31,11 +31,20 @@
 | `delivery_tasks` | 運送任務（分段 pickup/deliver/transfer） | `backend/migrations/0013_delivery_tasks.sql` |
 | `vehicles` | 車輛與位置 | `backend/migrations/0014_vehicles.sql` |
 | `vehicle_cargo` | 車上貨物（包裹上車/下車記錄） | `backend/migrations/0015_vehicle_cargo.sql` |
+| `access_logs` | API 存取日誌（安全稽核） | `backend/migrations/0018_access_logs.sql` |
+| `rate_limits` | 速率限制（key-count 快取） | `backend/migrations/0019_rate_limits.sql` |
+| `webhook_subscriptions` | Webhook 訂閱（即時通知） | `backend/migrations/0020_webhook_subscriptions.sql` |
+| `service_rules` | 服務/運費規則（動態定價） | `backend/migrations/0021_service_rules.sql` |
 
 ### Seed / 測試資料 migrations
 
 - `backend/migrations/0007_virtual_map_seed.sql`：建立/重建 `nodes`、`edges` 並寫入 seed
 - `backend/migrations/0011_seed_test_users.sql`：寫入測試帳號/員工（依賴 `nodes` 已存在）
+- `backend/migrations/0017_seed_demo_data.sql`：Demo 資料（測試包裹、事件等）
+
+### 欄位擴充 migrations
+
+- `backend/migrations/0022_delivery_signature.sql`：擴充 `packages` 表（新增 `signature_image`、`signed_by`）
 
 ---
 
@@ -496,6 +505,108 @@ CREATE UNIQUE INDEX IF NOT EXISTS uniq_vehicle_cargo_package_loaded ON vehicle_c
 
 ---
 
+### 2.15 `access_logs` - API 存取日誌
+
+用途：
+
+- 記錄所有 API 請求（含未認證請求），用於安全稽核與問題追蹤（符合需求 2.4：所有存取操作均須經過身份驗證並記錄存取日誌）。
+
+```sql
+CREATE TABLE access_logs (
+    id TEXT PRIMARY KEY,
+    user_id TEXT, -- Nullable for unauthenticated requests
+    method TEXT NOT NULL,
+    path TEXT NOT NULL,
+    status INTEGER NOT NULL,
+    duration_ms INTEGER,
+    ip_address TEXT,
+    user_agent TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_access_logs_created_at ON access_logs(created_at);
+CREATE INDEX idx_access_logs_user_id ON access_logs(user_id);
+```
+
+---
+
+### 2.16 `rate_limits` - 速率限制
+
+用途：
+
+- 儲存 API 速率限制的 key-count 快取，用於防止過度請求（符合需求 2.1 效能：系統應能處理高交易量）。
+
+```sql
+CREATE TABLE rate_limits (
+    key TEXT PRIMARY KEY,
+    count INTEGER DEFAULT 1,
+    last_request_at INTEGER
+);
+```
+
+---
+
+### 2.17 `webhook_subscriptions` - Webhook 訂閱
+
+用途：
+
+- 客戶可訂閱包裹事件通知（如 `delivered`、`exception`），系統主動推送至指定 URL（符合需求 2.1：即時更新）。
+
+關聯（常用 join key）：
+
+- `webhook_subscriptions.customer_id` → `users.id`
+
+```sql
+CREATE TABLE webhook_subscriptions (
+    id TEXT PRIMARY KEY,
+    customer_id TEXT NOT NULL,
+    url TEXT NOT NULL,
+    secret TEXT, -- For signing payload
+    events TEXT, -- JSON array of subscribed events, e.g. ["delivered", "exception"]
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(customer_id) REFERENCES users(id)
+);
+
+CREATE INDEX idx_webhook_subs_customer ON webhook_subscriptions(customer_id);
+```
+
+---
+
+### 2.18 `service_rules` - 服務/運費規則
+
+用途：
+
+- 儲存動態定價規則（取代硬編碼），方便管理員調整運費計算參數（符合需求：可維護性）。
+
+```sql
+CREATE TABLE service_rules (
+    rule_key TEXT PRIMARY KEY,
+    value TEXT NOT NULL, -- JSON value
+    description TEXT,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+初始 seed 包含：`const.route_cost_k`、`multipliers.service`、`delivery_days`、`box_params`、`weight_surcharge`、`min_price`、`max_price`、`mark_fees` 等規則。
+
+---
+
+### 2.19 `packages` 擴充欄位 - 簽收證明
+
+以下欄位由 `0022_delivery_signature.sql` 新增至 `packages` 表：
+
+| 欄位 | 類型 | 說明 |
+|------|------|------|
+| `signature_image` | TEXT | 簽收影像（Base64 或 URL） |
+| `signed_by` | TEXT | 簽收人姓名 |
+
+```sql
+ALTER TABLE packages ADD COLUMN signature_image TEXT;
+ALTER TABLE packages ADD COLUMN signed_by TEXT;
+```
+
+---
+
 ## 3. ER 圖
 
 ```mermaid
@@ -547,6 +658,9 @@ erDiagram
 | `vehicle_cargo` | `idx_vehicle_cargo_vehicle_unloaded` | `vehicle_id, unloaded_at` | 依車輛查目前載貨/歷史 |
 | `vehicle_cargo` | `idx_vehicle_cargo_package_unloaded` | `package_id, unloaded_at` | 依包裹查目前是否在車上 |
 | `vehicle_cargo` | `uniq_vehicle_cargo_package_loaded` | `package_id` (WHERE `unloaded_at IS NULL`) | 保證包裹同時只在一台車上 |
+| `access_logs` | `idx_access_logs_created_at` | `created_at` | 依時間範圍查詢日誌 |
+| `access_logs` | `idx_access_logs_user_id` | `user_id` | 依使用者查詢日誌 |
+| `webhook_subscriptions` | `idx_webhook_subs_customer` | `customer_id` | 依客戶查詢訂閱 |
 
 ---
 
@@ -555,3 +669,4 @@ erDiagram
 | 版本 | 日期 | 說明 |
 |---|---|---|
 | 1.0 | 2025-12-24 | 同步到目前 migrations，補齊 `vehicles` / `vehicle_cargo` 文件 |
+| 1.1 | 2025-12-29 | 補齊 0018-0022 migrations（`access_logs`、`rate_limits`、`webhook_subscriptions`、`service_rules`、簽收欄位） |
