@@ -1095,5 +1095,8 @@
   "admin.samples.errorMessage1": "範例：API 500 /api/warehouse/packages",
   "admin.samples.errorDetail1": "REG-3 批次失敗，重試 3 次仍 500",
   "admin.samples.errorMessage2": "範例：worker 延遲 15 分鐘",
-  "admin.samples.errorDetail2": "每月結算排程延遲超過 15 分鐘，請檢查佇列"
+  "admin.samples.errorDetail2": "每月結算排程延遲超過 15 分鐘，請檢查佇列",
+  "home.actions.mapDesc": "探索虛擬物流網絡",
+  "home.actions.trackDesc": "即時追蹤您的包裹",
+  "home.actions.estimateDesc": "立即計算運費"
 }
