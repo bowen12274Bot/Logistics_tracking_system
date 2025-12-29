@@ -35,14 +35,16 @@ const sortedExceptionReports = computed(() =>
 const pendingExceptionReports = computed(() => sortedExceptionReports.value.filter((r) => !r.handled));
 const handledExceptionReports = computed(() => sortedExceptionReports.value.filter((r) => Boolean(r.handled)));
 
-const exceptionReasonLabelByCode = new Map(
-  selectableReasonsFor("driver").map((r) => [String(r.code), String(r.label)] as const),
+const exceptionReasonKeyByCode = new Map(
+  selectableReasonsFor("driver").map((r) => [String(r.code), String(r.i18nKey)] as const),
 );
 
 function exceptionReasonLabel(code: unknown) {
   const raw = String(code ?? "").trim();
   if (!raw) return t("driver.missing");
-  return exceptionReasonLabelByCode.get(raw) ?? t("driver.missing");
+  const key = exceptionReasonKeyByCode.get(raw);
+  if (key) return t(key);
+  return t("exception.reason.unknownWithCode", { code: raw });
 }
 
 const cargoExceptionCount = computed(

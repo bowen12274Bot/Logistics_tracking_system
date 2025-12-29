@@ -1,4 +1,5 @@
 import { useToasts } from "../components/ui/toast";
+import { i18n } from "../i18n";
 
 type ApiErrorLike = {
   name?: string;
@@ -27,25 +28,27 @@ function messageFromUnknown(error: unknown): string {
 }
 
 function resolve409Message(error: ApiErrorLike, rawMessage: string): string {
+  const t = i18n.global.t;
   const reason = String(error.reason ?? "").trim().toLowerCase();
   const hint = [reason, String(error.from ?? ""), String(error.to ?? ""), rawMessage].join(" ").toLowerCase();
 
   if (reason.includes("not_at_node") || (hint.includes("not") && hint.includes("node"))) {
-    return "你不在正確節點，請先移動到目的節點後再操作。";
+    return t("errorToast.notAtNode");
   }
   if (reason.includes("payment") && reason.includes("settled")) {
-    return "此包裹尚未完成付款/收現，請先完成收款後再繼續。";
+    return t("errorToast.paymentNotSettled");
   }
   if (reason.includes("exception")) {
-    return "此包裹目前有未結案的異常，請先由客服處理後再繼續。";
+    return t("errorToast.hasActiveException");
   }
 
   if (rawMessage) return rawMessage;
-  return "目前狀態不允許此操作，請稍後再試。";
+  return t("errorToast.operationNotAllowed");
 }
 
 export function toastFromApiError(error: unknown, fallbackMessage: string) {
   const toast = useToasts();
+  const t = i18n.global.t;
 
   if (isApiErrorLike(error)) {
     if (error.status === 401 || error.status === 403) return;
@@ -58,12 +61,12 @@ export function toastFromApiError(error: unknown, fallbackMessage: string) {
     }
 
     if (error.status === 422) {
-      toast.warning(rawMessage || "輸入資料有誤，請檢查後再試。");
+      toast.warning(rawMessage || t("errorToast.invalidInput"));
       return;
     }
 
     if (error.status >= 500) {
-      toast.error("系統忙碌，請稍後再試。");
+      toast.error(t("errorToast.systemBusy"));
       return;
     }
 
@@ -74,5 +77,6 @@ export function toastFromApiError(error: unknown, fallbackMessage: string) {
   }
 
   const rawMessage = messageFromUnknown(error) || String(fallbackMessage ?? "").trim();
-  toast.error(rawMessage || "操作失敗，請稍後再試。");
+  toast.error(rawMessage || t("errorToast.operationFailed"));
 }
+

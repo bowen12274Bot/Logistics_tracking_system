@@ -28,7 +28,9 @@ import { toastFromApiError } from '../services/errorToast'
 
 const auth = useAuthStore()
 const toast = useToasts()
-const { t } = useI18n()
+const { t, locale } = useI18n()
+
+const listSeparator = computed(() => (locale.value === 'zh-TW' ? '、' : ', '))
 const trackingLabel = (tracking?: string | null) => (tracking && tracking.trim() ? tracking.trim() : t('common.tracking.pending'))
 
 const props = defineProps<{
@@ -64,35 +66,35 @@ const packageDetailError = ref<Record<string, string>>({})
 const statusLabel = computed(() => {
   switch (applicationStatus.value) {
     case 'pending':
-      return '審核中'
+      return t('contract.status.pending')
     case 'approved':
-      return '已核准'
+      return t('contract.status.approved')
     case 'rejected':
-      return '已退回'
+      return t('contract.status.rejected')
     case 'error':
-      return '載入失敗'
+      return t('contract.status.error')
     default:
-      return '尚未申請'
+      return t('contract.status.notSubmitted')
   }
 })
 
 const headerTitle = computed(() =>
-  applicationStatus.value === 'approved' ? '月結資訊管理' : '申請成為合約客戶',
+  applicationStatus.value === 'approved' ? t('contract.title.manage') : t('contract.title.apply'),
 )
 
 const headerLede = computed(() =>
   applicationStatus.value === 'approved'
-    ? '查看本期帳單與包裹明細，並在帳期結算後於付款清單完成繳費。'
-    : '填寫公司基本資料並送出申請，客服審核通過後即可使用月結付款資格。',
+    ? t('contract.lede.manage')
+    : t('contract.lede.apply'),
 )
 
 const fillTestData = () => {
-  form.company_name = '測試物流股份有限公司'
+  form.company_name = t('contract.testData.company')
   form.tax_id = '12345678'
-  form.contact_person = '王小明'
+  form.contact_person = t('contract.testData.contact')
   form.contact_phone = '0912-345-678'
-  form.billing_address = '台北市中正區仁愛路一段 1 號'
-  form.notes = '這是測試資料，用於開發環境測試。'
+  form.billing_address = t('contract.testData.address')
+  form.notes = t('contract.testData.notes')
 }
 
 const loadStatus = async () => {
@@ -109,7 +111,7 @@ const loadStatus = async () => {
       applicationId.value = ''
     }
   } catch (err: any) {
-    errorMessage.value = err?.message || '載入申請狀態失敗'
+    errorMessage.value = err?.message || t('contract.errors.loadStatusFailed')
     toastFromApiError(err, errorMessage.value)
     applicationStatus.value = 'error'
   } finally {
@@ -154,7 +156,7 @@ const loadCurrentBill = async () => {
     const detail = await api.getBillingBillDetail(selected.id)
     currentBill.value = detail.bill
   } catch (err: any) {
-    billErrorMessage.value = err?.message || '載入本期帳單失敗'
+    billErrorMessage.value = err?.message || t('contract.errors.loadBillFailed')
     toastFromApiError(err, billErrorMessage.value)
     currentBill.value = null
     currentBillMeta.value = null
@@ -175,8 +177,8 @@ const ensurePackageDetail = async (packageId: string) => {
     const res = await api.getPackageStatus(packageId)
     packageDetails.value = { ...packageDetails.value, [packageId]: res.package }
   } catch (err: any) {
-    packageDetailError.value = { ...packageDetailError.value, [packageId]: err?.message || '載入包裹資訊失敗' }
-    toastFromApiError(err, "載入包裹狀態失敗")
+    packageDetailError.value = { ...packageDetailError.value, [packageId]: err?.message || t('contract.errors.loadPackageFailed') }
+    toastFromApiError(err, t('contract.errors.loadPackageStatusFailed'))
     packageDetails.value = { ...packageDetails.value, [packageId]: null }
   } finally {
     packageDetailLoading.value = { ...packageDetailLoading.value, [packageId]: false }
@@ -195,12 +197,12 @@ const toggleItem = async (packageId: string) => {
 const billStatusLabel = (status?: BillingBillStatus | null) => {
   switch (status) {
     case 'paid':
-      return '已付款'
+      return t('contract.billStatus.paid')
     case 'overdue':
-      return '逾期'
+      return t('contract.billStatus.overdue')
     case 'pending':
     default:
-      return '待付款'
+      return t('contract.billStatus.pending')
   }
 }
 
@@ -209,7 +211,7 @@ const submitApplication = async () => {
   message.value = ''
 
   if (!auth.user) {
-    errorMessage.value = '請先登入後再送出申請'
+    errorMessage.value = t('contract.errors.loginRequired')
     applicationStatus.value = 'error'
     toast.warning(errorMessage.value)
     return
@@ -224,7 +226,7 @@ const submitApplication = async () => {
     applicationStatus.value = res.status
     message.value = res.message
   } catch (err: any) {
-    errorMessage.value = err?.message || '送出申請失敗，請稍後再試'
+    errorMessage.value = err?.message || t('contract.errors.submitFailed')
     toastFromApiError(err, errorMessage.value)
     applicationStatus.value = 'error'
   } finally {
@@ -250,7 +252,7 @@ onMounted(() => {
 
 <template>
   <UiPageShell
-    :eyebrow="props.embedded ? undefined : '帳務中心'"
+    :eyebrow="props.embedded ? undefined : t('contract.eyebrow')"
     :title="props.embedded ? undefined : headerTitle"
     :lede="props.embedded ? undefined : headerLede"
     :class="{ 'embedded-shell': props.embedded }"
@@ -261,10 +263,10 @@ onMounted(() => {
         <div class="status-text">
           <div class="status-title">
             <strong>{{ statusLabel }}</strong>
-            <span v-if="applicationId" class="muted">申請編號：{{ applicationId }}</span>
+            <span v-if="applicationId" class="muted">{{ t('contract.applicationId') }}：{{ applicationId }}</span>
           </div>
           <p v-if="message">{{ message }}</p>
-          <p v-if="isLoadingStatus" class="muted">正在載入申請狀態...</p>
+          <p v-if="isLoadingStatus" class="muted">{{ t('contract.loadingStatus') }}</p>
         </div>
       </div>
 
@@ -274,100 +276,100 @@ onMounted(() => {
         @submit.prevent="submitApplication"
       >
         <label class="form-field">
-          <span>公司名稱</span>
+          <span>{{ t('contract.form.companyName') }}</span>
           <input v-model="form.company_name" name="company_name" type="text" required />
         </label>
 
         <label class="form-field">
-          <span>統一編號</span>
+          <span>{{ t('contract.form.taxId') }}</span>
           <input v-model="form.tax_id" name="tax_id" type="text" required />
         </label>
 
         <label class="form-field">
-          <span>聯絡人</span>
+          <span>{{ t('contract.form.contactPerson') }}</span>
           <input v-model="form.contact_person" name="contact_person" type="text" required />
         </label>
 
         <label class="form-field">
-          <span>聯絡電話</span>
+          <span>{{ t('contract.form.contactPhone') }}</span>
           <input v-model="form.contact_phone" name="contact_phone" type="text" required />
         </label>
 
         <label class="form-field span-2">
-          <span>帳單地址</span>
+          <span>{{ t('contract.form.billingAddress') }}</span>
           <input v-model="form.billing_address" name="billing_address" type="text" required />
         </label>
 
         <label class="form-field span-2">
-          <span>備註（選填）</span>
+          <span>{{ t('contract.form.notesLabel') }}</span>
           <textarea
             v-model="form.notes"
             name="notes"
             rows="3"
-            placeholder="例：請在平日下午聯絡、需要客製合約條款等"
+            :placeholder="t('contract.form.notesPlaceholder')"
           ></textarea>
         </label>
 
-        <button class="secondary-btn" type="button" @click="fillTestData">填入測試資料</button>
+        <button class="secondary-btn" type="button" @click="fillTestData">{{ t('contract.form.fillTestData') }}</button>
         <button class="primary-btn" type="submit" :disabled="isSubmitting">
-          {{ isSubmitting ? '送出中…' : '送出申請' }}
+          {{ isSubmitting ? t('contract.form.submitting') : t('contract.form.submit') }}
         </button>
       </form>
 
       <div v-else-if="applicationStatus === 'pending'" class="status-panel">
-        <p class="status-heading">你的申請已送出</p>
+        <p class="status-heading">{{ t('contract.statusPanel.submittedTitle') }}</p>
         <p class="muted">
-          目前狀態：<strong>{{ statusLabel }}</strong>
+          {{ t('contract.statusPanel.currentStatus') }}：<strong>{{ statusLabel }}</strong>
           <span v-if="applicationId">（{{ applicationId }}）</span>
         </p>
-        <p class="muted">客服正在審核，通過後即可使用月結付款。</p>
+        <p class="muted">{{ t('contract.statusPanel.pendingHint') }}</p>
       </div>
 
       <div v-else-if="applicationStatus === 'approved'" class="billing-section">
-        <h2 class="section-title">本期月結帳單</h2>
+        <h2 class="section-title">{{ t('contract.bill.title') }}</h2>
 
         <div v-if="isLoadingBill" class="billing-items-placeholder">
-          <p class="muted">載入本期帳單中...</p>
+          <p class="muted">{{ t('contract.bill.loading') }}</p>
         </div>
         <div v-else-if="billErrorMessage" class="billing-items-placeholder">
           <UiNotice tone="error" role="alert">{{ billErrorMessage }}</UiNotice>
-          <button class="secondary-btn" type="button" style="margin-top: 10px" @click="loadCurrentBill">重新載入</button>
+          <button class="secondary-btn" type="button" style="margin-top: 10px" @click="loadCurrentBill">{{ t('contract.bill.reload') }}</button>
         </div>
         <div v-else-if="!currentBill" class="billing-items-placeholder">
-          <p class="muted">本月尚未產生帳單（可能本期尚未有月結包裹完成配送）。</p>
-          <button class="secondary-btn" type="button" style="margin-top: 10px" @click="loadCurrentBill">刷新</button>
+          <p class="muted">{{ t('contract.bill.empty') }}</p>
+          <button class="secondary-btn" type="button" style="margin-top: 10px" @click="loadCurrentBill">{{ t('contract.bill.refresh') }}</button>
         </div>
         <template v-else>
           <div class="billing-summary">
             <div class="summary-item">
-              <span class="label">帳單期間</span>
+              <span class="label">{{ t('contract.bill.summary.period') }}</span>
               <span class="value">{{ currentBill.period }}</span>
             </div>
             <div class="summary-item">
-              <span class="label">出帳狀態</span>
-              <span class="value">{{ currentBillMeta?.due_date ? '已出帳' : '未出帳' }}</span>
+              <span class="label">{{ t('contract.bill.summary.settlement') }}</span>
+              <span class="value">{{ currentBillMeta?.due_date ? t('contract.bill.summary.settled') : t('contract.bill.summary.unsettled') }}</span>
             </div>
             <div class="summary-item">
-              <span class="label">帳單狀態</span>
+              <span class="label">{{ t('contract.bill.summary.status') }}</span>
               <span class="value">{{ billStatusLabel(currentBill.status) }}</span>
             </div>
             <div class="summary-item">
-              <span class="label">包裹數</span>
-              <span class="value">{{ currentBill.items?.length ?? 0 }} 件</span>
+              <span class="label">{{ t('contract.bill.summary.count') }}</span>
+              <span class="value">{{ t('contract.bill.summary.countValue', { count: currentBill.items?.length ?? 0 }) }}</span>
             </div>
             <div class="summary-item">
-              <span class="label">總金額</span>
-              <span class="value">{{ formatMoney(currentBill.total_amount) }} 元</span>
+              <span class="label">{{ t('contract.bill.summary.total') }}</span>
+              <span class="value">{{ formatMoney(currentBill.total_amount) }} {{ t('payment.currency') }}</span>
             </div>
             <div v-if="currentBill.due_date" class="summary-item">
-              <span class="label">繳費期限</span>
+              <span class="label">{{ t('contract.bill.summary.dueDate') }}</span>
               <span class="value">{{ currentBill.due_date }}</span>
             </div>
           </div>
 
-          <h3 class="section-subtitle">{{ currentBillMeta?.due_date ? '本期帳單包裹' : '本期未出帳包裹' }}</h3>
+          <h3 class="section-subtitle">{{ currentBillMeta?.due_date ? t('contract.bill.packages.settledTitle') : t('contract.bill.packages.unsettledTitle') }}</h3>
           <div class="billing-items-placeholder" style="border-style: solid">
-            <p v-if="!currentBill.items?.length" class="muted">目前沒有包裹明細。</p>
+            <p v-if="!currentBill.items?.length" class="muted">{{ t('contract.bill.packages.empty') }}</p>
             <ul v-else class="package-list">
               <li
                 v-for="item in currentBill.items"
@@ -376,48 +378,48 @@ onMounted(() => {
                 :class="{ active: expandedItemIds.has(item.package_id) }"
               >
                 <button type="button" class="row-btn" @click="toggleItem(item.package_id)">
-                  <span class="tracking">月結 | {{ trackingLabel(item.tracking_number) }}</span>
+                  <span class="tracking">{{ t('contract.bill.packages.prefix') }} | {{ trackingLabel(item.tracking_number) }}</span>
                   <span class="meta">{{ item.shipped_at ? formatDateTime(item.shipped_at) : '--' }}</span>
                 </button>
 
                 <div v-if="expandedItemIds.has(item.package_id)" class="package-detail">
                   <div v-if="packageDetailLoading[item.package_id]" class="empty-state">
-                    <p>載入包裹資訊中...</p>
+                    <p>{{ t('contract.bill.packages.loadingPackage') }}</p>
                   </div>
                   <div v-else-if="packageDetailError[item.package_id]" class="empty-state">
                     <p>{{ packageDetailError[item.package_id] }}</p>
-                    <button class="secondary-btn" type="button" @click="ensurePackageDetail(item.package_id)">重新載入</button>
+                    <button class="secondary-btn" type="button" @click="ensurePackageDetail(item.package_id)">{{ t('contract.bill.packages.reload') }}</button>
                   </div>
                   <template v-else>
                     <div class="detail-grid">
                       <template v-if="packageDetails[item.package_id]">
                         <p class="meta">
-                          寄件者：{{ senderDisplayName(packageDetails[item.package_id]!, auth.user?.user_name) }}
+                          {{ t('contract.bill.packages.sender') }}：{{ senderDisplayName(packageDetails[item.package_id]!, auth.user?.user_name, t) }}
                           <span v-if="packageDetails[item.package_id]!.sender_phone"
                             >（{{ packageDetails[item.package_id]!.sender_phone }}）</span
                           >
                         </p>
                         <p class="meta">
-                          收件者：{{ receiverDisplayName(packageDetails[item.package_id]!, auth.user?.user_name) }}
+                          {{ t('contract.bill.packages.receiver') }}：{{ receiverDisplayName(packageDetails[item.package_id]!, auth.user?.user_name, t) }}
                           <span v-if="packageDetails[item.package_id]!.receiver_phone"
                             >（{{ packageDetails[item.package_id]!.receiver_phone }}）</span
                           >
                         </p>
-                        <p class="meta">寄件地址：{{ packageDetails[item.package_id]!.sender_address || '--' }}</p>
-                        <p class="meta">收件地址：{{ packageDetails[item.package_id]!.receiver_address || '--' }}</p>
+                        <p class="meta">{{ t('contract.bill.packages.senderAddress') }}：{{ packageDetails[item.package_id]!.sender_address || '--' }}</p>
+                        <p class="meta">{{ t('contract.bill.packages.receiverAddress') }}：{{ packageDetails[item.package_id]!.receiver_address || '--' }}</p>
                         <p class="meta">
-                          尺寸：{{ dimensionsLabel(packageDetails[item.package_id]!) }}
-                          · 重量：{{ packageDetails[item.package_id]!.weight ?? '--' }} kg
+                          {{ t('contract.bill.packages.dimensions') }}：{{ dimensionsLabel(packageDetails[item.package_id]!) }}
+                          · {{ t('contract.bill.packages.weight') }}：{{ packageDetails[item.package_id]!.weight ?? '--' }} kg
                         </p>
-                        <p class="meta">配送時效：{{ resolveDeliveryLabel(packageDetails[item.package_id]!.delivery_time) }}</p>
-                        <p v-if="resolveSpecialMarks(packageDetails[item.package_id]!).length" class="meta">
-                          特殊標記：{{ resolveSpecialMarks(packageDetails[item.package_id]!).join('、') }}
+                        <p class="meta">{{ t('contract.bill.packages.delivery') }}：{{ resolveDeliveryLabel(packageDetails[item.package_id]!.delivery_time, t) }}</p>
+                        <p v-if="resolveSpecialMarks(packageDetails[item.package_id]!, t).length" class="meta">
+                          {{ t('contract.bill.packages.marks') }}：{{ resolveSpecialMarks(packageDetails[item.package_id]!, t).join(listSeparator) }}
                         </p>
                         <p v-if="resolveNotes(packageDetails[item.package_id]!)" class="meta">
-                          備註：{{ resolveNotes(packageDetails[item.package_id]!) }}
+                          {{ t('contract.bill.packages.notes') }}：{{ resolveNotes(packageDetails[item.package_id]!) }}
                         </p>
-                          <p class="meta">費用：{{ formatMoney(item.cost) }} 元</p>
-                        <p class="meta">寄出時間：{{ item.shipped_at ? formatDateTime(item.shipped_at) : '--' }}</p>
+                        <p class="meta">{{ t('contract.bill.packages.cost') }}：{{ formatMoney(item.cost) }} {{ t('payment.currency') }}</p>
+                        <p class="meta">{{ t('contract.bill.packages.shippedAt') }}：{{ item.shipped_at ? formatDateTime(item.shipped_at) : '--' }}</p>
                       </template>
                     </div>
                   </template>

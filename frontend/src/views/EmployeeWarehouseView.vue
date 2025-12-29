@@ -656,7 +656,7 @@ watch(
           </div>
         </div>
 
-        <div class="mini-stats wh-mini-stats" aria-label="倉儲工作量總覽">
+        <div class="mini-stats wh-mini-stats" :aria-label="t('warehouse.stats.aria')">
           <div class="wh-mini-card">
             <div class="wh-mini-btn wh-mini-btn--static" aria-label="await receive">
               <p class="eyebrow">{{ t("warehouse.stats.awaitReceive") }}</p>
