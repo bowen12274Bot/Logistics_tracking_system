@@ -7,10 +7,12 @@ import {
   type CustomerServiceExceptionRecord,
 } from "../services/api";
 import { EXCEPTION_REASONS, exceptionReasonLabel } from "../lib/exceptionReasons";
-import UiCard from "../components/ui/UiCard.vue";
-import UiNotice from "../components/ui/UiNotice.vue";
-import UiModal from "../components/ui/UiModal.vue";
-import UiPageShell from "../components/ui/UiPageShell.vue";
+import UiCard from '../components/ui/UiCard.vue'
+import UiList from '../components/ui/UiList.vue'
+import UiModal from '../components/ui/UiModal.vue'
+import UiNotice from '../components/ui/UiNotice.vue'
+import UiPageShell from '../components/ui/UiPageShell.vue'
+import UiButton from '../components/ui/UiButton.vue'
 import { useToasts } from "../components/ui/toast";
 import { toastFromApiError } from "../services/errorToast";
 
@@ -696,12 +698,17 @@ onUnmounted(() => {
             <router-link class="ghost-btn small-btn" to="/cs/packages">
               {{ t('cs.actions.packageSearch') }}
             </router-link>
-            <button class="ghost-btn small-btn" type="button" :disabled="isLoading" @click="refresh">
+            <UiButton icon="refresh" variant="ghost" size="small" :disabled="isLoading" @click="refresh">
               {{ isLoading ? t('cs.actions.refreshing') : t('cs.actions.refresh') }}
-            </button>
-            <button class="ghost-btn small-btn" type="button" @click="toggleFullscreen">
+            </UiButton>
+            <UiButton
+              :icon="isFullscreen ? 'fullscreen-exit' : 'fullscreen'"
+              variant="ghost"
+              size="small"
+              @click="toggleFullscreen"
+            >
               {{ isFullscreen ? t('cs.actions.exitFullscreen') : t('cs.actions.enterFullscreen') }}
-            </button>
+            </UiButton>
           </div>
         </div>
       </div>

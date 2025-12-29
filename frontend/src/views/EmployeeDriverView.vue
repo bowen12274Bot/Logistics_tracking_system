@@ -5,8 +5,9 @@ import { useI18n } from "vue-i18n";
 import { api, type DeliveryTaskRecord, type DriverExceptionRecord, type VehicleRecord } from "../services/api";
 import UiCard from "../components/ui/UiCard.vue";
 import UiList from "../components/ui/UiList.vue";
-import UiNotice from "../components/ui/UiNotice.vue";
 import UiPageShell from "../components/ui/UiPageShell.vue";
+import UiButton from "../components/ui/UiButton.vue";
+import UiNotice from "../components/ui/UiNotice.vue";
 import { selectableReasonsFor } from "../lib/exceptionReasons";
 import { toastFromApiError } from "../services/errorToast";
 import { formatDateTime, formatMoney } from "../utils/packageDisplay";
@@ -172,9 +173,9 @@ onMounted(() => {
         </div>
 
         <div class="driver-overview-actions">
-          <button class="ghost-btn small-btn" type="button" :disabled="loading" @click="refresh">
+          <UiButton icon="refresh" variant="ghost" size="small" :disabled="loading" @click="refresh">
             {{ t("driver.actions.refresh") }}
-          </button>
+          </UiButton>
         </div>
       </div>
 
