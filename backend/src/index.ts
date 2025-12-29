@@ -79,7 +79,7 @@ const publicUser = (user: UserRecord) => ({
   billing_preference: user.billing_preference,
 });
 
-import { accessLogger } from "./middlewares/logger";
+import { accessLogger, logAuth } from "./middlewares/logger";
 import { rateLimiter } from "./middlewares/rateLimiter";
 
 // Start a Hono app
@@ -130,6 +130,7 @@ app.post("/api/auth/register", async (c) => {
   }>();
 
   if (!body.email || !body.password || !body.user_name) {
+    logAuth('register_failed', 'warn', null, { reason: 'missing_fields' });
     return c.json({ error: "email, password, and user_name are required" }, 400);
   }
 
@@ -154,6 +155,7 @@ app.post("/api/auth/register", async (c) => {
       .bind(email)
       .first();
     if (existing) {
+      logAuth('register_failed', 'warn', null, { reason: 'email_exists', email });
       return c.json({ error: "Email already exists" }, 409);
     }
 
@@ -174,6 +176,7 @@ app.post("/api/auth/register", async (c) => {
       .run();
   } catch (err: any) {
     if (String(err).includes("UNIQUE")) {
+      logAuth('register_failed', 'warn', null, { reason: 'email_duplicate', email });
       return c.json({ error: "Email 摰貉?行童頝冽" }, 409);
     }
     return c.json({ error: "?瑁租?瞉嗉儘?", detail: String(err) }, 500);
@@ -185,9 +188,11 @@ app.post("/api/auth/register", async (c) => {
   try {
     await c.env.DB.prepare("INSERT INTO tokens (id, user_id) VALUES (?, ?)").bind(token, id).run();
   } catch (err: any) {
+    logAuth('register_failed', 'error', id, { reason: 'token_storage_failed' }, String(err));
     return c.json({ error: "Auth token storage failed", detail: String(err) }, 500);
   }
 
+  logAuth('register_success', 'info', id, { email, user_type: userType });
   return c.json({
     user: publicUser({
       id,
@@ -208,6 +213,7 @@ app.post("/api/auth/register", async (c) => {
 app.post("/api/auth/login", async (c) => {
   const body = await c.req.json<{ identifier?: string; password?: string }>();
   if (!body.identifier || !body.password) {
+    logAuth('login_failed', 'warn', null, { reason: 'missing_fields' });
     return c.json({ error: "identifier and password are required" }, 400);
   }
 
@@ -218,6 +224,7 @@ app.post("/api/auth/login", async (c) => {
     .first<UserRecord>();
 
   if (!user || user.password_hash !== passwordHash) {
+    logAuth('login_failed', 'warn', user?.id ?? null, { reason: 'invalid_credentials', identifier });
     return c.json({ error: "Invalid credentials" }, 401);
   }
 
@@ -227,9 +234,11 @@ app.post("/api/auth/login", async (c) => {
   try {
     await c.env.DB.prepare("INSERT INTO tokens (id, user_id) VALUES (?, ?)").bind(token, user.id).run();
   } catch (err: any) {
+    logAuth('login_failed', 'error', user.id, { reason: 'token_storage_failed' }, String(err));
     return c.json({ error: "Auth token storage failed", detail: String(err) }, 500);
   }
 
+  logAuth('login_success', 'info', user.id, { email: user.email, user_type: user.user_type });
   return c.json({ user: publicUser(user), token });
 });
 

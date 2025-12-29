@@ -2,6 +2,7 @@ import { OpenAPIRoute } from "chanfana";
 import { z } from "zod";
 import type { AppContext } from "../types";
 import { requireAuth } from "../utils/authUtils";
+import { logBilling } from "../middlewares/logger";
 
 type PaymentMethod = "cash" | "credit_card" | "bank_transfer" | "third_party_payment";
 type LegacyPaymentMethod = "online_bank" | "third_party";
@@ -326,6 +327,11 @@ export class PackagePaymentPay extends OpenAPIRoute {
         )
         .run();
     }
+
+    logBilling('payment_success', 'info', auth.user.id, packageId, {
+      payment_method: normalizedMethod,
+      paid_at: now
+    });
 
     return c.json({ success: true, paid_at: now });
   }

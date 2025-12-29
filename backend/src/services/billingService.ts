@@ -1,4 +1,5 @@
 import { DateTime } from "luxon";
+import { logBilling } from "../middlewares/logger";
 
 /**
  * Get billing cycle (start/end) for a given date or string (ISO).

@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { AppContext } from "../types";
 import { requireWarehouse, type AuthUser } from "../utils/authUtils";
 import { getTerminalStatus, hasActiveException } from "../lib/packageGuards";
+import { logWarehouse } from "../middlewares/logger";
 
 type LatestEvent = { delivery_status: string | null; location: string | null; events_at: string | null };
 
@@ -137,6 +138,12 @@ export class WarehousePackagesReceive extends OpenAPIRoute {
         results.failed.push({ id: packageId, reason: "Insert failed" });
       }
     }
+
+    logWarehouse('packages_received', 'info', auth.user.id, null, {
+      warehouse_node_id: nodeId,
+      processed: results.success.length,
+      failed: results.failed.length
+    });
 
     return c.json({
       success: true,

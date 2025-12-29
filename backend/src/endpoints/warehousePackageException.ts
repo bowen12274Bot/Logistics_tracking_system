@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { AppContext } from "../types";
 import { getTerminalStatus, hasActiveException } from "../lib/packageGuards";
 import { requireWarehouse, type AuthResult, type AuthUser } from "../utils/authUtils";
+import { logException } from "../middlewares/logger";
 
 type LatestEvent = { delivery_status: string | null; location: string | null; events_at: string | null };
 type WarehouseUserWithNode = AuthUser & { address: string };
@@ -138,6 +139,12 @@ export class WarehousePackageExceptionCreate extends OpenAPIRoute {
     )
       .bind(eventId, packageId, body.description, now, nodeId)
       .run();
+
+    logException('exception_reported', 'warn', auth.user.id, packageId, {
+      reason_code: body.reason_code,
+      location: nodeId,
+      reported_role: 'warehouse_staff'
+    });
 
     return c.json({ success: true, exception_id: exceptionId, event_id: eventId });
   }
