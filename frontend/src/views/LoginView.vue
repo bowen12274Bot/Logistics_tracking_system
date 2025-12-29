@@ -6,6 +6,7 @@ import { useAuthStore } from '../stores/auth'
 import type { User } from '../services/api'
 import { useToasts } from '../components/ui/toast'
 import { toastFromApiError } from '../services/errorToast'
+import UiIcon from '../components/ui/UiIcon.vue'
 
 type Mode = 'login' | 'register'
 type TestAccount = { email: string; password: string; roleKey: string }
@@ -18,6 +19,8 @@ const toast = useToasts()
 const statusMessage = ref('')
 const loading = ref(false)
 const { t } = useI18n()
+const showLoginPassword = ref(false)
+const showRegisterPassword = ref(false)
 
 const applyReasonHint = () => {
   if (statusMessage.value) return
@@ -190,16 +193,26 @@ const fillTestAccount = (acct: TestAccount) => {
             />
           </label>
 
-          <label class="form-field">
+          <label class="form-field password-field">
             <span>{{ t('login.password') }}</span>
-            <input
-              v-model="loginForm.password"
-              required
-              name="password"
-              type="password"
-              placeholder="********"
-              autocomplete="current-password"
-            />
+            <div class="password-input-wrapper">
+              <input
+                v-model="loginForm.password"
+                required
+                name="password"
+                :type="showLoginPassword ? 'text' : 'password'"
+                placeholder="********"
+                autocomplete="current-password"
+              />
+              <button
+                type="button"
+                class="password-toggle-btn"
+                :aria-label="showLoginPassword ? t('login.hidePassword') : t('login.showPassword')"
+                @click="showLoginPassword = !showLoginPassword"
+              >
+                <UiIcon :name="showLoginPassword ? 'eye-off' : 'eye'" />
+              </button>
+            </div>
           </label>
 
           <button class="primary-btn auth-submit" type="submit" :disabled="loading">
@@ -225,9 +238,25 @@ const fillTestAccount = (acct: TestAccount) => {
               <input v-model="registerForm.email" required name="email" type="email" placeholder="you@example.com" />
             </label>
 
-            <label class="form-field reg-password">
+            <label class="form-field reg-password password-field">
               <span>{{ t('login.password') }}</span>
-              <input v-model="registerForm.password" required name="password" type="password" placeholder="********" />
+              <div class="password-input-wrapper">
+                <input
+                  v-model="registerForm.password"
+                  required
+                  name="password"
+                  :type="showRegisterPassword ? 'text' : 'password'"
+                  placeholder="********"
+                />
+                <button
+                  type="button"
+                  class="password-toggle-btn"
+                  :aria-label="showRegisterPassword ? t('login.hidePassword') : t('login.showPassword')"
+                  @click="showRegisterPassword = !showRegisterPassword"
+                >
+                  <UiIcon :name="showRegisterPassword ? 'eye-off' : 'eye'" />
+                </button>
+              </div>
             </label>
 
             <label class="form-field reg-phone">
@@ -360,6 +389,52 @@ const fillTestAccount = (acct: TestAccount) => {
 
 .auth-panel .form-field input:hover {
   border-color: rgba(165, 122, 99, 0.42);
+}
+
+.password-field {
+  position: relative;
+}
+
+.password-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.password-input-wrapper input {
+  flex: 1;
+  padding-right: 44px;
+}
+
+.password-toggle-btn {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  padding: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(106, 74, 64, 0.65);
+  transition: color 0.2s ease, transform 0.15s ease;
+  border-radius: 6px;
+}
+
+.password-toggle-btn:hover {
+  color: rgba(106, 74, 64, 0.9);
+  background: rgba(165, 122, 99, 0.08);
+}
+
+.password-toggle-btn:active {
+  transform: translateY(-50%) scale(0.95);
+}
+
+.password-toggle-btn:focus-visible {
+  outline: 2px solid rgba(244, 182, 194, 0.55);
+  outline-offset: 2px;
 }
 
 .auth-register-grid {

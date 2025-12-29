@@ -37,6 +37,8 @@ export type IconName =
     | 'more-vertical'
     | 'user'
     | 'logout'
+    | 'eye'
+    | 'eye-off'
     // Business
     | 'package'
     | 'truck'
@@ -184,6 +186,18 @@ export const ICONS: Record<IconName, IconDefinition> = {
             'M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4',
             'M16 17l5-5-5-5',
             'M21 12H9',
+        ],
+    },
+    eye: {
+        paths: [
+            'M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z',
+            'M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z',
+        ],
+    },
+    'eye-off': {
+        paths: [
+            'M17.94 17.94A10.07 10.07 0 0 1 12 19c-7 0-10-7-10-7a15.16 15.16 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 10 7 10 7a15.16 15.16 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24',
+            'M1 1l22 22',
         ],
     },
 

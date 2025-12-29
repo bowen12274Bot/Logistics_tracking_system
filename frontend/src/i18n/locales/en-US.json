@@ -165,6 +165,8 @@
   "login.loginFailed": "Login failed, please try again",
   "login.registerError": "Registration failed, please try again",
   "login.reasonUnauthorized": "Please log in to continue.",
+  "login.showPassword": "Show password",
+  "login.hidePassword": "Hide password",
   "forbidden.title": "Forbidden",
   "forbidden.reason.roleForbidden": "Your role does not have permission to access this page.",
   "forbidden.reason.apiForbidden": "The backend rejected this action (403).",
