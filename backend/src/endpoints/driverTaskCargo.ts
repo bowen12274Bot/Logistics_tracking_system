@@ -203,6 +203,16 @@ export class DriverTaskDropoff extends OpenAPIRoute {
     security: [{ bearerAuth: [] }],
     request: {
       params: z.object({ taskId: z.string().min(1) }),
+      body: {
+        content: {
+          "application/json": {
+            schema: z.object({
+              signature: z.string().optional().describe("Base64 encoded signature image or URL"),
+              signed_by: z.string().optional().describe("Name of the person signing"),
+            }),
+          },
+        },
+      },
     },
     responses: {
       "200": { description: "OK" },
@@ -287,6 +297,14 @@ export class DriverTaskDropoff extends OpenAPIRoute {
       )
       .bind(eventId, task.package_id, nextStatus, nextDetails, now, to)
       .run();
+
+    // P2 Improvement: Save Delivery Signature
+    const { signature, signed_by } = data.body;
+    if (nextStatus === "delivered" && (signature || signed_by)) {
+      await c.env.DB.prepare("UPDATE packages SET signature_image = ?, signed_by = ? WHERE id = ?")
+        .bind(signature ?? null, signed_by ?? null, task.package_id)
+        .run();
+    }
 
     await c.env.DB.prepare("UPDATE delivery_tasks SET status = 'completed', updated_at = ? WHERE id = ?").bind(now, taskId).run();
 

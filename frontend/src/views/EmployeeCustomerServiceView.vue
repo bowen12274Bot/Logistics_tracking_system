@@ -693,6 +693,9 @@ onUnmounted(() => {
           </div>
 
           <div class="cs-header-actions">
+            <router-link class="ghost-btn small-btn" to="/cs/packages">
+              {{ t('cs.actions.packageSearch') }}
+            </router-link>
             <button class="ghost-btn small-btn" type="button" :disabled="isLoading" @click="refresh">
               {{ isLoading ? t('cs.actions.refreshing') : t('cs.actions.refresh') }}
             </button>

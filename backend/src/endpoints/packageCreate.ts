@@ -8,7 +8,8 @@ import {
   guessDimensionsFromBoxType,
   mapDeliveryTimeToType,
   type DeliveryType,
-  type BoxType
+  type BoxType,
+  DEFAULT_PRICING_RULES
 } from "../utils/pricing";
 import { buildGraph, normalizeNodeId, type EdgeRow } from "../utils/graphUtils";
 
@@ -67,7 +68,8 @@ async function computeInitialPaymentAmount(
     weightKg,
     dimensions,
     deliveryType,
-    specialMarks
+    specialMarks,
+    DEFAULT_PRICING_RULES
   );
 
   if ("error" in pricing) {
