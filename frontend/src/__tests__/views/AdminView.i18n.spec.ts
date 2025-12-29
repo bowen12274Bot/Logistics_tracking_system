@@ -27,47 +27,46 @@ describe('AdminView i18n', () => {
   })
 
   it('updates fallback data text when locale switches', async () => {
-    const pinia = createPinia()
-    setActivePinia(pinia)
-    const auth = useAuthStore(pinia)
-    auth.setUser(mockAdminUser)
+    const previousLocale = i18n.global.locale.value
 
-    const wrapper = mount(AdminView, {
-      global: {
-        plugins: [pinia],
-      },
-    })
+    try {
+      i18n.global.locale.value = 'zh-TW'
 
-    const selectTab = (wrapper.vm as any).selectWorkbenchTab
-    if (typeof selectTab === 'function') {
-      selectTab('users')
+      const pinia = createPinia()
+      setActivePinia(pinia)
+      const auth = useAuthStore(pinia)
+      auth.setUser(mockAdminUser)
+
+      const wrapper = mount(AdminView, {
+        global: {
+          plugins: [pinia],
+        },
+      })
+
+      const tabButtons = wrapper.findAll('[role="tablist"] button')
+      expect(tabButtons.length).toBeGreaterThanOrEqual(4)
+      await tabButtons[3].trigger('click')
       await nextTick()
-    }
 
-    const reload = (wrapper.vm as any).loadUsers
-    if (typeof reload === 'function') {
-      await reload()
-    }
+      for (let i = 0; i < 10 && !wrapper.find('.user-row strong').exists(); i += 1) {
+        await flushPromises()
+        await nextTick()
+      }
 
-    for (let i = 0; i < 5 && !wrapper.find('.user-row strong').exists(); i += 1) {
+      expect(wrapper.find('.user-row strong').exists()).toBe(true)
+      expect(wrapper.find('.user-row strong').text()).toContain(i18n.global.t('admin.samples.driver'))
+      expect(wrapper.find('.user-row .pill-stack .pill:nth-child(2)').text()).toContain(i18n.global.t('admin.status.active'))
+
+      i18n.global.locale.value = 'en-US'
+      await nextTick()
       await flushPromises()
       await nextTick()
+
+      expect(wrapper.find('.user-row strong').text()).toContain(i18n.global.t('admin.samples.driver'))
+      expect(wrapper.find('.user-row .pill-stack .pill:nth-child(2)').text()).toContain(i18n.global.t('admin.status.active'))
+    } finally {
+      i18n.global.locale.value = previousLocale
     }
-
-    expect(wrapper.find('.user-row strong').exists()).toBe(true)
-    expect(wrapper.find('.user-row strong').text()).toContain('司機')
-    expect(wrapper.find('.user-row .pill-stack .pill:nth-child(2)').text()).toContain('啟用')
-
-    const previousLocale = i18n.global.locale.value
-    i18n.global.locale.value = 'en-US'
-    await nextTick()
-    await flushPromises()
-    await nextTick()
-
-    expect(wrapper.find('.user-row strong').text()).toContain('Driver')
-    expect(wrapper.find('.user-row .pill-stack .pill:nth-child(2)').text()).toContain('Active')
-
-    i18n.global.locale.value = previousLocale
   })
 })
 

@@ -167,7 +167,7 @@ const fillTestAccount = (acct: TestAccount) => {
         <p class="lede">{{ t('login.lede') }}</p>
       </header>
 
-      <div class="auth-panel">
+      <div class="auth-panel" :class="{ 'auth-panel--register': mode === 'register' }">
         <div class="tab-switch auth-tabs" role="tablist" :aria-label="t('login.tabAria')">
           <button :class="{ active: mode === 'login' }" type="button" role="tab" @click="switchMode('login')">
             {{ t('login.loginTab') }}
@@ -207,52 +207,54 @@ const fillTestAccount = (acct: TestAccount) => {
           </button>
         </form>
 
-        <form v-else class="auth-register-grid" @submit.prevent="handleRegister">
-          <label class="form-field reg-name">
-            <span>{{ t('login.register.name') }}</span>
-            <input
-              v-model="registerForm.user_name"
-              required
-              name="user_name"
-              type="text"
-              :placeholder="t('login.register.namePlaceholder')"
-            />
-          </label>
+        <div v-else class="auth-register-region">
+          <form class="auth-register-grid" @submit.prevent="handleRegister">
+            <label class="form-field reg-name">
+              <span>{{ t('login.register.name') }}</span>
+              <input
+                v-model="registerForm.user_name"
+                required
+                name="user_name"
+                type="text"
+                :placeholder="t('login.register.namePlaceholder')"
+              />
+            </label>
 
-          <label class="form-field reg-email">
-            <span>{{ t('login.email') }}</span>
-            <input v-model="registerForm.email" required name="email" type="email" placeholder="you@example.com" />
-          </label>
+            <label class="form-field reg-email">
+              <span>{{ t('login.email') }}</span>
+              <input v-model="registerForm.email" required name="email" type="email" placeholder="you@example.com" />
+            </label>
 
-          <label class="form-field reg-password">
-            <span>{{ t('login.password') }}</span>
-            <input v-model="registerForm.password" required name="password" type="password" placeholder="********" />
-          </label>
+            <label class="form-field reg-password">
+              <span>{{ t('login.password') }}</span>
+              <input v-model="registerForm.password" required name="password" type="password" placeholder="********" />
+            </label>
 
-          <label class="form-field reg-phone">
-            <span>{{ t('login.register.phone') }}</span>
-            <input
-              v-model="registerForm.phone_number"
-              name="phone_number"
-              type="text"
-              :placeholder="t('login.register.phonePlaceholder')"
-            />
-          </label>
+            <label class="form-field reg-phone">
+              <span>{{ t('login.register.phone') }}</span>
+              <input
+                v-model="registerForm.phone_number"
+                name="phone_number"
+                type="text"
+                :placeholder="t('login.register.phonePlaceholder')"
+              />
+            </label>
 
-          <label class="form-field reg-address">
-            <span>{{ t('login.register.address') }}</span>
-            <input
-              v-model="registerForm.address"
-              name="address"
-              type="text"
-              :placeholder="t('login.register.addressPlaceholder')"
-            />
-          </label>
+            <label class="form-field reg-address">
+              <span>{{ t('login.register.address') }}</span>
+              <input
+                v-model="registerForm.address"
+                name="address"
+                type="text"
+                :placeholder="t('login.register.addressPlaceholder')"
+              />
+            </label>
 
-          <button class="primary-btn auth-submit reg-submit" type="submit" :disabled="loading">
-            {{ loading ? t('login.registering') : t('login.registerTab') }}
-          </button>
-        </form>
+            <button class="primary-btn auth-submit reg-submit" type="submit" :disabled="loading">
+              {{ loading ? t('login.registering') : t('login.registerTab') }}
+            </button>
+          </form>
+        </div>
 
         <p v-if="statusMessage" class="hint auth-status" role="status" aria-live="polite">{{ statusMessage }}</p>
       </div>
@@ -361,44 +363,36 @@ const fillTestAccount = (acct: TestAccount) => {
 }
 
 .auth-register-grid {
-  margin-top: 14px;
   display: grid;
   gap: 12px;
-  grid-template-columns: 1fr 1fr 1fr;
-  grid-template-areas:
-    'name email password'
-    'phone address submit';
-  align-items: end;
+  grid-template-columns: 1fr;
+  align-items: stretch;
 }
 
-.reg-name {
-  grid-area: name;
+.auth-register-region {
+  margin-top: 16px;
+  max-width: auto;
+  margin-left: auto;
+  margin-right: auto;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(165, 122, 99, 0.18);
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 16px 44px rgba(170, 124, 105, 0.12);
 }
 
-.reg-email {
-  grid-area: email;
-}
-
-.reg-password {
-  grid-area: password;
-}
-
-.reg-phone {
-  grid-area: phone;
-}
-
-.reg-address {
-  grid-area: address;
-}
-
-.reg-submit {
-  grid-area: submit;
+.auth-panel--register .auth-register-region {
+  margin-top: 28px;
 }
 
 .auth-submit {
   width: 100%;
   height: 44px;
   border-radius: 14px;
+}
+
+.reg-submit {
+  margin-top: 18px;
 }
 
 .auth-status {
@@ -453,16 +447,6 @@ const fillTestAccount = (acct: TestAccount) => {
 
   .auth-login-grid {
     grid-template-columns: 1fr;
-  }
-
-  .auth-register-grid {
-    grid-template-columns: 1fr;
-    grid-template-areas: none;
-    align-items: stretch;
-  }
-
-  .reg-submit {
-    grid-area: auto;
   }
 }
 </style>
