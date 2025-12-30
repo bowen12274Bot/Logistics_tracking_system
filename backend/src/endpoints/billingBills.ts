@@ -88,26 +88,37 @@ export class BillingBillList extends OpenAPIRoute {
       ? await stmt.bind(...params).all()
       : await stmt.all();
 
-    // 計算每個帳單的包裹數量
-    const bills = [];
-    for (const bill of (result.results || [])) {
-      const b = bill as any;
-      const itemCount = await c.env.DB.prepare(
-        "SELECT COUNT(*) as count FROM monthly_billing_items WHERE monthly_billing_id = ?"
-      ).bind(b.id).first<{ count: number }>();
-
-      bills.push({
-        id: b.id,
-        customer_id: b.customer_id,
-        customer_name: b.customer_name,
-        period: `${b.cycle_start} - ${b.cycle_end}`,
-        total_amount: b.total_amount || 0,
-        package_count: itemCount?.count || 0,
-        status: b.status || "pending",
-        due_date: b.due_date,
-        created_at: b.created_at,
-      });
+    const billsRaw = result.results || [];
+    
+    // 優化：一次性批量查詢所有帳單的項目數量，避免 N+1 查詢
+    let itemCountMap: Record<string, number> = {};
+    if (billsRaw.length > 0) {
+      const billIds = billsRaw.map((b: any) => b.id);
+      const placeholders = billIds.map(() => '?').join(',');
+      const countsResult = await c.env.DB.prepare(`
+        SELECT monthly_billing_id, COUNT(*) as count 
+        FROM monthly_billing_items 
+        WHERE monthly_billing_id IN (${placeholders})
+        GROUP BY monthly_billing_id
+      `).bind(...billIds).all();
+      
+      for (const row of (countsResult.results || [])) {
+        const r = row as any;
+        itemCountMap[r.monthly_billing_id] = r.count;
+      }
     }
+
+    const bills = billsRaw.map((b: any) => ({
+      id: b.id,
+      customer_id: b.customer_id,
+      customer_name: b.customer_name,
+      period: `${b.cycle_start} - ${b.cycle_end}`,
+      total_amount: b.total_amount || 0,
+      package_count: itemCountMap[b.id] || 0,
+      status: b.status || "pending",
+      due_date: b.due_date,
+      created_at: b.created_at,
+    }));
 
     return c.json({
       success: true,

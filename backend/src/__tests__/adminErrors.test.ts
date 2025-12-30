@@ -35,7 +35,7 @@ describe("Admin System Errors API", () => {
     expect(status).toBe(200);
     expect(data.success).toBe(true);
     expect(Array.isArray(data.errors)).toBe(true);
-    expect(typeof data.total).toBe("number");
+    expect(typeof data.has_more).toBe("boolean");
   });
 
   it("should filter by level", async () => {

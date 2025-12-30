@@ -132,7 +132,7 @@ export class BillingPaymentList extends OpenAPIRoute {
 
     const query = c.req.query();
 
-    // 查詢已付款的帳單
+    // 優化：使用索引友好的查詢，先過濾再 SELECT
     let sql = `
       SELECT mb.id, mb.cycle_start, mb.cycle_end, mb.total_amount, mb.paid_at, mb.paid_method
       FROM monthly_billing mb

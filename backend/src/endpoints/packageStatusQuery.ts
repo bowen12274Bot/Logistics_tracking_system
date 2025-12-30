@@ -212,7 +212,12 @@ export class PackageList extends OpenAPIRoute {
 
 		const effectiveCustomerId = auth.user.user_type === "customer" ? auth.user.id : customer_id;
 
-		let query = "SELECT * FROM packages";
+		// 優化：明確指定欄位並使用索引友好的排序
+		let query = `SELECT id, tracking_number, customer_id, sender_name, sender_phone, sender_address,
+		             receiver_name, receiver_phone, receiver_address, weight, size, delivery_time,
+		             payment_type, declared_value, status, estimated_delivery, final_billing_date,
+		             special_handling, contents_description, route_path, description_json, created_at
+		             FROM packages`;
 		const params: any[] = [];
 
 		if (effectiveCustomerId) {
@@ -220,7 +225,7 @@ export class PackageList extends OpenAPIRoute {
 			params.push(effectiveCustomerId);
 		}
 
-		query += ` LIMIT ${limit}`;
+		query += ` ORDER BY created_at DESC LIMIT ${limit}`;
 
 		const results = await c.env.DB.prepare(query).bind(...params).all();
 		const packages = (results.results ?? []).map((pkg) => {
