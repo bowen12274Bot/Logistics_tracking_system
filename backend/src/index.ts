@@ -40,6 +40,8 @@ import { DriverTaskPickup, DriverTaskDropoff } from "./endpoints/driverTaskCargo
 import { DriverCollectCash } from "./endpoints/driverCollectCash";
 import { DriverTaskEnRoute } from "./endpoints/driverTaskEnRoute";
 import { DriverTaskArrive } from "./endpoints/driverTaskArrive";
+import { DriverTaskBatchArrive } from "./endpoints/driverTaskBatch";
+import { DriverDashboard } from "./endpoints/driverDashboard";
 import { CustomerServiceExceptionHandle, CustomerServiceExceptionList } from "./endpoints/csExceptions";
 import { CustomerServiceContractList, CustomerServiceContractReview } from "./endpoints/csContracts";
 import { AdminReportBilling, AdminReportPackages } from "./endpoints/adminReports";
@@ -315,6 +317,8 @@ openapi.post("/api/driver/packages/:packageId/collect-cash", DriverCollectCash);
 openapi.post("/api/driver/packages/:packageId/status", DriverUpdateStatus);
 openapi.post("/api/driver/packages/:packageId/exception", DriverPackageExceptionCreate);
 openapi.get("/api/driver/exceptions", DriverPackageExceptionList);
+openapi.get("/api/driver/dashboard", DriverDashboard);
+openapi.post("/api/driver/tasks/batch-arrive", DriverTaskBatchArrive);
 openapi.get("/api/cs/exceptions", CustomerServiceExceptionList);
 openapi.post("/api/cs/exceptions/:exceptionId/handle", CustomerServiceExceptionHandle);
 openapi.get("/api/cs/contract-applications", CustomerServiceContractList);

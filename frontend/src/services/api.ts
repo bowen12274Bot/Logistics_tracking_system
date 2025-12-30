@@ -782,6 +782,27 @@ export const api = {
         { method: "GET" },
       );
     },
+    // 司機儀表板聚合 API - 減少 API 調用次數
+    getDriverDashboard: () =>
+      request<{
+        success: boolean;
+        vehicle: VehicleRecord | null;
+        assigned_tasks: DeliveryTaskRecord[];
+        handoff_tasks: DeliveryTaskRecord[];
+        cargo: Array<{ package_id: string; tracking_number: string | null; package_status?: string | null; loaded_at: string | null }>;
+        exception_count: number;
+        synced_at: string;
+      }>("/api/driver/dashboard", { method: "GET" }),
+    // 批量標記到達 API - 用於付款視窗
+    batchArriveDriverTasks: (taskIds: string[]) =>
+      request<{
+        success: boolean;
+        summary: { total: number; arrived: number; errors: number; skipped: number };
+        results: Array<{ task_id: string; status: string; error?: string }>;
+      }>("/api/driver/tasks/batch-arrive", {
+        method: "POST",
+        body: JSON.stringify({ task_ids: taskIds }),
+      }),
     getCustomerServiceExceptions: (query?: { handled?: boolean; limit?: number }) => {
       const qs = new URLSearchParams();
       if (query?.handled !== undefined) qs.set("handled", String(query.handled));

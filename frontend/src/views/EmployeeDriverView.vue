@@ -104,16 +104,15 @@ async function refresh() {
   loading.value = true;
   error.value = null;
   try {
-    const [meRes, assignedRes, exceptionRes, cargoRes] = await Promise.all([
-      api.getVehicleMe(),
-      api.getDriverTasks("assigned"),
+    // 優化：使用聚合 Dashboard API，減少 4 個調用為 1 個 + 1 個
+    const [dashboard, exceptionRes] = await Promise.all([
+      api.getDriverDashboard(),
       api.getDriverExceptionReports(100),
-      api.getVehicleCargoMe(),
     ]);
-    vehicle.value = meRes.vehicle ?? null;
-    assigned.value = assignedRes.tasks ?? [];
+    vehicle.value = dashboard.vehicle ?? null;
+    assigned.value = dashboard.assigned_tasks ?? [];
+    cargoList.value = dashboard.cargo ?? [];
     exceptionReports.value = exceptionRes.exceptions ?? [];
-    cargoList.value = cargoRes.cargo ?? [];
   } catch (e: any) {
     error.value = String(e?.message ?? e);
     toastFromApiError(e, error.value ?? t("driver.errors.loadFailed"));
