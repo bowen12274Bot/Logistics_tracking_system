@@ -11,15 +11,15 @@ import { i18n } from '../../i18n'
 import { useAuthStore } from '../../stores/auth'
 import { mockDriverUser, createMockAuthResponse } from '../helpers'
 
-// Mock API
+// Mock API - 使用新的聚合 Dashboard API 和批量 API
 const apiMock = vi.hoisted(() => ({
   getMap: vi.fn(),
   getVehicleMe: vi.fn(),
-  getDriverTasks: vi.fn(),
-  getVehicleCargoMe: vi.fn(),
+  getDriverDashboard: vi.fn(),
   getMapRoute: vi.fn(),
   arriveDriverTask: vi.fn(),
   enrouteDriverTask: vi.fn(),
+  batchArriveDriverTasks: vi.fn(),
 }))
 
 vi.mock('../../services/api', () => ({
@@ -62,8 +62,21 @@ describe('DriverMapView', () => {
     
     apiMock.getMap.mockResolvedValue({ nodes: mockNodes, edges: mockEdges })
     apiMock.getVehicleMe.mockResolvedValue({ vehicle: { id: 'v1', vehicle_code: 'V-001', current_node_id: 'HUB_0' } })
-    apiMock.getDriverTasks.mockResolvedValue({ tasks: [] })
-    apiMock.getVehicleCargoMe.mockResolvedValue({ cargo: [] })
+    // 使用新的 Dashboard API
+    apiMock.getDriverDashboard.mockResolvedValue({
+      success: true,
+      vehicle: { id: 'v1', vehicle_code: 'V-001', current_node_id: 'HUB_0' },
+      assigned_tasks: [],
+      handoff_tasks: [],
+      cargo: [],
+      exception_count: 0,
+      synced_at: new Date().toISOString(),
+    })
+    apiMock.batchArriveDriverTasks.mockResolvedValue({
+      success: true,
+      summary: { total: 0, arrived: 0, errors: 0, skipped: 0 },
+      results: [],
+    })
 
     const auth = useAuthStore()
     auth.persist(createMockAuthResponse(mockDriverUser))
@@ -97,39 +110,35 @@ describe('DriverMapView', () => {
   })
 
   it.skip('renders assigned tasks in sidebar', async () => {
-    apiMock.getDriverTasks.mockImplementation(async (type) => {
-        if (type === 'assigned') {
-            return { 
-              tasks: [
-                { 
-                  id: 't1', 
-                  package_id: 'pkg1',
-                  tracking_number: 'TRK-1', 
-                  from_location: 'HUB_0',
-                  to_location: 'REG_1',
-                  status: 'pending'
-                }
-              ] 
-            }
+    apiMock.getDriverDashboard.mockResolvedValue({
+      success: true,
+      vehicle: { id: 'v1', vehicle_code: 'V-001', current_node_id: 'HUB_0' },
+      assigned_tasks: [
+        { 
+          id: 't1', 
+          package_id: 'pkg1',
+          tracking_number: 'TRK-1', 
+          from_location: 'HUB_0',
+          to_location: 'REG_1',
+          status: 'pending'
         }
-        return { tasks: [] }
+      ],
+      handoff_tasks: [],
+      cargo: [],
+      exception_count: 0,
+      synced_at: new Date().toISOString(),
     })
-    
     
     const wrapper = mountView()
     await flushPromises()
     await wrapper.vm.$nextTick()
     
-    // Open sidebar if collapsed? Default seems open or easily openable.
-    // Check if task exists in list
     // Verify API calls
-    // Verify API calls
-    expect(apiMock.getDriverTasks).toHaveBeenCalled()
+    expect(apiMock.getDriverDashboard).toHaveBeenCalled()
     expect(wrapper.text()).not.toContain('目前沒有任務')
     expect(wrapper.text()).toContain('TRK-1')
 
     // Expand the task to see actions
-    // Directly toggle to ensure reactivity if click is flaky
     const vm = wrapper.vm as any
     vm.toggleTaskExpanded('assigned:t1')
     await wrapper.vm.$nextTick()
@@ -141,29 +150,22 @@ describe('DriverMapView', () => {
   it('enroutes task', async () => {
     const task = { 
         id: 't1', 
-        package_id: 'pkg1', // Add missing field
+        package_id: 'pkg1',
         tracking_number: 'TRK-1', 
         from_location: 'HUB_0', 
         to_location: 'REG_1',
-        status: 'accepted', // accepted/pending -> pickup. in_progress -> enroute/dropoff
-        task_type: 'dropoff', // Force enroute/dropoff logic?
-        // To force "enroute", we need !isAtTo and status=in_progress? 
-        // Or if it's "pickup" type but we are at different node?
-        // Let's rely on default "Enroute" button if others don't match.
+        status: 'in_progress',
+        task_type: 'dropoff',
     }
     
-    // For enroute: status in_progress, not at dest?
-    // Let's use status 'in_progress', from 'HUB_0', to 'REG_1'. Current at 'HUB_0'.
-    // Action should be "Enroute" (前往)?
-    // Actually if at HUB_0 and to REG_1, and status in_progress -> we are moving content?
-    
-    apiMock.getDriverTasks.mockImplementation(async (type) => {
-        if (type === 'assigned') {
-            return { 
-                tasks: [{ ...task, status: 'in_progress' }] 
-            }
-        }
-        return { tasks: [] }
+    apiMock.getDriverDashboard.mockResolvedValue({
+      success: true,
+      vehicle: { id: 'v1', vehicle_code: 'V-001', current_node_id: 'HUB_0' },
+      assigned_tasks: [task],
+      handoff_tasks: [],
+      cargo: [],
+      exception_count: 0,
+      synced_at: new Date().toISOString(),
     })
     
     const wrapper = await mountView()

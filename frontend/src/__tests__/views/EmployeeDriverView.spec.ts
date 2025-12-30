@@ -11,12 +11,10 @@ import { i18n } from '../../i18n'
 import { useAuthStore } from '../../stores/auth'
 import { mockDriverUser, createMockAuthResponse } from '../helpers'
 
-// Mock API
+// Mock API - 使用新的聚合 Dashboard API
 const apiMock = vi.hoisted(() => ({
-  getVehicleMe: vi.fn(),
-  getDriverTasks: vi.fn(),
+  getDriverDashboard: vi.fn(),
   getDriverExceptionReports: vi.fn(),
-  getVehicleCargoMe: vi.fn(),
 }))
 
 vi.mock('../../services/api', () => ({
@@ -32,11 +30,17 @@ describe('EmployeeDriverView', () => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
     
-    // Default mocks
-    apiMock.getVehicleMe.mockResolvedValue({ vehicle: { id: 'v1', vehicle_code: 'V-001', current_node_id: 'HUB_0' } })
-    apiMock.getDriverTasks.mockResolvedValue({ tasks: [] })
+    // Default mocks - 使用新的 Dashboard API
+    apiMock.getDriverDashboard.mockResolvedValue({
+      success: true,
+      vehicle: { id: 'v1', vehicle_code: 'V-001', current_node_id: 'HUB_0' },
+      assigned_tasks: [],
+      handoff_tasks: [],
+      cargo: [],
+      exception_count: 0,
+      synced_at: new Date().toISOString(),
+    })
     apiMock.getDriverExceptionReports.mockResolvedValue({ exceptions: [] })
-    apiMock.getVehicleCargoMe.mockResolvedValue({ cargo: [] })
 
     const auth = useAuthStore()
     auth.persist(createMockAuthResponse(mockDriverUser))
@@ -56,7 +60,7 @@ describe('EmployeeDriverView', () => {
 
   it('renders loading state initially', async () => {
     // Delay resolution
-    apiMock.getVehicleMe.mockImplementation(() => new Promise(() => {}))
+    apiMock.getDriverDashboard.mockImplementation(() => new Promise(() => {}))
     const wrapper = mountView()
     expect(wrapper.text()).toContain('...') 
   })
@@ -70,10 +74,16 @@ describe('EmployeeDriverView', () => {
   })
 
   it('renders assigned tasks', async () => {
-    apiMock.getDriverTasks.mockResolvedValue({ 
-      tasks: [
+    apiMock.getDriverDashboard.mockResolvedValue({
+      success: true,
+      vehicle: { id: 'v1', vehicle_code: 'V-001', current_node_id: 'HUB_0' },
+      assigned_tasks: [
         { id: 't1', tracking_number: 'TRK-1', from_location: 'LOC_A', to_location: 'LOC_B' }
-      ] 
+      ],
+      handoff_tasks: [],
+      cargo: [],
+      exception_count: 0,
+      synced_at: new Date().toISOString(),
     })
     
     const wrapper = mountView()
@@ -98,7 +108,7 @@ describe('EmployeeDriverView', () => {
   })
 
   it('handles api error', async () => {
-    apiMock.getVehicleMe.mockRejectedValue(new Error('API Fail'))
+    apiMock.getDriverDashboard.mockRejectedValue(new Error('API Fail'))
     
     const wrapper = mountView()
     await flushPromises()
