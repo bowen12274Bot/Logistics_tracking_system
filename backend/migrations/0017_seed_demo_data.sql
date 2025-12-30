@@ -6,8 +6,8 @@
 -- 4. An "exception" package stuck at warehouse
 
 -- Assign a vehicle to driver HUB_0
-INSERT OR IGNORE INTO vehicles (id, vehicle_code, home_node_id, current_node_id, updated_at)
-VALUES ('vehicle-demo-1', 'TRUCK-001', 'HUB_0', 'HUB_0', datetime('now'));
+INSERT OR IGNORE INTO vehicles (id, driver_user_id, vehicle_code, home_node_id, current_node_id, updated_at)
+VALUES ('vehicle-demo-1', 'user-driver-0', 'TRUCK-001', 'HUB_0', 'HUB_0', datetime('now'));
 
 -- Link vehicle to driver
 UPDATE users SET address = 'HUB_0' WHERE id = 'user-driver-0';
