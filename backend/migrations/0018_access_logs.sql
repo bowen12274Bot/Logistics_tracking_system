@@ -1,5 +1,5 @@
 -- Access Logs table for security auditing (Requirement 2.4, 114)
-CREATE TABLE access_logs (
+CREATE TABLE IF NOT EXISTS access_logs (
     id TEXT PRIMARY KEY,
     user_id TEXT, -- Nullable for unauthenticated requests
     method TEXT NOT NULL,
@@ -11,5 +11,5 @@ CREATE TABLE access_logs (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_access_logs_created_at ON access_logs(created_at);
-CREATE INDEX idx_access_logs_user_id ON access_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_access_logs_created_at ON access_logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_access_logs_user_id ON access_logs(user_id);

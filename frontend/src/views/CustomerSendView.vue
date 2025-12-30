@@ -712,18 +712,23 @@ async function copyTracking() {
         <section class="send-section">
           <header class="send-section-header">
             <h2 class="send-section-title">{{ t('send.package.title') }}</h2>
-            <p class="hint send-section-hint">{{ t('send.package.hint') }}</p>
+            <div class="send-section-actions">
+              <RouterLink to="/shipping-rules" class="ghost-btn small-btn">
+                📋 運費規則
+              </RouterLink>
+            </div>
           </header>
+          <p class="hint send-section-hint">{{ t('send.package.hint') }}</p>
           <div class="form-grid">
             <label class="form-field">
               <span>{{ t('send.package.weight') }}</span>
               <input
                 v-model.number="form.weight"
-                min="1"
+                min="0.1"
                 required
                 name="weight"
                 type="number"
-                step="1"
+                step="0.1"
                 :placeholder="t('send.package.weightPlaceholder')"
               />
             </label>
@@ -783,7 +788,7 @@ async function copyTracking() {
                 name="declaredValue"
                 type="number"
                 min="0"
-                step="1"
+                step="0.01"
                 :placeholder="t('send.package.declaredPlaceholder')"
               />
             </label>

@@ -35,6 +35,31 @@ const methodLabel = (method: PaymentMethod) => t(`payment.method.${method}`)
 const trackingLabel = (tracking?: string | null) => (tracking && tracking.trim() ? tracking.trim() : t('common.tracking.pending'))
 const listSeparator = computed(() => (locale.value === 'zh-TW' ? '、' : ', '))
 
+// 格式化日期範圍字串 "2025-12-01T00:00:00.000Z - 2025-12-31T23:59:59.999Z" -> "2025/12/1 - 2025/12/31"
+const formatPeriodRange = (period: string) => {
+  if (!period || !period.includes(' - ')) return period
+  
+  const [start, end] = period.split(' - ').map(s => s.trim())
+  if (!start || !end) return period
+  
+  try {
+    const startDate = new Date(start)
+    const endDate = new Date(end)
+    
+    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) return period
+    
+    const targetLocale = locale.value === 'en-US' ? 'en-US' : 'zh-TW'
+    const options: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'numeric', day: 'numeric' }
+    
+    const formattedStart = startDate.toLocaleDateString(targetLocale, options)
+    const formattedEnd = endDate.toLocaleDateString(targetLocale, options)
+    
+    return `${formattedStart} - ${formattedEnd}`
+  } catch {
+    return period
+  }
+}
+
 const unpaidPackages = computed<StoredPackage[]>(() => packageStore.unpaidPackages)
 const myUnpaidPackages = computed<StoredPackage[]>(() => unpaidPackages.value)
 const expandedIds = ref<Set<string>>(new Set())
@@ -403,7 +428,20 @@ const canPayNow = (pkg: StoredPackage) => {
 }
 
 const payableReasonFor = (pkg: StoredPackage) => {
-  return getPayableSnapshot(pkg)?.reason ?? null
+  const reason = getPayableSnapshot(pkg)?.reason ?? null
+  if (!reason) return null
+  
+  // 翻譯後端返回的英文 reason
+  const reasonMap: Record<string, string> = {
+    'Package not found': t('payment.reason.packageNotFound'),
+    'monthly_billing is only available for prepaid/cod': t('payment.reason.monthlyBillingOnly'),
+    'COD cash at store is payable after delivered at END_STORE_*': t('payment.reason.codStoreAfterDelivered'),
+    'COD cash at home is payable after arrived_delivery': t('payment.reason.codHomeAfterDelivered'),
+    'Cash prepaid at home is payable after arrived_pickup': t('payment.reason.prepaidHomeAfterPickup'),
+    'Unsupported payment_type': t('payment.reason.unsupportedPaymentType'),
+  }
+  
+  return reasonMap[reason] ?? reason
 }
 </script>
 
@@ -684,7 +722,7 @@ const payableReasonFor = (pkg: StoredPackage) => {
               :class="{ active: expandedRecordIds.has(recordKeyForBill(item.bill_id)) }"
             >
               <button type="button" class="row-btn" @click="toggleBillRecord(item.bill_id)">
-                <span class="tracking">{{ t('payment.billType.monthly') }} | {{ item.period }}</span>
+                <span class="tracking">{{ t('payment.billType.monthly') }} | {{ formatPeriodRange(item.period) }}</span>
                 <span class="pill">{{ billPaymentMethodLabel(item.payment_method) }}</span>
                 <span class="pill">{{ t('payment.records.amount', { amount: formatMoney(item.amount) }) }}</span>
                 <span class="meta">{{ t('payment.records.paidAt', { at: item.paid_at ? formatCreatedAt(item.paid_at) : '--' }) }}</span>
@@ -692,7 +730,7 @@ const payableReasonFor = (pkg: StoredPackage) => {
 
               <div v-if="expandedRecordIds.has(recordKeyForBill(item.bill_id))" class="package-detail">
                 <div class="detail-grid">
-                  <p class="meta">{{ t('payment.records.billPeriod') }}：{{ item.period }}</p>
+                  <p class="meta">{{ t('payment.records.billPeriod') }}：{{ formatPeriodRange(item.period) }}</p>
                   <p class="meta">{{ t('payment.detail.method') }}：{{ billPaymentMethodLabel(item.payment_method) }}</p>
                   <p class="meta">{{ t('payment.records.amount') }}：{{ formatMoney(item.amount) }} {{ t('payment.currency') }}</p>
                   <p class="meta">{{ t('payment.records.paidAt') }}：{{ item.paid_at ? formatCreatedAt(item.paid_at) : '--' }}</p>
@@ -759,6 +797,11 @@ const payableReasonFor = (pkg: StoredPackage) => {
   border: none;
   cursor: pointer;
   color: inherit;
+  transition: all 0.2s ease;
+}
+
+.tab-btn:hover:not(.active) {
+  background: rgba(225, 139, 139, 0.08);
 }
 
 .tab-btn + .tab-btn {
@@ -828,10 +871,16 @@ const payableReasonFor = (pkg: StoredPackage) => {
   border-radius: 12px;
   overflow: hidden;
   background: #fff;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.package-row:hover {
+  box-shadow: 0 2px 8px rgba(165, 122, 99, 0.12);
 }
 
 .package-row.active {
   border-color: var(--accent);
+  box-shadow: 0 4px 12px rgba(244, 182, 194, 0.2);
 }
 
 .detail-grid {
@@ -854,6 +903,18 @@ const payableReasonFor = (pkg: StoredPackage) => {
   background: rgba(255, 255, 255, 0.86);
   color: var(--text-main);
   min-width: 220px;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.method-select:hover {
+  border-color: rgba(165, 122, 99, 0.35);
+}
+
+.method-select:focus {
+  outline: none;
+  border-color: rgba(225, 139, 139, 0.5);
+  box-shadow: 0 0 0 3px rgba(225, 139, 139, 0.15);
 }
 
 .package-row.highlight {
@@ -872,6 +933,24 @@ const payableReasonFor = (pkg: StoredPackage) => {
   border: none;
   cursor: pointer;
   text-align: left;
+  transition: all 0.2s ease;
+  color: inherit;
+}
+
+.row-btn:hover {
+  background: rgba(244, 182, 194, 0.08);
+}
+
+.row-btn:active {
+  background: rgba(244, 182, 194, 0.15);
+}
+
+.row-static {
+  cursor: default;
+}
+
+.row-static:hover {
+  background: transparent;
 }
 
 .tracking {
@@ -883,6 +962,12 @@ const payableReasonFor = (pkg: StoredPackage) => {
   border-radius: 999px;
   background: rgba(0, 0, 0, 0.05);
   font-size: 13px;
+  transition: all 0.2s ease;
+}
+
+.pill:hover {
+  background: rgba(0, 0, 0, 0.08);
+  transform: scale(1.02);
 }
 
 .pill.danger {
@@ -890,11 +975,27 @@ const payableReasonFor = (pkg: StoredPackage) => {
   color: #7a2e2e;
 }
 
+.pill.danger:hover {
+  background: rgba(161, 60, 60, 0.15);
+}
+
 .package-detail {
   padding: 12px;
   border-top: 1px dashed var(--surface-stroke);
   display: grid;
   gap: 10px;
+  animation: slideDown 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .chip {
@@ -903,11 +1004,20 @@ const payableReasonFor = (pkg: StoredPackage) => {
   font-size: 12px;
   background: #f2f2f2;
   color: #444;
+  transition: all 0.2s ease;
+}
+
+.chip:hover {
+  background: #e8e8e8;
 }
 
 .chip.danger {
   background: #ffeceb;
   color: #a13c3c;
+}
+
+.chip.danger:hover {
+  background: #ffd9d7;
 }
 
 .meta {
@@ -937,6 +1047,17 @@ const payableReasonFor = (pkg: StoredPackage) => {
   border: 1px solid currentColor;
   padding: 8px 12px;
   border-radius: 10px;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.ghost-btn:hover:not(:disabled) {
+  background: rgba(244, 182, 194, 0.1);
+  transform: translateY(-1px);
+}
+
+.ghost-btn:active:not(:disabled) {
+  transform: translateY(0);
 }
 
 .ghost-btn:disabled {

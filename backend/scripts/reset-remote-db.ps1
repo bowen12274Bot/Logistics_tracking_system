@@ -11,30 +11,32 @@ Param(
 $backendDir = Resolve-Path (Join-Path $PSScriptRoot "..")
 Set-Location $backendDir
 
-$indexes = @(
-  "idx_edges_source",
-  "idx_tokens_user_id",
-  "idx_system_errors_level",
-  "idx_system_errors_resolved"
-)
+# Discover tables/indexes from migrations to avoid drift.
+$migrationsDir = Join-Path $backendDir "migrations"
+$migrationTables = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+$migrationIndexes = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
 
-$tables = @(
-  "vehicle_cargo",
-  "delivery_tasks",
-  "package_exceptions",
-  "monthly_billing_items",
-  "monthly_billing",
-  "tokens",
-  "system_errors",
-  "payments",
-  "package_events",
-  "vehicles",
-  "contract_applications",
-  "packages",
-  "users",
-  "edges",
-  "nodes"
-)
+if (Test-Path $migrationsDir) {
+  $migrationFiles = Get-ChildItem -Path $migrationsDir -Filter "*.sql" | Sort-Object Name
+  foreach ($file in $migrationFiles) {
+    $sql = Get-Content -LiteralPath $file.FullName -Raw
+
+    foreach ($match in [regex]::Matches($sql, '(?im)^[\\s]*CREATE\\s+TABLE\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?(?:\\[\\s*)?([A-Za-z0-9_]+)(?:\\s*\\])?[\\s]*\\(')) {
+      [void]$migrationTables.Add($match.Groups[1].Value)
+    }
+
+    foreach ($match in [regex]::Matches($sql, '(?im)^[\\s]*CREATE\\s+(?:UNIQUE\\s+)?INDEX\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?(?:\\[\\s*)?([A-Za-z0-9_]+)(?:\\s*\\])?[\\s]+ON\\b')) {
+      [void]$migrationIndexes.Add($match.Groups[1].Value)
+    }
+  }
+}
+
+$indexes = @($migrationIndexes) | Sort-Object
+$tables = @($migrationTables) | Sort-Object
+
+if ($tables.Count -eq 0) {
+  throw "No migration tables discovered under '$migrationsDir'. Aborting to avoid incomplete drop."
+}
 
 if (-not $Yes) {
   $actionText = if ($DropOnly) { "DROP tables only" } else { "DROP tables and REAPPLY migrations" }

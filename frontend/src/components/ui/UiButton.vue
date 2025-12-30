@@ -70,9 +70,11 @@ const iconSize = computed(() => {
   font-family: inherit;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   border: 1px solid transparent;
   white-space: nowrap;
+  position: relative;
+  overflow: hidden;
 }
 
 /* Variants */
@@ -80,11 +82,18 @@ const iconSize = computed(() => {
   background: rgba(244, 182, 194, 0.55);
   border-color: rgba(0, 0, 0, 0.06);
   color: var(--text-main);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
 .ui-button--primary:hover:not(:disabled) {
   background: rgba(244, 182, 194, 0.7);
-  transform: translateY(-1px);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(244, 182, 194, 0.4);
+}
+
+.ui-button--primary:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
 .ui-button--ghost {
@@ -96,6 +105,13 @@ const iconSize = computed(() => {
 .ui-button--ghost:hover:not(:disabled) {
   background: rgba(244, 182, 194, 0.15);
   border-color: rgba(244, 182, 194, 0.35);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(244, 182, 194, 0.2);
+}
+
+.ui-button--ghost:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: none;
 }
 
 .ui-button--danger {
@@ -107,6 +123,19 @@ const iconSize = computed(() => {
 .ui-button--danger:hover:not(:disabled) {
   background: rgba(220, 38, 38, 0.2);
   border-color: rgba(220, 38, 38, 0.5);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(220, 38, 38, 0.25);
+}
+
+.ui-button--danger:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: none;
+}
+
+/* Focus state */
+.ui-button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(244, 182, 194, 0.3);
 }
 
 /* Sizes */
@@ -140,6 +169,10 @@ const iconSize = computed(() => {
   padding: 12px;
 }
 
+.ui-button--icon-only:hover:not(:disabled) .ui-button__icon {
+  transform: scale(1.1);
+}
+
 /* Icon position */
 .ui-button--icon-right {
   flex-direction: row-reverse;
@@ -149,10 +182,12 @@ const iconSize = computed(() => {
 .ui-button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+  transform: none !important;
 }
 
 .ui-button__icon {
   flex-shrink: 0;
+  transition: transform 0.2s ease;
 }
 
 .ui-button__text {

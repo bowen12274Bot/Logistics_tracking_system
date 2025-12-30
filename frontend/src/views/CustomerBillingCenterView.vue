@@ -112,6 +112,15 @@ onMounted(() => {
   color: inherit;
   border-radius: 10px;
   font-weight: 700;
+  transition: all 0.2s ease;
+}
+
+.tab-btn:hover:not(.active) {
+  background: rgba(225, 139, 139, 0.08);
+}
+
+.tab-btn:active:not(.active) {
+  background: rgba(225, 139, 139, 0.15);
 }
 
 .tab-btn.active {
@@ -130,6 +139,11 @@ onMounted(() => {
   font-weight: 800;
   font-size: 12px;
   white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.tab-btn:hover .tab-pill {
+  transform: scale(1.05);
 }
 
 .tab-panel {

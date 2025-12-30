@@ -79,6 +79,27 @@ const billableWeightKg = computed(() => Math.max(form.weightKg || 0, volumetricW
 const boxType = computed<BoxType | null>(() => pickBoxType(form.lengthCm, form.widthCm, form.heightCm, billableWeightKg.value))
 const { t } = useI18n()
 
+function boxTypeLabel(type: BoxType | null): string {
+  if (!type) return ''
+  const labels: Record<BoxType, string> = {
+    envelope: '信封',
+    S: '小型',
+    M: '中型',
+    L: '大型',
+  }
+  return labels[type] || type
+}
+
+function deliveryTypeLabel(type: DeliveryType): string {
+  const labels: Record<DeliveryType, string> = {
+    economy: '經濟',
+    standard: '標準',
+    two_day: '兩日',
+    overnight: '隔日',
+  }
+  return labels[type] || type
+}
+
 function pickBoxType(l: number, w: number, h: number, billableWeight: number): BoxType | null {
   const dims = [l, w, h].sort((a, b) => b - a) // d1 >= d2 >= d3
   const d1 = dims[0] ?? 0
@@ -178,6 +199,11 @@ async function handleSubmit() {
     toast.warning(error.value)
     return
   }
+  if (form.fromNodeId === form.toNodeId) {
+    error.value = '起點和終點不能相同，請選擇不同的地點。'
+    toast.warning(error.value)
+    return
+  }
   if (!boxType.value) {
     error.value = t('estimate.error.boxType')
     toast.warning(error.value)
@@ -239,69 +265,98 @@ async function handleSubmit() {
     :lede="t('estimate.lede')"
   >
     <UiCard class="estimator">
-      <div class="form-grid">
-        <div class="field">
-          <label>{{ t('estimate.from') }}</label>
-          <input v-model="form.fromNodeId" :placeholder="t('estimate.fromPlaceholder')" />
-        </div>
-        <div class="field">
-          <label>{{ t('estimate.to') }}</label>
-          <input v-model="form.toNodeId" :placeholder="t('estimate.toPlaceholder')" />
-        </div>
+      <!-- Shipping Rules Link -->
+      <div class="rules-link-section">
+        <RouterLink to="/shipping-rules" class="rules-link">
+          📋 查看運費規則說明
+        </RouterLink>
+      </div>
 
-        <div class="field">
-          <label>{{ t('estimate.weight') }}</label>
-          <input v-model.number="form.weightKg" type="number" min="0" step="0.1" />
-          <p class="hint">{{ t('estimate.billableHint') }}</p>
-        </div>
-        <div class="field">
-          <label>{{ t('estimate.dimensions') }}</label>
-          <div class="triple">
-            <input v-model.number="form.lengthCm" type="number" min="0" step="1" :placeholder="t('estimate.lengthPlaceholder')" />
-            <input v-model.number="form.widthCm" type="number" min="0" step="1" :placeholder="t('estimate.widthPlaceholder')" />
-            <input v-model.number="form.heightCm" type="number" min="0" step="1" :placeholder="t('estimate.heightPlaceholder')" />
+      <!-- Location Section -->
+      <div class="form-section">
+        <h3 class="section-title">{{ t('estimate.from') }} / {{ t('estimate.to') }}</h3>
+        <div class="section-grid two-col">
+          <div class="field">
+            <label>{{ t('estimate.from') }}</label>
+            <input v-model="form.fromNodeId" :placeholder="t('estimate.fromPlaceholder')" />
           </div>
-          <p class="hint">{{ t('estimate.volumeHint') }}</p>
-        </div>
-
-        <div class="field">
-          <label>{{ t('estimate.deliveryType') }}</label>
-          <select v-model="form.deliveryType">
-            <option value="economy">{{ t('estimate.deliveryTypeOptions.economy') }}</option>
-            <option value="standard">{{ t('estimate.deliveryTypeOptions.standard') }}</option>
-            <option value="two_day">{{ t('estimate.deliveryTypeOptions.twoDay') }}</option>
-            <option value="overnight">{{ t('estimate.deliveryTypeOptions.overnight') }}</option>
-          </select>
-        </div>
-
-        <div class="field">
-          <label>{{ t('estimate.marks') }}</label>
-          <div class="chips">
-            <label class="chip">
-              <input v-model="form.specialMarks.dangerous" type="checkbox" />
-              <span>{{ t('estimate.mark.dangerous') }}</span>
-            </label>
-            <label class="chip">
-              <input v-model="form.specialMarks.fragile" type="checkbox" />
-              <span>{{ t('estimate.mark.fragile') }}</span>
-            </label>
-            <label class="chip">
-              <input v-model="form.specialMarks.international" type="checkbox" />
-              <span>{{ t('estimate.mark.international') }}</span>
-            </label>
+          <div class="field">
+            <label>{{ t('estimate.to') }}</label>
+            <input v-model="form.toNodeId" :placeholder="t('estimate.toPlaceholder')" />
           </div>
         </div>
       </div>
 
-      <div class="derived">
-        <div class="pill">{{ t('estimate.volumePill', { weight: volumetricWeightKg.toFixed(2) }) }}</div>
-        <div class="pill">{{ t('estimate.billablePill', { weight: billableWeightKg.toFixed(2) }) }}</div>
-        <div class="pill">
-          {{ t('estimate.boxLabel', { box: boxType || t('estimate.boxOutOfRange') }) }}
+      <!-- Package Details Section -->
+      <div class="form-section">
+        <h3 class="section-title">{{ t('estimate.weight') }} / {{ t('estimate.dimensions') }}</h3>
+        <div class="section-grid">
+          <div class="field">
+            <label>{{ t('estimate.weight') }}</label>
+            <input v-model.number="form.weightKg" type="number" min="0" step="0.1" />
+            <p class="info-text">
+              <span class="label">計費重量：</span>
+              <span class="result-value">{{ billableWeightKg.toFixed(2) }} kg</span>
+            </p>
+          </div>
+          
+          <div class="field">
+            <label>{{ t('estimate.dimensions') }}</label>
+            <div class="triple">
+              <input v-model.number="form.lengthCm" type="number" min="0" step="1" :placeholder="t('estimate.lengthPlaceholder')" />
+              <input v-model.number="form.widthCm" type="number" min="0" step="1" :placeholder="t('estimate.widthPlaceholder')" />
+              <input v-model.number="form.heightCm" type="number" min="0" step="1" :placeholder="t('estimate.heightPlaceholder')" />
+            </div>
+            <p class="info-text">
+              <span class="label">材積重量：</span>
+              <span class="result-value">{{ volumetricWeightKg.toFixed(2) }} kg</span>
+            </p>
+          </div>
+        </div>
+        
+        <div class="box-type-display" :class="{ invalid: !boxType }">
+          <span class="label">箱型：</span>
+          <span class="box-value" v-if="boxType">{{ boxTypeLabel(boxType) }}</span>
+          <span class="box-value invalid" v-else>{{ t('estimate.boxOutOfRange') }}</span>
           <span v-if="!boxType" class="hint">{{ t('estimate.boxAdjustHint') }}</span>
         </div>
       </div>
 
+      <!-- Delivery Options Section -->
+      <div class="form-section">
+        <h3 class="section-title">{{ t('estimate.deliveryType') }} / {{ t('estimate.marks') }}</h3>
+        <div class="section-grid two-col">
+          <div class="field">
+            <label>{{ t('estimate.deliveryType') }}</label>
+            <select v-model="form.deliveryType">
+              <option value="economy">{{ t('estimate.deliveryTypeOptions.economy') }}</option>
+              <option value="standard">{{ t('estimate.deliveryTypeOptions.standard') }}</option>
+              <option value="two_day">{{ t('estimate.deliveryTypeOptions.twoDay') }}</option>
+              <option value="overnight">{{ t('estimate.deliveryTypeOptions.overnight') }}</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label>{{ t('estimate.marks') }}</label>
+            <div class="chips">
+              <label class="chip">
+                <input v-model="form.specialMarks.dangerous" type="checkbox" />
+                <span>{{ t('estimate.mark.dangerous') }}</span>
+              </label>
+              <label class="chip">
+                <input v-model="form.specialMarks.fragile" type="checkbox" />
+                <span>{{ t('estimate.mark.fragile') }}</span>
+              </label>
+              <label class="chip">
+                <input v-model="form.specialMarks.international" type="checkbox" />
+                <span>{{ t('estimate.mark.international') }}</span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Actions -->
       <div class="actions">
         <button class="primary-btn" type="button" :disabled="loading" @click="handleSubmit">
           {{ loading ? t('estimate.loading') : t('estimate.cta') }}
@@ -311,10 +366,11 @@ async function handleSubmit() {
 
       <p v-if="error" class="error">{{ error }}</p>
 
+      <!-- Result Section -->
       <div v-if="result" class="result card">
         <header class="result-head">
           <h3>{{ t('estimate.result.title') }}</h3>
-          <span class="pill">{{ t('estimate.result.total', { amount: result.total_cost }) }}</span>
+          <span class="pill total-pill">{{ t('estimate.result.total', { amount: result.total_cost }) }}</span>
         </header>
         <div class="grid">
           <div>
@@ -324,7 +380,7 @@ async function handleSubmit() {
           </div>
           <div>
             <p class="eyebrow">{{ t('estimate.section.box') }}</p>
-            <p>{{ t('estimate.boxLabel', { box: lastSnapshot.boxType ?? result.box_type }) }}</p>
+            <p>箱型：{{ boxTypeLabel(lastSnapshot.boxType ?? result.box_type) }}</p>
             <p>
               {{ t('estimate.billableLabel', { billable: lastSnapshot.billableWeightKg.toFixed(2), volumetric: lastSnapshot.volumetricWeightKg.toFixed(2) }) }}
             </p>
@@ -332,7 +388,7 @@ async function handleSubmit() {
           <div>
             <p class="eyebrow">{{ t('estimate.section.service') }}</p>
             <p>{{ t('estimate.base', { value: result.base.toFixed(2) }) }}</p>
-            <p>{{ t('estimate.deliveryTypeLabel', { level: form.deliveryType }) }}</p>
+            <p>配送型態：{{ deliveryTypeLabel(form.deliveryType) }}</p>
             <p>{{ t('estimate.shippingBase', { value: result.shipping }) }}</p>
           </div>
           <div>
@@ -360,18 +416,76 @@ async function handleSubmit() {
 <style scoped>
 .estimator {
   display: grid;
-  gap: 16px;
-  padding: 18px;
-  max-width: 1100px;
+  gap: 20px;
+  padding: 20px;
+  max-width: auto;
   margin: 0 auto;
 }
 
-.form-grid {
-  display: grid;
-  gap: 12px;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+/* Shipping Rules Link */
+.rules-link-section {
+  text-align: center;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(165, 122, 99, 0.1);
 }
 
+.rules-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 18px;
+  border-radius: 12px;
+  background: rgba(244, 182, 194, 0.15);
+  border: 1px solid rgba(244, 182, 194, 0.3);
+  color: rgba(107, 74, 64, 0.9);
+  font-weight: 600;
+  font-size: 14px;
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+.rules-link:hover {
+  background: rgba(244, 182, 194, 0.25);
+  border-color: rgba(244, 182, 194, 0.5);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(170, 124, 105, 0.15);
+}
+
+.rules-link:active {
+  transform: translateY(0);
+}
+
+
+/* Form Sections */
+.form-section {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(165, 122, 99, 0.15);
+}
+
+.section-title {
+  margin: 0 0 8px 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: rgba(165, 122, 99, 0.9);
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(165, 122, 99, 0.12);
+}
+
+.section-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: 1fr;
+}
+
+.section-grid.two-col {
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+/* Fields */
 .field {
   display: flex;
   flex-direction: column;
@@ -380,22 +494,111 @@ async function handleSubmit() {
 
 .field label {
   font-weight: 700;
+  font-size: 14px;
+  color: var(--text-main);
 }
 
 .field input,
 .field select {
-  padding: 10px 12px;
+  padding: 11px 14px;
   border: 1px solid var(--surface-stroke);
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.95);
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.field input:focus,
+.field select:focus {
+  outline: none;
+  border-color: rgba(244, 182, 194, 0.6);
+  box-shadow: 0 0 0 3px rgba(244, 182, 194, 0.15);
 }
 
 .triple {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  grid-template-columns: repeat(3, 1fr);
   gap: 8px;
 }
 
+/* Info Text (inline calculations) */
+.info-text {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 4px 0 0 0;
+  padding: 8px 12px;
+  background: rgba(244, 182, 194, 0.1);
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.info-text .label {
+  font-weight: 600;
+  color: rgba(165, 122, 99, 0.8);
+}
+
+.info-text .value {
+  color: #666;
+  font-style: italic;
+}
+
+.info-text .result-value {
+  margin-left: auto;
+  font-weight: 700;
+  color: rgba(165, 122, 99, 1);
+  padding: 3px 10px;
+  background: rgba(244, 182, 194, 0.25);
+  border-radius: 6px;
+}
+
+/* Box Type Display */
+.box-type-display {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  background: rgba(244, 182, 194, 0.15);
+  border: 1px solid rgba(244, 182, 194, 0.3);
+  border-radius: 12px;
+  margin-top: 8px;
+}
+
+.box-type-display.invalid {
+  background: rgba(255, 200, 200, 0.15);
+  border-color: rgba(200, 100, 100, 0.3);
+}
+
+.box-type-display .label {
+  font-weight: 600;
+  font-size: 14px;
+  color: rgba(165, 122, 99, 0.8);
+}
+
+.box-type-display .box-value {
+  font-weight: 800;
+  font-size: 16px;
+  color: rgba(165, 122, 99, 1);
+  padding: 4px 12px;
+  background: rgba(244, 182, 194, 0.3);
+  border-radius: 8px;
+}
+
+.box-type-display .box-value.invalid {
+  color: #a13c3c;
+  background: rgba(255, 200, 200, 0.3);
+}
+
+.box-type-display .hint {
+  margin-left: auto;
+  font-size: 12px;
+  color: #a13c3c;
+  font-style: italic;
+}
+
+/* Chips (checkboxes) */
 .chips {
   display: flex;
   gap: 10px;
@@ -405,61 +608,88 @@ async function handleSubmit() {
 .chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 10px;
+  gap: 8px;
+  padding: 10px 14px;
   border-radius: 12px;
   border: 1px solid rgba(165, 122, 99, 0.25);
-  background: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.8);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.chip:hover {
+  background: rgba(244, 182, 194, 0.15);
+  border-color: rgba(244, 182, 194, 0.4);
+}
+
+.chip input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
   cursor: pointer;
 }
 
-.derived {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-  max-width: 1100px;
-  margin: 0 auto;
+.chip span {
+  font-size: 14px;
+  font-weight: 500;
 }
 
-.pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 12px;
-  border-radius: 999px;
-  background: rgba(244, 182, 194, 0.28);
-  border: 1px solid rgba(244, 182, 194, 0.4);
-}
-
+/* Actions */
 .actions {
   display: flex;
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
-  max-width: 1100px;
-  margin: 0 auto;
+  padding-top: 8px;
 }
 
 .primary-btn {
-  padding: 10px 14px;
+  padding: 12px 24px;
   border-radius: 12px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  background: rgba(244, 182, 194, 0.55);
+  border: 1px solid rgba(244, 182, 194, 0.4);
+  background: linear-gradient(135deg, rgba(244, 182, 194, 0.5), rgba(255, 164, 164, 0.4));
   cursor: pointer;
+  font-weight: 700;
+  font-size: 15px;
+  transition: all 0.2s ease;
+}
+
+.primary-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, rgba(244, 182, 194, 0.7), rgba(255, 164, 164, 0.6));
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(244, 182, 194, 0.3);
+}
+
+.primary-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.primary-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.hint {
+  font-size: 13px;
+  color: #666;
+  font-style: italic;
 }
 
 .error {
   color: #c0392b;
   font-weight: 700;
+  padding: 12px 16px;
+  background: rgba(255, 200, 200, 0.2);
+  border-radius: 10px;
+  border: 1px solid rgba(200, 100, 100, 0.3);
 }
 
+/* Result Section */
 .result {
   border: 1px solid rgba(165, 122, 99, 0.2);
-  padding: 14px;
+  padding: 18px;
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.9);
-  max-width: 1100px;
-  margin: 0 auto;
+  margin-top: 8px;
 }
 
 .result-head {
@@ -467,12 +697,80 @@ async function handleSubmit() {
   justify-content: space-between;
   align-items: center;
   gap: 10px;
-  margin-bottom: 10px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(165, 122, 99, 0.15);
+  flex-wrap: wrap;
+}
+
+.result-head h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(244, 182, 194, 0.28);
+  border: 1px solid rgba(244, 182, 194, 0.4);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.total-pill {
+  background: linear-gradient(135deg, rgba(244, 182, 194, 0.5), rgba(255, 164, 164, 0.4));
+  border-color: rgba(244, 182, 194, 0.6);
+  font-weight: 700;
+  font-size: 15px;
 }
 
 .grid {
   display: grid;
-  gap: 12px;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.grid > div {
+  padding: 14px;
+  border-radius: 12px;
+  background: rgba(244, 182, 194, 0.08);
+  border: 1px solid rgba(244, 182, 194, 0.2);
+}
+
+.grid > div p {
+  margin: 6px 0;
+  line-height: 1.5;
+  font-size: 14px;
+}
+
+.grid > div p.eyebrow {
+  margin-top: 0;
+  margin-bottom: 10px;
+  font-weight: 700;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: rgba(165, 122, 99, 0.8);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .section-grid.two-col {
+    grid-template-columns: 1fr;
+  }
+  
+  .triple {
+    grid-template-columns: 1fr;
+  }
+  
+  .result-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 }
 </style>
