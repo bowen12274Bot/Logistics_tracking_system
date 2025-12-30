@@ -44,21 +44,18 @@ export class AuthMe extends OpenAPIRoute {
 
     const token = authHeader.replace("Bearer ", "");
 
-    // 查詢 token 對應的使用者
-    const tokenRecord = await c.env.DB.prepare(
-      "SELECT user_id FROM tokens WHERE id = ?"
-    ).bind(token).first<{ user_id: string }>();
-
-    if (!tokenRecord) {
-      return c.json({ error: "Token 無效" }, 401);
-    }
-
-    const user = await c.env.DB.prepare(
-      "SELECT id, user_name, phone_number, address, email, user_type, user_class, billing_preference FROM users WHERE id = ?"
-    ).bind(tokenRecord.user_id).first();
+    // 優化：合併 token 和 user 查詢為單一 JOIN 查詢
+    const user = await c.env.DB.prepare(`
+      SELECT u.id, u.user_name, u.phone_number, u.address, u.email, 
+             u.user_type, u.user_class, u.billing_preference 
+      FROM tokens t
+      JOIN users u ON t.user_id = u.id
+      WHERE t.id = ?
+      LIMIT 1
+    `).bind(token).first();
 
     if (!user) {
-      return c.json({ error: "使用者不存在" }, 401);
+      return c.json({ error: "Token 無效或使用者不存在" }, 401);
     }
 
     return c.json({ success: true, user });

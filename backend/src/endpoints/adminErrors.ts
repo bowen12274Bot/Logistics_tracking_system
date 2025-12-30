@@ -40,7 +40,9 @@ export class AdminSystemErrors extends OpenAPIRoute {
     const limit = Math.min(parseInt(query.limit || "20", 10), 100);
     const offset = parseInt(query.offset || "0", 10);
 
-    let sql = "SELECT * FROM system_errors WHERE 1=1";
+    // 優化：只查詢需要的欄位，移除昂貴的 COUNT 子查詢
+    let sql = `SELECT id, level, code, message, details, occurred_at, resolved 
+               FROM system_errors WHERE 1=1`;
     const params: (string | number)[] = [];
 
     if (query.level) {
@@ -63,21 +65,17 @@ export class AdminSystemErrors extends OpenAPIRoute {
       params.push(query.resolved === "true" ? 1 : 0);
     }
 
-    // 計算總數
-    const countSql = sql.replace("SELECT *", "SELECT COUNT(*) as total");
-    const countResult = params.length > 0
-      ? await c.env.DB.prepare(countSql).bind(...params).first<{ total: number }>()
-      : await c.env.DB.prepare(countSql).first<{ total: number }>();
-    const total = countResult?.total || 0;
-
     sql += " ORDER BY occurred_at DESC LIMIT ? OFFSET ?";
-    params.push(limit, offset);
+    params.push(limit + 1, offset); // 多查一筆來判斷是否有更多
 
     const result = await c.env.DB.prepare(sql).bind(...params).all();
+    const rows = result.results || [];
+    const hasMore = rows.length > limit;
+    const errors = hasMore ? rows.slice(0, limit) : rows;
 
     return c.json({
       success: true,
-      errors: (result.results || []).map((err: any) => ({
+      errors: errors.map((err: any) => ({
         id: err.id,
         level: err.level,
         code: err.code,
@@ -86,7 +84,7 @@ export class AdminSystemErrors extends OpenAPIRoute {
         occurred_at: err.occurred_at,
         resolved: err.resolved === 1,
       })),
-      total,
+      has_more: hasMore,
       limit,
       offset,
     });

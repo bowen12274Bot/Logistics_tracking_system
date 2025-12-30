@@ -35,8 +35,12 @@ export class AdminContractList extends OpenAPIRoute {
 
     const query = c.req.query();
 
+    // 優化：只選取必要欄位並加入 LIMIT
     let sql = `
-      SELECT ca.*, u.user_name as customer_name, u.email as customer_email
+      SELECT ca.id, ca.customer_id, ca.company_name, ca.tax_id, 
+             ca.contact_person, ca.contact_phone, ca.billing_address, 
+             ca.notes, ca.status, ca.created_at,
+             u.user_name as customer_name, u.email as customer_email
       FROM contract_applications ca
       LEFT JOIN users u ON ca.customer_id = u.id
       WHERE 1=1
@@ -48,7 +52,7 @@ export class AdminContractList extends OpenAPIRoute {
       params.push(query.status);
     }
 
-    sql += " ORDER BY ca.created_at DESC";
+    sql += " ORDER BY ca.created_at DESC LIMIT 100";
 
     const result = params.length > 0
       ? await c.env.DB.prepare(sql).bind(...params).all()
