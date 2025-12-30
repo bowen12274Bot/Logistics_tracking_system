@@ -21,18 +21,21 @@ if (Test-Path $migrationsDir) {
   foreach ($file in $migrationFiles) {
     $sql = Get-Content -LiteralPath $file.FullName -Raw
 
-    foreach ($match in [regex]::Matches($sql, '(?im)^[\\s]*CREATE\\s+TABLE\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?(?:\\[\\s*)?([A-Za-z0-9_]+)(?:\\s*\\])?[\\s]*\\(')) {
+    foreach ($match in [regex]::Matches($sql, '(?im)^\s*CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:\[\s*)?([A-Za-z0-9_]+)(?:\s*\])?\s*\(')) {
       [void]$migrationTables.Add($match.Groups[1].Value)
     }
 
-    foreach ($match in [regex]::Matches($sql, '(?im)^[\\s]*CREATE\\s+(?:UNIQUE\\s+)?INDEX\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?(?:\\[\\s*)?([A-Za-z0-9_]+)(?:\\s*\\])?[\\s]+ON\\b')) {
+    foreach ($match in [regex]::Matches($sql, '(?im)^\s*CREATE\s+(?:UNIQUE\s+)?INDEX\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:\[\s*)?([A-Za-z0-9_]+)(?:\s*\])?\s+ON\b')) {
       [void]$migrationIndexes.Add($match.Groups[1].Value)
     }
   }
 }
 
+
 $indexes = @($migrationIndexes) | Sort-Object
 $tables = @($migrationTables) | Sort-Object
+
+Write-Host "Found $($tables.Count) tables to drop: $($tables -join ', ')"
 
 if ($tables.Count -eq 0) {
   throw "No migration tables discovered under '$migrationsDir'. Aborting to avoid incomplete drop."
@@ -49,14 +52,14 @@ if (-not $Yes) {
 }
 
 $dropSqlLines = @("PRAGMA foreign_keys=OFF;")
-$dropSqlLines += $indexes | ForEach-Object { "DROP INDEX IF EXISTS [$($_)];" }
-$dropSqlLines += $tables | ForEach-Object { "DROP TABLE IF EXISTS [$($_)];" }
+$dropSqlLines += $indexes | ForEach-Object { "DROP INDEX IF EXISTS ""$($_)"";" }
+$dropSqlLines += $tables | ForEach-Object { "DROP TABLE IF EXISTS ""$($_)"";" }
 if (-not $KeepMigrationHistory) {
-  $dropSqlLines += "DROP TABLE IF EXISTS [d1_migrations];"
-  $dropSqlLines += "DROP TABLE IF EXISTS [d1_migrations_lock];"
+  $dropSqlLines += "DROP TABLE IF EXISTS ""d1_migrations"";"
+  $dropSqlLines += "DROP TABLE IF EXISTS ""d1_migrations_lock"";"
 }
 if ($ExtraDropTables.Count -gt 0) {
-  $dropSqlLines += $ExtraDropTables | ForEach-Object { "DROP TABLE IF EXISTS [$($_)];" }
+  $dropSqlLines += $ExtraDropTables | ForEach-Object { "DROP TABLE IF EXISTS ""$($_)"";" }
 }
 $dropSqlLines += @("PRAGMA foreign_keys=ON;")
 $dropSql = ($dropSqlLines -join "`n")
@@ -67,7 +70,7 @@ Set-Content -Path $tempDropFile -Value $dropSql -Encoding UTF8
 try {
   $wranglerArgs = @()
   if ($ConfigPath) { $wranglerArgs += @("--config", $ConfigPath) }
-  & npx wrangler @wranglerArgs d1 execute $DatabaseBinding --remote --file $tempDropFile
+  & npx wrangler @wranglerArgs d1 execute $DatabaseBinding --remote --file $tempDropFile --yes
   if ($LASTEXITCODE -ne 0) {
     throw "Dropping remote tables failed."
   }
@@ -83,7 +86,7 @@ if ($DropOnly) {
 Write-Host "Applying D1 migrations (remote)..."
 $wranglerArgs = @()
 if ($ConfigPath) { $wranglerArgs += @("--config", $ConfigPath) }
-& npx wrangler @wranglerArgs d1 migrations apply $DatabaseBinding --remote
+& npx wrangler @wranglerArgs d1 migrations apply $DatabaseBinding --remote --yes
 if ($LASTEXITCODE -ne 0) {
   throw "Remote migration apply failed."
 }

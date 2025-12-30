@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll } from "vitest";
-import { 
-  getAdminToken, 
-  createEmployeeUser, 
+import {
+  getAdminToken,
+  createEmployeeUser,
   authenticatedRequest,
   apiRequest
 } from "./helpers";
@@ -134,5 +134,53 @@ describe("Admin User Management APIs", () => {
     );
     expect(details.user.status).toBe("deleted");
     expect(details.user.deleted_at).toBeDefined();
+  });
+
+  it("DELETE /api/admin/users/:id - Deleting driver unbinds vehicle", async () => {
+    // 1. Create a new driver (driver2)
+    const driver2 = await createEmployeeUser(adminToken, "driver");
+    const driver2Id = driver2.user.id;
+
+    // 2. Assign a vehicle
+    const vehicleCode = "TEST_TRUCK_DELETE_BIND";
+    const { status: assignStatus } = await authenticatedRequest<any>(
+      `/api/admin/users/${driver2Id}/assign-vehicle`,
+      adminToken,
+      {
+        method: "POST",
+        body: JSON.stringify({ vehicle_code: vehicleCode, home_node_id: "HUB_0" }),
+      }
+    );
+    expect(assignStatus).toBe(200);
+
+    // 3. Delete the driver
+    const { status: deleteStatus } = await authenticatedRequest<any>(
+      `/api/admin/users/${driver2Id}`,
+      adminToken,
+      { method: "DELETE" }
+    );
+    expect(deleteStatus).toBe(200);
+
+    // 4. Verify vehicle is unbound (deleted from vehicles table)
+    // We can verify this by trying to assign the SAME vehicle code to another driver.
+    // If the previous binding still exists, it would fail with 409 (unique constraint or check).
+    // Or we can query the driver's vehicle list if such API existed, but re-assigning is a good integration check.
+
+    const driver3 = await createEmployeeUser(adminToken, "driver");
+    const driver3Id = driver3.user.id;
+
+    const { status: reassignStatus, data: reassignData } = await authenticatedRequest<any>(
+      `/api/admin/users/${driver3Id}/assign-vehicle`,
+      adminToken,
+      {
+        method: "POST",
+        body: JSON.stringify({ vehicle_code: vehicleCode, home_node_id: "HUB_0" }),
+      }
+    );
+
+    // Should succeed because previous record was deleted
+    expect(reassignStatus).toBe(200);
+    expect(reassignData.vehicle.vehicle_code).toBe(vehicleCode);
+    expect(reassignData.vehicle.driver_user_id).toBe(driver3Id);
   });
 });

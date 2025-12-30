@@ -116,7 +116,7 @@ export class AdminUserDetails extends OpenAPIRoute {
     // 簡單統計：總包裹數/總金額 (for customers)
     let stats = {};
     if (user.user_type === 'customer') {
-      const pkgCount = await c.env.DB.prepare("SELECT COUNT(*) as c FROM packages WHERE customer_id = ?").bind(id).first<{c:number}>();
+      const pkgCount = await c.env.DB.prepare("SELECT COUNT(*) as c FROM packages WHERE customer_id = ?").bind(id).first<{ c: number }>();
       stats = { total_packages: pkgCount?.c || 0 };
     }
 
@@ -172,8 +172,8 @@ export class AdminUserUpdate extends OpenAPIRoute {
     }
 
     if (body.user_class && user.user_type === 'customer') {
-       // 客戶不能隨意改 class (需透過合約)，這裡可視需求放寬，但計畫說「僅限員工」
-       // 但若要手動升級合約客戶也可以，暫時允許但不建議
+      // 客戶不能隨意改 class (需透過合約)，這裡可視需求放寬，但計畫說「僅限員工」
+      // 但若要手動升級合約客戶也可以，暫時允許但不建議
     }
 
     const updates: string[] = [];
@@ -223,9 +223,9 @@ export class AdminUserSuspend extends OpenAPIRoute {
     const data = await this.getValidatedData<typeof this.schema>();
     const { id } = data.params;
     const { body } = data;
-    
+
     if (id === auth.user.id) {
-       return c.json({ error: "不能停用自己" }, 403);
+      return c.json({ error: "不能停用自己" }, 403);
     }
 
     await c.env.DB.prepare(`
@@ -282,12 +282,15 @@ export class AdminUserDelete extends OpenAPIRoute {
     const { id } = data.params;
 
     if (id === auth.user.id) {
-       return c.json({ error: "不能刪除自己" }, 403);
+      return c.json({ error: "不能刪除自己" }, 403);
     }
 
     await c.env.DB.prepare(`
       UPDATE users SET status = 'deleted', deleted_at = datetime('now') WHERE id = ?
     `).bind(id).run();
+
+    // Also remove vehicle binding if exists (implicitly unbinding the truck)
+    await c.env.DB.prepare("DELETE FROM vehicles WHERE driver_user_id = ?").bind(id).run();
 
     await c.env.DB.prepare("DELETE FROM tokens WHERE user_id = ?").bind(id).run();
 
@@ -302,14 +305,14 @@ export class AdminUserResetPassword extends OpenAPIRoute {
     summary: "重設密碼",
     security: [{ bearerAuth: [] }],
     request: {
-       params: z.object({ id: z.string() }),
-       body: {
-         content: {
-           "application/json": {
-             schema: z.object({ new_password: z.string().min(6) }),
-           },
-         },
-       },
+      params: z.object({ id: z.string() }),
+      body: {
+        content: {
+          "application/json": {
+            schema: z.object({ new_password: z.string().min(6) }),
+          },
+        },
+      },
     },
     responses: { "200": { description: "成功" } },
   };
@@ -391,11 +394,11 @@ export class AdminUserAssignVehicle extends OpenAPIRoute {
 // GET /api/admin/users/:id/work-stats
 export class AdminUserWorkStats extends OpenAPIRoute {
   schema = {
-     tags: ["Admin"],
-     summary: "查詢員工工作統計",
-     security: [{ bearerAuth: [] }],
-     request: { params: z.object({ id: z.string() }) },
-     responses: { "200": { description: "成功" } },
+    tags: ["Admin"],
+    summary: "查詢員工工作統計",
+    security: [{ bearerAuth: [] }],
+    request: { params: z.object({ id: z.string() }) },
+    responses: { "200": { description: "成功" } },
   };
 
   async handle(c: AppContext) {
@@ -411,14 +414,14 @@ export class AdminUserWorkStats extends OpenAPIRoute {
     // TODO: Implement real stats based on logs/tasks
     // This is a placeholder as actual stats logic can be complex
     return c.json({
-       success: true,
-       user_id: id,
-       user_class: user.user_class,
-       stats: {
-         tasks_completed: 0,
-         packages_processed: 0,
-         exceptions_reported: 0
-       }
+      success: true,
+      user_id: id,
+      user_class: user.user_class,
+      stats: {
+        tasks_completed: 0,
+        packages_processed: 0,
+        exceptions_reported: 0
+      }
     });
   }
 }
