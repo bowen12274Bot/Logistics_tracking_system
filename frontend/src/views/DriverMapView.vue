@@ -474,14 +474,18 @@ const toast = useToasts();
 async function refreshArriveData() {
   arriveError.value = null;
   try {
-    const [assignedRes, handoffRes, cargoRes] = await Promise.all([
-      api.getDriverTasks("assigned"),
-      api.getDriverTasks("handoff"),
-      api.getVehicleCargoMe(),
-    ]);
-    assignedTasks.value = assignedRes.tasks ?? [];
-    handoffTasks.value = handoffRes.tasks ?? [];
-    cargo.value = cargoRes.cargo ?? [];
+    // 優化：使用聚合 Dashboard API，減少 3 個調用為 1 個
+    const dashboard = await api.getDriverDashboard();
+    assignedTasks.value = dashboard.assigned_tasks ?? [];
+    handoffTasks.value = dashboard.handoff_tasks ?? [];
+    cargo.value = dashboard.cargo ?? [];
+    // 更新車輛資訊（如果需要）
+    if (dashboard.vehicle) {
+      vehicle.value = dashboard.vehicle;
+      if (dashboard.vehicle.current_node_id) {
+        currentNodeId.value = dashboard.vehicle.current_node_id;
+      }
+    }
     const targetLocale = locale.value === 'en-US' ? 'en-US' : 'zh-TW';
     lastSyncAt.value = new Date().toLocaleString(targetLocale);
   } catch (e: any) {
@@ -507,7 +511,9 @@ async function markArrivalForCashPayWindow() {
   });
   if (targets.length === 0) return;
 
-  await Promise.allSettled(targets.map((task) => api.arriveDriverTask(task.id)));
+  // 優化：使用批量 API，將 N 個調用減為 1 個
+  const taskIds = targets.map((task) => task.id);
+  await api.batchArriveDriverTasks(taskIds);
 }
 
 function collapseSidebar() {
