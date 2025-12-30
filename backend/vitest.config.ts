@@ -6,6 +6,10 @@ export default defineWorkersConfig(async () => {
       pool: "@cloudflare/vitest-pool-workers" as const,
       include: ["src/__tests__/**/*.test.ts"],
       exclude: ["src/__tests__/benchmark.test.ts"],
+      reporters: ["default", "html"],
+      outputFile: {
+        html: "./html-report/index.html",
+      },
       poolOptions: {
         workers: {
           main: "./src/index.ts",
