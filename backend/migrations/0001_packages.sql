@@ -20,7 +20,9 @@
   contents_description TEXT,
   route_path TEXT,
   description_json TEXT,
+  current_location TEXT, -- Current physical location (node ID or TRUCK_* code)
   created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_packages_status ON packages(status);
+CREATE INDEX IF NOT EXISTS idx_packages_current_location ON packages(current_location);

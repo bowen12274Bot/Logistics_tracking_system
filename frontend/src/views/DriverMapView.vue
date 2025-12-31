@@ -221,6 +221,8 @@ function deliveryTimeLabel(raw: unknown) {
 function taskTypeLabel(raw: unknown) {
   const key = String(raw ?? "").trim().toLowerCase();
   if (key === "pickup") return t("driver.map.taskType.pickup");
+  if (key === "deliver") return t("driver.map.taskType.deliver");
+  if (key === "enroute") return t("driver.map.taskType.enroute");
   if (key === "dropoff") return t("driver.map.taskType.dropoff");
   return String(raw ?? "");
 }
@@ -391,8 +393,10 @@ const taskListItems = computed<TaskListItem[]>(() => {
     const isAtFrom = Boolean(nodeId && from === nodeId);
     const isAtTo = Boolean(nodeId && to === nodeId);
 
+    const taskType = String(task.task_type ?? "").trim().toLowerCase();
+
     const collectable = canCollectCashHere({ task, nodeId, isAtFrom, isAtTo, onTruck, status });
-    const pickupable = isAtFrom && (status === "pending" || status === "accepted");
+    const pickupable = taskType === "pickup" && isAtFrom && (status === "pending" || status === "accepted");
     const dropoffable = isAtTo && status === "in_progress" && onTruck;
 
     let note: string | undefined;

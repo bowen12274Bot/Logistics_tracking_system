@@ -888,23 +888,11 @@ onUnmounted(() => {
                   <span>{{ t('cs.modal.exception.fields.resumeMode') }}</span>
                   <select v-model="exceptionResumeMode" :disabled="exceptionSubmitting">
                     <option value="continue_segment">{{ t('cs.modal.exception.resumeMode.continueSegment') }}</option>
-                    <option value="reroute_next_hop">{{ t('cs.modal.exception.resumeMode.rerouteNextHop') }}</option>
                     <option value="redirect_destination">{{ t('cs.modal.exception.resumeMode.redirectDestination') }}</option>
                   </select>
                 </label>
 
-                <label
-                  v-if="exceptionAction === 'resume' && exceptionResumeMode === 'reroute_next_hop'"
-                  class="form-field span-2"
-                >
-                  <span>{{ t('cs.modal.exception.fields.nextHop') }}</span>
-                  <input
-                    v-model="exceptionNextHopOverride"
-                    type="text"
-                    :disabled="exceptionSubmitting"
-                    :placeholder="t('cs.modal.exception.placeholders.nextHop')"
-                  />
-                </label>
+
 
                 <label
                   v-if="exceptionAction === 'resume' && exceptionResumeMode === 'redirect_destination'"

@@ -208,26 +208,45 @@ export class DriverPackageExceptionCreate extends OpenAPIRoute {
       // Backwards compatible: allow reporting a TRUCK_* location even if cargo isn't currently loaded.
       if (!currentNodeId && !myTruckCode) return c.json({ error: "Driver vehicle has no current node" }, 409);
 
-      if (currentNodeId && relatedNodes.size > 0 && !relatedNodes.has(currentNodeId)) {
-        return c.json({ error: "Driver is not at a related node for this task", current: currentNodeId, related: [...relatedNodes] }, 409);
-      }
-
       if (requestedLocation) {
         if (/^TRUCK_/i.test(requestedLocation)) {
+          // Truck exception: no node validation required (e.g. accident can happen anywhere)
           if (!myTruckCode) return c.json({ error: "Driver vehicle has no truck code" }, 409);
           if (requestedLocation !== myTruckCode) {
             return c.json({ error: "Invalid location: must be your truck code", expected: myTruckCode }, 400);
           }
           location = myTruckCode;
         } else {
+          // Node exception: validate node is correct and task-related
           if (!currentNodeId) return c.json({ error: "Driver vehicle has no current node" }, 409);
           if (requestedLocation !== currentNodeId) {
             return c.json({ error: "Invalid location: must match current node", current: currentNodeId }, 400);
           }
+          // When package is NOT on truck, only allow exception at from_location (where the package is)
+          // This prevents reporting exceptions at to_location before even picking up the package
+          if (task) {
+            const taskFrom = String(task.from_location ?? "").trim().toUpperCase();
+            if (taskFrom && requestedLocation !== taskFrom) {
+              return c.json({
+                error: "Invalid location: package not on truck, exception only allowed at pickup location",
+                current: requestedLocation,
+                expected: taskFrom
+              }, 409);
+            }
+          }
+          // Check if node is related to the task (only relevant when no specific task exists)
+          if (!task && relatedNodes.size > 0 && !relatedNodes.has(requestedLocation)) {
+            return c.json({ error: "Invalid location: node not related to task", location: requestedLocation, related: [...relatedNodes] }, 409);
+          }
           location = currentNodeId;
         }
       } else {
-        location = currentNodeId || myTruckCode;
+        // No location specified: prefer current node, fallback to truck if node is unrelated
+        if (currentNodeId && relatedNodes.size > 0 && !relatedNodes.has(currentNodeId)) {
+          location = myTruckCode; // Current node unrelated, use truck
+        } else {
+          location = currentNodeId || myTruckCode;
+        }
       }
     }
 

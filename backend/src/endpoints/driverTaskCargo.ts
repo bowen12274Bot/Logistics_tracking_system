@@ -127,6 +127,13 @@ export class DriverTaskPickup extends OpenAPIRoute {
     const task = await loadTask(c.env.DB, taskId);
     if (!task) return c.json({ error: "Task not found" }, 404);
     if (task.assigned_driver_id !== auth.user.id) return c.json({ error: "Forbidden" }, 403);
+
+    // Validate task type
+    const taskType = String(task.task_type ?? "").trim().toLowerCase();
+    if (taskType !== "pickup") {
+      return c.json({ error: "Invalid task type for pickup", task_type: task.task_type }, 409);
+    }
+
     if (task.status !== "pending" && task.status !== "accepted") {
       return c.json({ error: "Task not eligible", status: task.status }, 409);
     }
