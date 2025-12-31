@@ -97,13 +97,16 @@ const openapi = fromHono(app, {
   docs_url: "/",
 });
 
-// CORS for local dev (??癟竄簪 http://localhost:5173 ??Pages ??癡礎翻)
+// CORS for all origins (local dev + production Pages)
 app.use(
   "/*",
   cors({
     origin: "*",
-    allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowHeaders: ["*"],
+    allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept", "Origin"],
+    exposeHeaders: ["X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset"],
+    maxAge: 86400, // 24 hours preflight cache
+    credentials: false, // Set to false when origin is "*"
   }),
 );
 
