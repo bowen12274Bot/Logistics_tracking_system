@@ -202,7 +202,7 @@ export class WarehouseDispatchNextTask extends OpenAPIRoute {
       INSERT INTO delivery_tasks (
         id, package_id, task_type, from_location, to_location,
         assigned_driver_id, status, segment_index, created_at, updated_at
-      ) VALUES (?, ?, 'deliver', ?, ?, ?, 'pending', ?, ?, ?)
+      ) VALUES (?, ?, 'pickup', ?, ?, ?, 'pending', ?, ?, ?)
       `,
     )
       .bind(id, packageId, fromNodeId, toNodeId, assignedDriverId, nextIndex, now, now)

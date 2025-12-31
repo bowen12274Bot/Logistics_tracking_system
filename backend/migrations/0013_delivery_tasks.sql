@@ -1,7 +1,7 @@
 CREATE TABLE IF NOT EXISTS delivery_tasks (
   id TEXT PRIMARY KEY,
   package_id TEXT NOT NULL REFERENCES packages(id),
-  task_type TEXT NOT NULL, -- pickup / deliver / transfer_pickup / transfer_dropoff
+  task_type TEXT NOT NULL, -- pickup / deliver / enroute
   from_location TEXT,
   to_location TEXT,
   assigned_driver_id TEXT REFERENCES users(id),

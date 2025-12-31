@@ -478,6 +478,64 @@ describe("Customer service exception pool", () => {
     expect((drvAssigned.data.tasks ?? []).some((t: any) => String(t.package_id) === pkg.id)).toBe(false);
   });
 
+  it("CS-EXC-WH-002: redirect_destination updates receiver even when staying in warehouse workflow", async () => {
+    const sender = "END_HOME_1";
+    const receiver = "END_HOME_2";
+    const pkg = await createTestPackage(customerToken, { sender_address: sender, receiver_address: receiver });
+
+    const mapRes = await apiRequest<any>("/api/map");
+    expect(mapRes.status).toBe(200);
+    const dest = (mapRes.data.nodes ?? [])
+      .map((n: any) => String(n?.id ?? "").trim().toUpperCase())
+      .find((id: string) => /^END_/i.test(id) && id !== sender && id !== receiver);
+    expect(dest).toBeTruthy();
+
+    const evt = await authenticatedRequest<any>(`/api/packages/${encodeURIComponent(pkg.id)}/events`, warehouseToken, {
+      method: "POST",
+      body: JSON.stringify({ delivery_status: "warehouse_in", location: "HUB_0" }),
+    });
+    expect(evt.status).toBe(200);
+
+    const report = await authenticatedRequest<any>(
+      `/api/warehouse/packages/${encodeURIComponent(pkg.id)}/exception`,
+      warehouseToken,
+      { method: "POST", body: JSON.stringify({ reason_code: "address_issue", description: "wrong address" }) },
+    );
+    expect(report.status).toBe(200);
+    expect(report.data.success).toBe(true);
+
+    const list = await authenticatedRequest<any>("/api/cs/exceptions", csToken);
+    expect(list.status).toBe(200);
+    const items: any[] = list.data.exceptions ?? [];
+    const hit = items.find((e) => String(e.package_id) === pkg.id && String(e.reported_role) === "warehouse_staff");
+    expect(hit).toBeTruthy();
+
+    const handle = await authenticatedRequest<any>(
+      `/api/cs/exceptions/${encodeURIComponent(String(hit.id))}/handle`,
+      csToken,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          action: "resume",
+          resume_mode: "redirect_destination",
+          destination_override: dest,
+          handling_report: "redirect destination",
+          location: "HUB_0",
+        }),
+      },
+    );
+    expect(handle.status).toBe(200);
+    expect(handle.data.success).toBe(true);
+
+    const statusRes = await authenticatedRequest<any>(`/api/packages/${encodeURIComponent(pkg.id)}/status`, customerToken);
+    expect(statusRes.status).toBe(200);
+    expect(String(statusRes.data.package?.receiver_address)).toBe(dest);
+
+    const drvAssigned = await authenticatedRequest<any>("/api/driver/tasks?scope=assigned", driverToken);
+    expect(drvAssigned.status).toBe(200);
+    expect((drvAssigned.data.tasks ?? []).some((t: any) => String(t.package_id) === pkg.id)).toBe(false);
+  });
+
   it("CS-EXC-LIST-002: filter by handled status", async () => {
     // Setup: Create two exceptions, one handled, one unhandled
     

@@ -197,6 +197,65 @@ export class VehicleMeMove extends OpenAPIRoute {
       }
     }
 
+    // Auto-complete enroute tasks when driver arrives at destination
+    // Enroute tasks are pure travel segments that should automatically complete
+    // and trigger the creation of the next task (usually pickup)
+    const enrouteTasks = await c.env.DB.prepare(
+      `
+      SELECT id, package_id, from_location, to_location
+      FROM delivery_tasks
+      WHERE assigned_driver_id = ?
+        AND task_type = 'enroute'
+        AND status IN ('pending', 'accepted', 'in_progress')
+        AND to_location = ?
+      `,
+    )
+      .bind(auth.user.id, toNodeId)
+      .all<{ id: string; package_id: string; from_location: string | null; to_location: string | null }>();
+
+    for (const task of enrouteTasks.results ?? []) {
+      // Mark enroute task as completed
+      await c.env.DB.prepare("UPDATE delivery_tasks SET status = 'completed', updated_at = ? WHERE id = ?")
+        .bind(updatedAt, task.id)
+        .run();
+
+      // Create next pickup task at the current location
+      const nextTaskId = crypto.randomUUID();
+      const packageData = await c.env.DB.prepare(
+        "SELECT receiver_address FROM packages WHERE id = ? LIMIT 1",
+      )
+        .bind(task.package_id)
+        .first<{ receiver_address: string | null }>();
+
+      const receiver = String(packageData?.receiver_address ?? "").trim().toUpperCase();
+      if (!receiver) continue; // Skip if no destination
+
+      // Compute next hop for pickup task
+      const { computeRoute } = await import("./mapRoute");
+      const route = await computeRoute(c.env.DB, toNodeId, receiver);
+      if (!route.ok || route.path.length < 2) continue;
+
+      const nextHop = String(route.path[1]).trim().toUpperCase();
+
+      // Get max segment index
+      const maxSeg = await c.env.DB.prepare(
+        "SELECT MAX(COALESCE(segment_index, 0)) AS max_seg FROM delivery_tasks WHERE package_id = ?",
+      )
+        .bind(task.package_id)
+        .first<{ max_seg: number | null }>();
+      const nextIndex = Number(maxSeg?.max_seg ?? -1) + 1;
+
+      // Create pickup task
+      await c.env.DB.prepare(
+        `
+        INSERT INTO delivery_tasks (id, package_id, task_type, from_location, to_location, assigned_driver_id, status, segment_index, created_at, updated_at)
+        VALUES (?, ?, 'pickup', ?, ?, ?, 'pending', ?, ?, ?)
+        `,
+      )
+        .bind(nextTaskId, task.package_id, toNodeId, nextHop, auth.user.id, nextIndex, updatedAt, updatedAt)
+        .run();
+    }
+
     return c.json({ success: true, vehicle: updated ?? null });
   }
 }

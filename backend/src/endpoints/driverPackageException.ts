@@ -222,8 +222,20 @@ export class DriverPackageExceptionCreate extends OpenAPIRoute {
           if (requestedLocation !== currentNodeId) {
             return c.json({ error: "Invalid location: must match current node", current: currentNodeId }, 400);
           }
-          // Check if node is related to the task
-          if (relatedNodes.size > 0 && !relatedNodes.has(requestedLocation)) {
+          // When package is NOT on truck, only allow exception at from_location (where the package is)
+          // This prevents reporting exceptions at to_location before even picking up the package
+          if (task) {
+            const taskFrom = String(task.from_location ?? "").trim().toUpperCase();
+            if (taskFrom && requestedLocation !== taskFrom) {
+              return c.json({
+                error: "Invalid location: package not on truck, exception only allowed at pickup location",
+                current: requestedLocation,
+                expected: taskFrom
+              }, 409);
+            }
+          }
+          // Check if node is related to the task (only relevant when no specific task exists)
+          if (!task && relatedNodes.size > 0 && !relatedNodes.has(requestedLocation)) {
             return c.json({ error: "Invalid location: node not related to task", location: requestedLocation, related: [...relatedNodes] }, 409);
           }
           location = currentNodeId;

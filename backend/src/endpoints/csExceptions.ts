@@ -359,6 +359,26 @@ export class CustomerServiceExceptionHandle extends OpenAPIRoute {
       const sender = String(pkgRow?.sender_address ?? "").trim().toUpperCase();
       const receiver = String(pkgRow?.receiver_address ?? "").trim().toUpperCase();
 
+      let effectiveDestination = receiver;
+      let destinationOverride: string | null = null;
+
+      if (resumeMode === "redirect_destination") {
+        destinationOverride = String(body.destination_override ?? "").trim().toUpperCase() || null;
+        if (!destinationOverride) {
+          if (!sender) return c.json({ error: "Package has no sender_address for return-to-origin" }, 409);
+          destinationOverride = sender;
+        }
+
+        const destExists = await c.env.DB.prepare("SELECT 1 FROM nodes WHERE UPPER(id) = ? LIMIT 1")
+          .bind(destinationOverride)
+          .first();
+        if (!destExists) {
+          return c.json({ error: "destination_override not found", destination_override: destinationOverride }, 400);
+        }
+        effectiveDestination = destinationOverride;
+        persistedDestinationOverride = destinationOverride;
+      }
+
       // Backwards compatible: some legacy/test flows create packages without receiver_address.
       // In this case we still allow CS to "resolve" the exception, but we skip creating new tasks.
       if (!receiver) {
@@ -385,26 +405,6 @@ export class CustomerServiceExceptionHandle extends OpenAPIRoute {
           let toNodeId: string | null = null;
           const canceledFrom = String(lastCanceled?.from_location ?? "").trim().toUpperCase();
           const canceledTo = String(lastCanceled?.to_location ?? "").trim().toUpperCase();
-
-          let effectiveDestination = receiver;
-          let destinationOverride: string | null = null;
-
-          if (resumeMode === "redirect_destination") {
-            destinationOverride = String(body.destination_override ?? "").trim().toUpperCase() || null;
-            if (!destinationOverride) {
-              if (!sender) return c.json({ error: "Package has no sender_address for return-to-origin" }, 409);
-              destinationOverride = sender;
-            }
-
-            const destExists = await c.env.DB.prepare("SELECT 1 FROM nodes WHERE UPPER(id) = ? LIMIT 1")
-              .bind(destinationOverride)
-              .first();
-            if (!destExists) {
-              return c.json({ error: "destination_override not found", destination_override: destinationOverride }, 400);
-            }
-            effectiveDestination = destinationOverride;
-            persistedDestinationOverride = destinationOverride;
-          }
 
           if (resumeMode === "continue_segment") {
             if (activeCargoVehicle && canceledTo) {
@@ -442,6 +442,19 @@ export class CustomerServiceExceptionHandle extends OpenAPIRoute {
             persistedNextHopOverride = nextHopOverride;
           }
 
+          // Check for edge case: pickup task but driver not at origin
+          const isPickupNotAtOrigin =
+            !toNodeId &&
+            lastCanceled?.task_type === "pickup" &&
+            canceledFrom &&
+            canceledFrom !== startNodeId &&
+            !activeCargoVehicle;
+
+          if (isPickupNotAtOrigin) {
+            // Driver needs to go back to pickup origin
+            toNodeId = canceledFrom;
+          }
+
           if (!toNodeId) {
             const route = await computeRoute(c.env.DB, startNodeId, effectiveDestination);
             if (route.ok === false || route.path.length < 2) {
@@ -468,7 +481,29 @@ export class CustomerServiceExceptionHandle extends OpenAPIRoute {
 
           // Determine task type: prioritize cargo status over node type
           let taskType: string;
-          if (activeCargoVehicle) {
+
+          // Check if package has been through warehouse processing (sorting, etc.)
+          // If so, don't create enroute task to go back to pickup origin
+          let hasWarehouseProcessing = false;
+          if (isPickupNotAtOrigin) {
+            const warehouseEvent = await c.env.DB.prepare(
+              `
+              SELECT 1 AS ok
+              FROM package_events
+              WHERE package_id = ?
+                AND LOWER(TRIM(delivery_status)) IN ('warehouse_in', 'warehouse_received', 'sorting', 'route_decided')
+              LIMIT 1
+              `,
+            )
+              .bind(record.package_id)
+              .first();
+            hasWarehouseProcessing = Boolean(warehouseEvent);
+          }
+
+          if (isPickupNotAtOrigin && !hasWarehouseProcessing) {
+            // Driver needs to go back to pickup origin (package hasn't been picked up yet)
+            taskType = "enroute";
+          } else if (activeCargoVehicle) {
             // Package on truck → always deliver (driver needs to dropoff/deliver)
             taskType = "deliver";
           } else {
@@ -486,6 +521,7 @@ export class CustomerServiceExceptionHandle extends OpenAPIRoute {
 
           const assignedDriverForResume = activeCargoVehicle?.driver_user_id ?? assignedDriverId;
           const statusForResume = activeCargoVehicle ? "in_progress" : "pending";
+
           await c.env.DB.prepare(
             `
         INSERT INTO delivery_tasks (
@@ -509,26 +545,32 @@ export class CustomerServiceExceptionHandle extends OpenAPIRoute {
               body.handling_report,
             )
             .run();
-
-          if (resumeMode === "redirect_destination" && destinationOverride) {
-            // Calculate the new route from current location to new destination
-            const newRoute = await computeRoute(c.env.DB, startNodeId, destinationOverride);
-            if (newRoute.ok === false || newRoute.path.length < 2) {
-              return c.json(
-                { error: "Cannot compute route to new destination", from: startNodeId, to: destinationOverride },
-                400
-              );
-            }
-
-            // Serialize the new route path as JSON
-            const newRoutePath = JSON.stringify(newRoute.path);
-
-            // Update both receiver_address and route_path
-            await c.env.DB.prepare("UPDATE packages SET receiver_address = ?, route_path = ? WHERE id = ?")
-              .bind(destinationOverride, newRoutePath, record.package_id)
-              .run();
-          }
         }
+
+        if (resumeMode === "redirect_destination" && destinationOverride) {
+          if (startNodeId === destinationOverride) {
+            return c.json({ error: "Already at destination" }, 409);
+          }
+
+          const newRoute = await computeRoute(c.env.DB, startNodeId, destinationOverride);
+          if (newRoute.ok === false || newRoute.path.length < 2) {
+            return c.json(
+              { error: "Cannot compute route to new destination", from: startNodeId, to: destinationOverride },
+              400,
+            );
+          }
+
+          await c.env.DB.prepare("UPDATE packages SET receiver_address = ?, route_path = ? WHERE id = ?")
+            .bind(destinationOverride, JSON.stringify(newRoute.path), record.package_id)
+            .run();
+        }
+
+        // Update package current_location to reflect the actual node position after resume
+        // This is especially important for truck exceptions where location was TRUCK_*, 
+        // but we need to show the actual node for tracking progress
+        await c.env.DB.prepare("UPDATE packages SET current_location = ? WHERE id = ?")
+          .bind(startNodeId, record.package_id)
+          .run();
       }
     }
 

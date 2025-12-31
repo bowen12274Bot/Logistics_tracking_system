@@ -41,6 +41,9 @@ function resolve409Message(error: ApiErrorLike, rawMessage: string): string {
   if (reason.includes("exception")) {
     return t("errorToast.hasActiveException");
   }
+  if (hint.includes("package not on truck") || hint.includes("pickup location")) {
+    return t("errorToast.packageNotOnTruck");
+  }
 
   if (rawMessage) return rawMessage;
   return t("errorToast.operationNotAllowed");
