@@ -366,10 +366,10 @@ export class CustomerServiceExceptionHandle extends OpenAPIRoute {
       } else {
         if (!skipResumeTaskCreation) {
 
-      // Prefer "re-issuing the last canceled segment" when the package is still on a truck:
-      // the driver should be able to continue the same segment and/or dropoff (unload) at its destination node.
-      const lastCanceled = await c.env.DB.prepare(
-        `
+          // Prefer "re-issuing the last canceled segment" when the package is still on a truck:
+          // the driver should be able to continue the same segment and/or dropoff (unload) at its destination node.
+          const lastCanceled = await c.env.DB.prepare(
+            `
         SELECT task_type, from_location, to_location
         FROM delivery_tasks
         WHERE package_id = ?
@@ -378,128 +378,141 @@ export class CustomerServiceExceptionHandle extends OpenAPIRoute {
         ORDER BY COALESCE(updated_at, created_at, '') DESC
         LIMIT 1
         `,
-      )
-        .bind(record.package_id)
-        .first<{ task_type: string | null; from_location: string | null; to_location: string | null }>();
+          )
+            .bind(record.package_id)
+            .first<{ task_type: string | null; from_location: string | null; to_location: string | null }>();
 
-      let toNodeId: string | null = null;
-      const canceledFrom = String(lastCanceled?.from_location ?? "").trim().toUpperCase();
-      const canceledTo = String(lastCanceled?.to_location ?? "").trim().toUpperCase();
+          let toNodeId: string | null = null;
+          const canceledFrom = String(lastCanceled?.from_location ?? "").trim().toUpperCase();
+          const canceledTo = String(lastCanceled?.to_location ?? "").trim().toUpperCase();
 
-      let effectiveDestination = receiver;
-      let destinationOverride: string | null = null;
+          let effectiveDestination = receiver;
+          let destinationOverride: string | null = null;
 
-      if (resumeMode === "redirect_destination") {
-        destinationOverride = String(body.destination_override ?? "").trim().toUpperCase() || null;
-        if (!destinationOverride) {
-          if (!sender) return c.json({ error: "Package has no sender_address for return-to-origin" }, 409);
-          destinationOverride = sender;
-        }
+          if (resumeMode === "redirect_destination") {
+            destinationOverride = String(body.destination_override ?? "").trim().toUpperCase() || null;
+            if (!destinationOverride) {
+              if (!sender) return c.json({ error: "Package has no sender_address for return-to-origin" }, 409);
+              destinationOverride = sender;
+            }
 
-        const destExists = await c.env.DB.prepare("SELECT 1 FROM nodes WHERE UPPER(id) = ? LIMIT 1")
-          .bind(destinationOverride)
-          .first();
-        if (!destExists) {
-          return c.json({ error: "destination_override not found", destination_override: destinationOverride }, 400);
-        }
-        effectiveDestination = destinationOverride;
-        persistedDestinationOverride = destinationOverride;
-      }
+            const destExists = await c.env.DB.prepare("SELECT 1 FROM nodes WHERE UPPER(id) = ? LIMIT 1")
+              .bind(destinationOverride)
+              .first();
+            if (!destExists) {
+              return c.json({ error: "destination_override not found", destination_override: destinationOverride }, 400);
+            }
+            effectiveDestination = destinationOverride;
+            persistedDestinationOverride = destinationOverride;
+          }
 
-      if (resumeMode === "continue_segment") {
-        if (activeCargoVehicle && canceledTo) {
-          // Re-issue the same segment while cargo is still loaded: do NOT jump to next hop.
-          toNodeId = canceledTo;
-        } else if (canceledFrom === startNodeId && canceledTo) {
-          toNodeId = canceledTo;
-        }
-      }
+          if (resumeMode === "continue_segment") {
+            if (activeCargoVehicle && canceledTo) {
+              // Re-issue the same segment while cargo is still loaded: do NOT jump to next hop.
+              toNodeId = canceledTo;
+            } else if (canceledFrom === startNodeId && canceledTo) {
+              toNodeId = canceledTo;
+            }
+          }
 
-      if (resumeMode === "reroute_next_hop") {
-        const nextHopOverride = String(body.next_hop_override ?? "").trim().toUpperCase();
-        if (!nextHopOverride) {
-          return c.json({ error: "next_hop_override is required for reroute_next_hop" }, 400);
-        }
+          if (resumeMode === "reroute_next_hop") {
+            const nextHopOverride = String(body.next_hop_override ?? "").trim().toUpperCase();
+            if (!nextHopOverride) {
+              return c.json({ error: "next_hop_override is required for reroute_next_hop" }, 400);
+            }
 
-        const edgeOk = await c.env.DB.prepare(
-          `
+            const edgeOk = await c.env.DB.prepare(
+              `
           SELECT 1 AS ok
           FROM edges
           WHERE (UPPER(source) = ? AND UPPER(target) = ?)
              OR (UPPER(source) = ? AND UPPER(target) = ?)
           LIMIT 1
           `,
-        )
-          .bind(startNodeId, nextHopOverride, nextHopOverride, startNodeId)
-          .first<{ ok: number }>();
-        if (!edgeOk) {
-          return c.json(
-            { error: "next_hop_override must be adjacent to start", start: startNodeId, next: nextHopOverride },
-            400,
-          );
-        }
-        toNodeId = nextHopOverride;
-        persistedNextHopOverride = nextHopOverride;
-      }
+            )
+              .bind(startNodeId, nextHopOverride, nextHopOverride, startNodeId)
+              .first<{ ok: number }>();
+            if (!edgeOk) {
+              return c.json(
+                { error: "next_hop_override must be adjacent to start", start: startNodeId, next: nextHopOverride },
+                400,
+              );
+            }
+            toNodeId = nextHopOverride;
+            persistedNextHopOverride = nextHopOverride;
+          }
 
-      if (!toNodeId) {
-        const route = await computeRoute(c.env.DB, startNodeId, effectiveDestination);
-        if (route.ok === false || route.path.length < 2) {
-          return c.json(
-            { error: "Route not found for resume", from: startNodeId, to: effectiveDestination },
-            400,
-          );
-        }
-        toNodeId = String(route.path[1]).trim().toUpperCase() || null;
-      }
+          if (!toNodeId) {
+            const route = await computeRoute(c.env.DB, startNodeId, effectiveDestination);
+            if (route.ok === false || route.path.length < 2) {
+              return c.json(
+                { error: "Route not found for resume", from: startNodeId, to: effectiveDestination },
+                400,
+              );
+            }
+            toNodeId = String(route.path[1]).trim().toUpperCase() || null;
+          }
 
-      if (!toNodeId) return c.json({ error: "Route not found for resume" }, 400);
-      if (startNodeId === effectiveDestination) {
-        return c.json({ error: "Already at destination" }, 409);
-      }
+          if (!toNodeId) return c.json({ error: "Route not found for resume" }, 400);
+          if (startNodeId === effectiveDestination) {
+            return c.json({ error: "Already at destination" }, 409);
+          }
 
-      const assignedDriverId = await assignDriverForNode(c.env.DB, startNodeId);
-      const maxSeg = await c.env.DB.prepare(
-        "SELECT MAX(COALESCE(segment_index, 0)) AS max_seg FROM delivery_tasks WHERE package_id = ?",
-      )
-        .bind(record.package_id)
-        .first<{ max_seg: number | null }>();
-      const nextIndex = Number(maxSeg?.max_seg ?? -1) + 1;
-      const taskType =
-        String(lastCanceled?.task_type ?? "").trim() || (/^END_/i.test(startNodeId) ? "pickup" : "deliver");
-      const taskId = crypto.randomUUID();
+          const assignedDriverId = await assignDriverForNode(c.env.DB, startNodeId);
+          const maxSeg = await c.env.DB.prepare(
+            "SELECT MAX(COALESCE(segment_index, 0)) AS max_seg FROM delivery_tasks WHERE package_id = ?",
+          )
+            .bind(record.package_id)
+            .first<{ max_seg: number | null }>();
+          const nextIndex = Number(maxSeg?.max_seg ?? -1) + 1;
+          const taskType =
+            String(lastCanceled?.task_type ?? "").trim() || (/^END_/i.test(startNodeId) ? "pickup" : "deliver");
+          const taskId = crypto.randomUUID();
 
-      const assignedDriverForResume = activeCargoVehicle?.driver_user_id ?? assignedDriverId;
-      const statusForResume = activeCargoVehicle ? "in_progress" : "pending";
-      await c.env.DB.prepare(
-        `
+          const assignedDriverForResume = activeCargoVehicle?.driver_user_id ?? assignedDriverId;
+          const statusForResume = activeCargoVehicle ? "in_progress" : "pending";
+          await c.env.DB.prepare(
+            `
         INSERT INTO delivery_tasks (
           id, package_id, task_type, from_location, to_location,
           assigned_driver_id, status, segment_index, created_at, updated_at,
           instructions
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
-      )
-        .bind(
-          taskId,
-          record.package_id,
-          taskType,
-          startNodeId,
-          toNodeId,
-          assignedDriverForResume,
-          statusForResume,
-          nextIndex,
-          now,
-          now,
-          body.handling_report,
-        )
-        .run();
+          )
+            .bind(
+              taskId,
+              record.package_id,
+              taskType,
+              startNodeId,
+              toNodeId,
+              assignedDriverForResume,
+              statusForResume,
+              nextIndex,
+              now,
+              now,
+              body.handling_report,
+            )
+            .run();
 
-      if (resumeMode === "redirect_destination" && destinationOverride) {
-        await c.env.DB.prepare("UPDATE packages SET receiver_address = ? WHERE id = ?")
-          .bind(destinationOverride, record.package_id)
-          .run();
-      }
+          if (resumeMode === "redirect_destination" && destinationOverride) {
+            // Calculate the new route from current location to new destination
+            const newRoute = await computeRoute(c.env.DB, startNodeId, destinationOverride);
+            if (newRoute.ok === false || newRoute.path.length < 2) {
+              return c.json(
+                { error: "Cannot compute route to new destination", from: startNodeId, to: destinationOverride },
+                400
+              );
+            }
+
+            // Serialize the new route path as JSON
+            const newRoutePath = JSON.stringify(newRoute.path);
+
+            // Update both receiver_address and route_path
+            await c.env.DB.prepare("UPDATE packages SET receiver_address = ?, route_path = ? WHERE id = ?")
+              .bind(destinationOverride, newRoutePath, record.package_id)
+              .run();
+          }
         }
       }
     }
@@ -525,8 +538,8 @@ export class CustomerServiceExceptionHandle extends OpenAPIRoute {
         body.action === "cancel"
           ? "destroy"
           : (persistedResumeMode === "redirect_destination"
-              ? (String(body.destination_override ?? "").trim() ? "redirect_destination" : "return_to_origin")
-              : (persistedResumeMode === "reroute_next_hop" ? "reroute_next_hop" : "resume_original")),
+            ? (String(body.destination_override ?? "").trim() ? "redirect_destination" : "return_to_origin")
+            : (persistedResumeMode === "reroute_next_hop" ? "reroute_next_hop" : "resume_original")),
         body.action === "resume" ? persistedResumeMode : null,
         body.action === "resume" ? persistedNextHopOverride : null,
         body.action === "resume" ? persistedDestinationOverride : null,
