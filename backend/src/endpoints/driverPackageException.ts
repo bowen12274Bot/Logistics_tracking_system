@@ -208,26 +208,33 @@ export class DriverPackageExceptionCreate extends OpenAPIRoute {
       // Backwards compatible: allow reporting a TRUCK_* location even if cargo isn't currently loaded.
       if (!currentNodeId && !myTruckCode) return c.json({ error: "Driver vehicle has no current node" }, 409);
 
-      if (currentNodeId && relatedNodes.size > 0 && !relatedNodes.has(currentNodeId)) {
-        return c.json({ error: "Driver is not at a related node for this task", current: currentNodeId, related: [...relatedNodes] }, 409);
-      }
-
       if (requestedLocation) {
         if (/^TRUCK_/i.test(requestedLocation)) {
+          // Truck exception: no node validation required (e.g. accident can happen anywhere)
           if (!myTruckCode) return c.json({ error: "Driver vehicle has no truck code" }, 409);
           if (requestedLocation !== myTruckCode) {
             return c.json({ error: "Invalid location: must be your truck code", expected: myTruckCode }, 400);
           }
           location = myTruckCode;
         } else {
+          // Node exception: validate node is correct and task-related
           if (!currentNodeId) return c.json({ error: "Driver vehicle has no current node" }, 409);
           if (requestedLocation !== currentNodeId) {
             return c.json({ error: "Invalid location: must match current node", current: currentNodeId }, 400);
           }
+          // Check if node is related to the task
+          if (relatedNodes.size > 0 && !relatedNodes.has(requestedLocation)) {
+            return c.json({ error: "Invalid location: node not related to task", location: requestedLocation, related: [...relatedNodes] }, 409);
+          }
           location = currentNodeId;
         }
       } else {
-        location = currentNodeId || myTruckCode;
+        // No location specified: prefer current node, fallback to truck if node is unrelated
+        if (currentNodeId && relatedNodes.size > 0 && !relatedNodes.has(currentNodeId)) {
+          location = myTruckCode; // Current node unrelated, use truck
+        } else {
+          location = currentNodeId || myTruckCode;
+        }
       }
     }
 

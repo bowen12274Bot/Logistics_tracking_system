@@ -465,8 +465,23 @@ export class CustomerServiceExceptionHandle extends OpenAPIRoute {
             .bind(record.package_id)
             .first<{ max_seg: number | null }>();
           const nextIndex = Number(maxSeg?.max_seg ?? -1) + 1;
-          const taskType =
-            String(lastCanceled?.task_type ?? "").trim() || (/^END_/i.test(startNodeId) ? "pickup" : "deliver");
+
+          // Determine task type: prioritize cargo status over node type
+          let taskType: string;
+          if (activeCargoVehicle) {
+            // Package on truck → always deliver (driver needs to dropoff/deliver)
+            taskType = "deliver";
+          } else {
+            // Package not on truck
+            if (String(lastCanceled?.task_type ?? "").trim()) {
+              // Preserve last canceled task type
+              taskType = String(lastCanceled.task_type).trim();
+            } else {
+              // Determine by start node type
+              taskType = /^END_/i.test(startNodeId) ? "pickup" : "deliver";
+            }
+          }
+
           const taskId = crypto.randomUUID();
 
           const assignedDriverForResume = activeCargoVehicle?.driver_user_id ?? assignedDriverId;
