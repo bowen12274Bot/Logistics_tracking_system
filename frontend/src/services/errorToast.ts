@@ -55,15 +55,86 @@ function translateCommonBackendMessages(message: string): string {
 
   // Map common backend error messages to i18n keys
   const messageMap: Record<string, string> = {
+    // Authentication & Authorization
     "invalid credentials": "errorToast.invalidCredentials",
-    "package not found": "errorToast.packageNotFound",
+    "token missing": "errorToast.tokenMissing",
+    "invalid token": "errorToast.invalidToken",
+    "auth token storage failed": "errorToast.authTokenStorageFailed",
     "forbidden": "errorToast.forbidden",
+    "not found": "errorToast.notFound",
+
+    // User & Registration
+    "email, password, and user_name are required": "errorToast.emailPasswordNameRequired",
+    "identifier and password are required": "errorToast.identifierPasswordRequired",
+    "email already exists": "errorToast.emailExists",
+
+    // Package Related
+    "package not found": "errorToast.packageNotFound",
+    "package is terminal": "errorToast.packageTerminal",
+    "package has active exception": "errorToast.hasActiveException",
+    "payment not settled yet": "errorToast.paymentNotSettledYet",
+    "cargo not found on this vehicle": "errorToast.cargoNotFound",
+    "cargo already loaded": "errorToast.cargoAlreadyLoaded",
+    "package not received yet": "errorToast.packageNotReceived",
+    "package not in sorting area": "errorToast.packageNotInSorting",
+    "package not at this warehouse node": "errorToast.packageNotAtWarehouse",
+    "package has no latest event": "errorToast.packageNoLatestEvent",
+    "package is on truck": "errorToast.packageOnTruck",
+    "package already has an active task": "errorToast.packageHasActiveTask",
+    "package has no sender_address": "errorToast.packageNoSenderAddress",
+
+    // Task Related
+    "task not found": "errorToast.taskNotFound",
+    "task not eligible": "errorToast.taskNotEligible",
+    "task already completed or canceled": "errorToast.taskAlreadyCompleted",
+    "task has no from_location": "errorToast.taskNoFromLocation",
+    "task not eligible for handoff": "errorToast.taskNotEligibleHandoff",
+    "not eligible": "errorToast.notEligible",
+    "invalid task type": "errorToast.invalidTaskType",
+
+    // Location & Routing
+    "not at task start node": "errorToast.notAtTaskStart",
+    "not at pickup node": "errorToast.notAtPickupNode",
+    "handoff not allowed from this node": "errorToast.handoffNotAllowed",
+    "missing from/to": "errorToast.missingFromTo",
+    "route not found": "errorToast.routeNotFound",
+    "missing fromnodeid/tonodeid": "errorToast.missingNodeIds",
+    "fromnodeid equals tonodeid": "errorToast.nodeIdsEqual",
+    "invalid tonodeid": "errorToast.invalidNodeId",
+    "not adjacent": "errorToast.notAdjacent",
+    "cannot resolve resume start location": "errorToast.cannotResolveLocation",
+    "cannot compute route to new destination": "errorToast.cannotComputeRoute",
+    "already at destination": "errorToast.alreadyAtDestination",
+
+    // Vehicle Related
+    "vehicle has no current node": "errorToast.vehicleNoNode",
+    "vehicle position changed": "errorToast.vehiclePositionChanged",
+    "driver has no home node": "errorToast.driverNoHomeNode",
+    "invalid home node id": "errorToast.invalidHomeNodeId",
+
+    // Warehouse Related
+    "warehouse has no node": "errorToast.warehouseNoNode",
+    "missing tonodeid": "errorToast.missingToNodeId",
+
+    // Payment Related
     "already paid": "errorToast.alreadyPaid",
     "not payable yet": "errorToast.notPayableYet",
-    "package is terminal": "errorToast.packageTerminal",
-    "task not found": "errorToast.taskNotFound",
-    "email already exists": "errorToast.emailExists",
-    "package has active exception": "errorToast.hasActiveException",
+    "invalid payment_method": "errorToast.invalidPaymentMethod",
+    "monthly_billing is only available for prepaid/cod": "errorToast.monthlyBillingOnlyPrepaidCod",
+    "monthly_billing requires contract_customer": "errorToast.monthlyBillingRequiresContract",
+
+    // Customer Service & Exceptions
+    "exception not found": "errorToast.exceptionNotFound",
+    "already handled": "errorToast.alreadyHandled",
+    "invalid cancel_reason": "errorToast.invalidCancelReason",
+    "invalid handled": "errorToast.invalidHandledValue",
+    "destination_override not found": "errorToast.destinationOverrideNotFound",
+    "next_hop_override is required": "errorToast.nextHopOverrideRequired",
+    "next_hop_override must be adjacent": "errorToast.nextHopMustBeAdjacent",
+
+    // Tracking Related
+    "location_id and vehicle_id cannot be used together": "errorToast.locationAndVehicleConflict",
+    "customer not found": "errorToast.customerNotFound",
   };
 
   // Try exact match first

@@ -154,6 +154,7 @@ const statusInfoText = (pkg: any) => {
     return code ? `${t('track.status.exception')} (${reasonLabel(code)})` : t('track.statusInfo.exception')
   }
 
+
   const status = String(latest?.delivery_status ?? '').trim().toLowerCase()
   const raw = String(latest?.delivery_details ?? '').trim()
   const rawLower = raw.toLowerCase()
@@ -178,6 +179,8 @@ const statusInfoText = (pkg: any) => {
   if (status === 'warehouse_received') return t('track.event.warehouse_received')
   if (status === 'sorting') return t('track.event.sorting')
   if (status === 'route_decided') return t('track.event.route_decided')
+  if (status === 'payment_collected_prepaid') return t('package.status.payment_collected_prepaid')
+  if (status === 'payment_collected_cod') return t('package.status.payment_collected_cod')
 
   return raw || details?.latestDetails || '-'
 }
