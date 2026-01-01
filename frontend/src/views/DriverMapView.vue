@@ -624,8 +624,9 @@ function startException(task: DeliveryTaskRecord) {
   exceptionTarget.value = { packageId: task.package_id, taskId: task.id };
   exceptionForm.reason_code = "";
   exceptionForm.description = "";
-  const onTruck = cargoPackageIds.value.has(String(task.package_id));
-  exceptionForm.location_mode = onTruck ? "truck" : "node";
+  // Default to node mode when driver is at a node (even if package is on truck)
+  // This ensures node exceptions mark the node, not the segment
+  exceptionForm.location_mode = currentNodeId.value ? "node" : "truck";
   exceptionModalOpen.value = true;
 }
 

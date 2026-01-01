@@ -354,8 +354,32 @@ const routeModel = (pkg: any) => {
     if (status === 'exception_resolved') continue
     const loc = String(evt.location ?? '').trim()
     if (!loc) continue
-    if (!baseNodes.includes(loc)) continue
-    if (baseNodes.length && loc === baseNodes[0] && isPrePickupEvent(evt, baseNodes[0])) {
+    
+    // Handle TRUCK_* locations: extract destination from in_transit events
+    let resolvedLoc = loc
+    if (/^TRUCK_/i.test(loc) && status === 'in_transit') {
+      const details = String(evt.delivery_details ?? '').trim()
+      const extractDestination = (text: string) => {
+        const patterns: RegExp[] = [
+          /(?:next|to)\s*([A-Z0-9_]+)/i,
+          /destination\s*[:=]\s*([A-Z0-9_]+)/i,
+          /(?:目的地|下一站)\s*[:：]?\s*([A-Z0-9_]+)/i,
+          /前往\s*([A-Z0-9_]+)/i,
+        ]
+        for (const p of patterns) {
+          const m = text.match(p)
+          if (m?.[1]) return String(m[1]).trim()
+        }
+        return null
+      }
+      const dest = extractDestination(details)
+      if (dest && baseNodes.includes(dest)) {
+        resolvedLoc = dest
+      }
+    }
+    
+    if (!baseNodes.includes(resolvedLoc)) continue
+    if (baseNodes.length && resolvedLoc === baseNodes[0] && isPrePickupEvent(evt, baseNodes[0])) {
       if (!originAtFromEvent) originAtFromEvent = evt.events_at
       else {
         const cur = new Date(originAtFromEvent).getTime()
@@ -364,13 +388,13 @@ const routeModel = (pkg: any) => {
       }
       continue
     }
-    const existing = nodeTimeById.get(loc)
+    const existing = nodeTimeById.get(resolvedLoc)
     if (!existing) {
-      nodeTimeById.set(loc, evt.events_at)
+      nodeTimeById.set(resolvedLoc, evt.events_at)
     } else {
       const cur = new Date(existing).getTime()
       const nxt = new Date(evt.events_at).getTime()
-      if (Number.isFinite(nxt) && (!Number.isFinite(cur) || nxt < cur)) nodeTimeById.set(loc, evt.events_at)
+      if (Number.isFinite(nxt) && (!Number.isFinite(cur) || nxt < cur)) nodeTimeById.set(resolvedLoc, evt.events_at)
     }
   }
 
@@ -478,18 +502,22 @@ const routeModel = (pkg: any) => {
           else segmentExceptionFlags[segIndex] = true
           if (!segmentTruckIds[segIndex]) segmentTruckIds[segIndex] = loc
         }
+        
+        // For TRUCK exceptions, also try to extract destination and mark segment
+        if (!isFailure) {
+          const destination = extractDestination(details, nodes)
+          if (destination) {
+            const destIndex = nodes.findIndex((n) => n === destination)
+            if (destIndex > 0) {
+              const segIndex = destIndex - 1
+              if (segIndex >= 0 && segIndex < segmentExceptionFlags.length && segIndex >= currentIndex) {
+                segmentExceptionFlags[segIndex] = true
+                if (!segmentTruckIds[segIndex]) segmentTruckIds[segIndex] = loc
+              }
+            }
+          }
+        }
       }
-
-      if (isFailure) continue
-
-      const destination = extractDestination(details, nodes)
-      if (!destination) continue
-      const destIndex = nodes.findIndex((n) => n === destination)
-      if (destIndex <= 0) continue
-      const segIndex = destIndex - 1
-      if (segIndex < 0 || segIndex >= segmentExceptionFlags.length) continue
-      if (segIndex >= currentIndex) segmentExceptionFlags[segIndex] = true
-      if (loc && /^TRUCK_/i.test(loc) && !segmentTruckIds[segIndex]) segmentTruckIds[segIndex] = loc
     }
   }
 

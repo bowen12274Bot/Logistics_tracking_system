@@ -467,7 +467,8 @@ export class CustomerServiceExceptionHandle extends OpenAPIRoute {
           }
 
           if (!toNodeId) return c.json({ error: "Route not found for resume" }, 400);
-          if (startNodeId === effectiveDestination) {
+          // Allow delivery task creation if package is on truck at destination (needs unloading)
+          if (startNodeId === effectiveDestination && !activeCargoVehicle) {
             return c.json({ error: "Already at destination" }, 409);
           }
 
@@ -548,7 +549,8 @@ export class CustomerServiceExceptionHandle extends OpenAPIRoute {
         }
 
         if (resumeMode === "redirect_destination" && destinationOverride) {
-          if (startNodeId === destinationOverride) {
+          // Allow delivery task creation if package is on truck at destination (needs unloading)
+          if (startNodeId === destinationOverride && !activeCargoVehicle) {
             return c.json({ error: "Already at destination" }, 409);
           }
 
