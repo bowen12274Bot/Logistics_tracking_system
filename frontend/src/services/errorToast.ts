@@ -54,8 +54,28 @@ function translateCommonBackendMessages(message: string): string {
   const lowerMessage = message.toLowerCase().trim();
 
   // Map common backend error messages to i18n keys
-  if (lowerMessage === "invalid credentials") {
-    return t("errorToast.invalidCredentials");
+  const messageMap: Record<string, string> = {
+    "invalid credentials": "errorToast.invalidCredentials",
+    "package not found": "errorToast.packageNotFound",
+    "forbidden": "errorToast.forbidden",
+    "already paid": "errorToast.alreadyPaid",
+    "not payable yet": "errorToast.notPayableYet",
+    "package is terminal": "errorToast.packageTerminal",
+    "task not found": "errorToast.taskNotFound",
+    "email already exists": "errorToast.emailExists",
+    "package has active exception": "errorToast.hasActiveException",
+  };
+
+  // Try exact match first
+  if (messageMap[lowerMessage]) {
+    return t(messageMap[lowerMessage]);
+  }
+
+  // Try partial match for messages with dynamic content
+  for (const [key, value] of Object.entries(messageMap)) {
+    if (lowerMessage.includes(key)) {
+      return t(value);
+    }
   }
 
   return message;
