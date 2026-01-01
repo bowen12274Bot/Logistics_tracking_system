@@ -498,6 +498,7 @@
   "track.event.arrived": "已抵達",
   "track.event.arrived_pickup": "已抵達取件地點",
   "track.event.arrived_delivery": "已抵達配送地點",
+  "track.event.picked_up": "已取件",
   "track.event.delivered": "已送達",
   "track.route.title": "路徑進度",
   "track.route.aria": "路徑進度",

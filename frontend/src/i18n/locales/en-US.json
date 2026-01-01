@@ -498,6 +498,7 @@
   "track.event.arrived": "Arrived",
   "track.event.arrived_pickup": "Arrived at pickup",
   "track.event.arrived_delivery": "Arrived at delivery",
+  "track.event.picked_up": "Picked up",
   "track.event.delivered": "Delivered",
   "track.route.title": "Route progress",
   "track.route.aria": "Route progress",
