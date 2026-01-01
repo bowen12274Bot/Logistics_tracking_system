@@ -215,6 +215,8 @@ function deliveryTimeLabel(raw: unknown) {
   if (key === "standard") return t("driver.map.deliveryTime.standard");
   if (key === "express") return t("driver.map.deliveryTime.express");
   if (key === "economy") return t("driver.map.deliveryTime.economy");
+  if (key === "overnight") return t("driver.map.deliveryTime.overnight");
+  if (["two_day", "two-day", "two_days", "two-days"].includes(key)) return t("driver.map.deliveryTime.twoDay");
   return String(raw);
 }
 
@@ -624,8 +626,9 @@ function startException(task: DeliveryTaskRecord) {
   exceptionTarget.value = { packageId: task.package_id, taskId: task.id };
   exceptionForm.reason_code = "";
   exceptionForm.description = "";
-  const onTruck = cargoPackageIds.value.has(String(task.package_id));
-  exceptionForm.location_mode = onTruck ? "truck" : "node";
+  // Default to node mode when driver is at a node (even if package is on truck)
+  // This ensures node exceptions mark the node, not the segment
+  exceptionForm.location_mode = currentNodeId.value ? "node" : "truck";
   exceptionModalOpen.value = true;
 }
 
@@ -1200,8 +1203,8 @@ onMounted(async () => {
           </svg>
         </div>
 
-        <aside v-if="!sidebarCollapsed" class="map-sidebar" aria-label="driver work panel">
-          <UiCard class="map-overlay driver-info-card" role="complementary" aria-label="driver map panel">
+        <aside v-if="!sidebarCollapsed" class="map-sidebar" :aria-label="t('driver.map.aria.workPanel')">
+          <UiCard class="map-overlay driver-info-card" role="complementary" :aria-label="t('driver.map.aria.mapPanel')">
             <p class="eyebrow">{{ t("driver.map.info.title") }}</p>
             <div class="driver-info-grid">
               <div class="driver-info-row">
@@ -1226,7 +1229,7 @@ onMounted(async () => {
             </div>
           </UiCard>
 
-          <UiCard class="map-overlay task-panel" role="complementary" aria-label="task list">
+          <UiCard class="map-overlay task-panel" role="complementary" :aria-label="t('driver.map.aria.taskList')">
             <div class="task-header">
               <div>
                 <p class="eyebrow">{{ t("driver.map.taskList.title") }}</p>
@@ -1393,7 +1396,7 @@ onMounted(async () => {
             <UiModal
               v-model="exceptionModalOpen"
               :title="t('driver.map.exception.title')"
-              aria-label="report exception"
+              :aria-label="t('driver.map.aria.reportException')"
               :close-on-backdrop="!arriveBusy"
               :close-on-esc="!arriveBusy"
               @close="closeExceptionModal"

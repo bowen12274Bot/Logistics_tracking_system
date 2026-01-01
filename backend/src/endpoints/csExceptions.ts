@@ -352,12 +352,32 @@ export class CustomerServiceExceptionHandle extends OpenAPIRoute {
       if (!startNodeId) return c.json({ error: "Cannot resolve resume start location" }, 409);
 
       const pkgRow = await c.env.DB.prepare(
-        "SELECT sender_address, receiver_address FROM packages WHERE id = ? LIMIT 1",
+        "SELECT sender_address, receiver_address, route_path FROM packages WHERE id = ? LIMIT 1",
       )
         .bind(record.package_id)
-        .first<{ sender_address: string | null; receiver_address: string | null }>();
+        .first<{ sender_address: string | null; receiver_address: string | null; route_path: string | null }>();
       const sender = String(pkgRow?.sender_address ?? "").trim().toUpperCase();
       const receiver = String(pkgRow?.receiver_address ?? "").trim().toUpperCase();
+      const existingRoutePathRaw = pkgRow?.route_path ?? null;
+
+      const parseExistingRoutePath = (raw: string | null): string[] => {
+        if (!raw) return [];
+        const s = String(raw).trim();
+        if (!s) return [];
+        if (s.startsWith("[")) {
+          try {
+            const parsed = JSON.parse(s);
+            if (!Array.isArray(parsed)) return [];
+            return parsed.map((v) => String(v).trim().toUpperCase()).filter(Boolean);
+          } catch {
+            return [];
+          }
+        }
+        return s
+          .split(",")
+          .map((v) => String(v).trim().toUpperCase())
+          .filter(Boolean);
+      };
 
       let effectiveDestination = receiver;
       let destinationOverride: string | null = null;
@@ -467,7 +487,8 @@ export class CustomerServiceExceptionHandle extends OpenAPIRoute {
           }
 
           if (!toNodeId) return c.json({ error: "Route not found for resume" }, 400);
-          if (startNodeId === effectiveDestination) {
+          // Allow delivery task creation if package is on truck at destination (needs unloading)
+          if (startNodeId === effectiveDestination && !activeCargoVehicle) {
             return c.json({ error: "Already at destination" }, 409);
           }
 
@@ -548,22 +569,32 @@ export class CustomerServiceExceptionHandle extends OpenAPIRoute {
         }
 
         if (resumeMode === "redirect_destination" && destinationOverride) {
-          if (startNodeId === destinationOverride) {
+          // Allow delivery task creation if package is on truck at destination (needs unloading)
+          if (startNodeId === destinationOverride && !activeCargoVehicle) {
             return c.json({ error: "Already at destination" }, 409);
           }
 
-          const newRoute = await computeRoute(c.env.DB, startNodeId, destinationOverride);
-          if (newRoute.ok === false || newRoute.path.length < 2) {
-            return c.json(
-              { error: "Cannot compute route to new destination", from: startNodeId, to: destinationOverride },
-              400,
-            );
-          }
-
-          await c.env.DB.prepare("UPDATE packages SET receiver_address = ?, route_path = ? WHERE id = ?")
-            .bind(destinationOverride, JSON.stringify(newRoute.path), record.package_id)
-            .run();
+        const newRoute = await computeRoute(c.env.DB, startNodeId, destinationOverride);
+        if (newRoute.ok === false || newRoute.path.length < 2) {
+          return c.json(
+            { error: "Cannot compute route to new destination", from: startNodeId, to: destinationOverride },
+            400,
+          );
         }
+
+        const existingPath = parseExistingRoutePath(existingRoutePathRaw);
+        // If the route contains repeated nodes (e.g. REG_7 ... HUB_1 ... REG_7),
+        // prefer the latest occurrence to avoid truncating history when resuming from the second visit.
+        const idx = existingPath.lastIndexOf(startNodeId);
+        const mergedPath =
+          idx >= 0
+            ? [...existingPath.slice(0, idx + 1), ...newRoute.path.slice(1)]
+            : [...newRoute.path];
+
+        await c.env.DB.prepare("UPDATE packages SET receiver_address = ?, route_path = ? WHERE id = ?")
+          .bind(destinationOverride, JSON.stringify(mergedPath), record.package_id)
+          .run();
+      }
 
         // Update package current_location to reflect the actual node position after resume
         // This is especially important for truck exceptions where location was TRUCK_*, 

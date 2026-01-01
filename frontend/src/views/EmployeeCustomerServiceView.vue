@@ -14,7 +14,7 @@ import UiNotice from '../components/ui/UiNotice.vue'
 import UiPageShell from '../components/ui/UiPageShell.vue'
 import UiButton from '../components/ui/UiButton.vue'
 import { useToasts } from "../components/ui/toast";
-import { toastFromApiError } from "../services/errorToast";
+import { toastFromApiError, translateCommonBackendMessages } from "../services/errorToast";
 import { roleLabelKey } from "../services/roleLabels";
 
 type TaskKind = "exception" | "contract";
@@ -482,7 +482,8 @@ const submitExpandedException = async () => {
     resetExceptionForm();
     await refresh();
   } catch (e) {
-    exceptionSubmitError.value = e instanceof Error ? e.message : String(e);
+    const rawMessage = e instanceof Error ? e.message : String(e);
+    exceptionSubmitError.value = translateCommonBackendMessages(rawMessage);
     toastFromApiError(e, exceptionSubmitError.value ?? t("cs.errors.actionFailed"));
   } finally {
     exceptionSubmitting.value = false;

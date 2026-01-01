@@ -103,11 +103,21 @@ export class WarehousePackagesList extends OpenAPIRoute {
       .bind(nodeId, nodeId)
       .all();
     const neighborSet = new Set<string>();
+    const edgeCostByNeighbor = new Map<string, number>();
     for (const e of (edgesRes.results || []) as any[]) {
       const a = normalizeNodeId(e.source);
       const b = normalizeNodeId(e.target);
-      if (a === nodeId && b) neighborSet.add(b);
-      if (b === nodeId && a) neighborSet.add(a);
+      const cost = Number(e.cost ?? 0);
+      if (a === nodeId && b) {
+        neighborSet.add(b);
+        const prev = edgeCostByNeighbor.get(b);
+        edgeCostByNeighbor.set(b, prev === undefined ? cost : Math.min(prev, cost));
+      }
+      if (b === nodeId && a) {
+        neighborSet.add(a);
+        const prev = edgeCostByNeighbor.get(a);
+        edgeCostByNeighbor.set(a, prev === undefined ? cost : Math.min(prev, cost));
+      }
     }
     const neighbors = Array.from(neighborSet.values()).sort();
 
@@ -127,10 +137,16 @@ export class WarehousePackagesList extends OpenAPIRoute {
       let suggested_total_cost: number | null = null;
       if (receiverNodeId && graph.nodeIds.has(receiverNodeId) && neighbors.length > 0) {
         for (const candidate of neighbors) {
-          const cost = dijkstraCost(graph, candidate, receiverNodeId);
-          if (cost === null) continue;
-          if (suggested_total_cost === null || cost < suggested_total_cost) {
-            suggested_total_cost = cost;
+          const edgeCost = edgeCostByNeighbor.get(candidate);
+          if (edgeCost === undefined) continue;
+
+          const remainingCost = dijkstraCost(graph, candidate, receiverNodeId);
+          if (remainingCost === null) continue;
+
+          // Compare by full path cost: nodeId -> candidate edge + candidate -> destination shortest path.
+          const totalCost = edgeCost + remainingCost;
+          if (suggested_total_cost === null || totalCost < suggested_total_cost) {
+            suggested_total_cost = totalCost;
             suggested_to_node_id = candidate;
           }
         }

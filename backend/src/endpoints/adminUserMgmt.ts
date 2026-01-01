@@ -365,16 +365,41 @@ export class AdminUserAssignVehicle extends OpenAPIRoute {
     if (!user) return c.json({ error: "使用者不存在" }, 404);
     if (user.user_class !== 'driver') return c.json({ error: "使用者不是司機" }, 409);
 
-    const checkVehicle = await c.env.DB.prepare("SELECT * FROM vehicles WHERE vehicle_code = ? AND driver_user_id != ?").bind(body.vehicle_code, id).first();
-    if (checkVehicle) return c.json({ error: "車輛編號已被使用" }, 409);
+    const conflictingVehicle = await c.env.DB.prepare(`
+      SELECT v.id, v.driver_user_id, u.status as owner_status
+      FROM vehicles v
+      LEFT JOIN users u ON u.id = v.driver_user_id
+      WHERE v.vehicle_code = ? AND v.driver_user_id != ?
+      LIMIT 1
+    `).bind(body.vehicle_code, id).first<{ id: string; driver_user_id: string; owner_status: string | null }>();
+
+    // Allow claiming a vehicle code from a soft-deleted driver even if the vehicle row still exists.
+    // This can happen if historical records reference the vehicle, preventing a hard delete.
+    if (conflictingVehicle && conflictingVehicle.owner_status !== "deleted") {
+      return c.json({ error: "車輛編號已被使用" }, 409);
+    }
 
     const homeNode = body.home_node_id || user.address;
     if (!homeNode) return c.json({ error: "無效的 home_node_id" }, 400);
 
     // Check if entry exists
-    const existingEntry = await c.env.DB.prepare("SELECT id FROM vehicles WHERE driver_user_id = ?").bind(id).first();
+    const existingEntry = await c.env.DB.prepare("SELECT id FROM vehicles WHERE driver_user_id = ? LIMIT 1")
+      .bind(id)
+      .first<{ id: string }>();
 
-    if (existingEntry) {
+    // If the code is currently owned by a deleted driver, transfer that vehicle row to the target driver
+    // to avoid duplicate `vehicle_code` rows (many endpoints look up by vehicle_code directly).
+    if (conflictingVehicle && conflictingVehicle.owner_status === "deleted") {
+      if (existingEntry) {
+        return c.json({ error: "司機已綁定其他車輛，無法接收此車輛" }, 409);
+      }
+
+      await c.env.DB.prepare(`
+        UPDATE vehicles
+        SET driver_user_id = ?, home_node_id = ?, current_node_id = ?, updated_at = datetime('now')
+        WHERE id = ?
+      `).bind(id, homeNode, homeNode, conflictingVehicle.id).run();
+    } else if (existingEntry) {
       await c.env.DB.prepare(`
         UPDATE vehicles SET vehicle_code = ?, home_node_id = ?, current_node_id = ?, updated_at = datetime('now')
         WHERE driver_user_id = ?
