@@ -106,7 +106,7 @@ export class WarehousePackagesReceive extends OpenAPIRoute {
       if (!(latestLoc === nodeId && latestStatus === "warehouse_in")) {
         results.failed.push({
           id: packageId,
-          reason: "Package not at this warehouse (must be latest warehouse_in at this node)",
+          reason: "Package not at this warehouse node (must be latest warehouse_in at this node)",
         });
         continue;
       }

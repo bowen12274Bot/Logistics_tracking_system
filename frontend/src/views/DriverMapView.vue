@@ -1203,8 +1203,8 @@ onMounted(async () => {
           </svg>
         </div>
 
-        <aside v-if="!sidebarCollapsed" class="map-sidebar" aria-label="driver work panel">
-          <UiCard class="map-overlay driver-info-card" role="complementary" aria-label="driver map panel">
+        <aside v-if="!sidebarCollapsed" class="map-sidebar" :aria-label="t('driver.map.aria.workPanel')">
+          <UiCard class="map-overlay driver-info-card" role="complementary" :aria-label="t('driver.map.aria.mapPanel')">
             <p class="eyebrow">{{ t("driver.map.info.title") }}</p>
             <div class="driver-info-grid">
               <div class="driver-info-row">
@@ -1229,7 +1229,7 @@ onMounted(async () => {
             </div>
           </UiCard>
 
-          <UiCard class="map-overlay task-panel" role="complementary" aria-label="task list">
+          <UiCard class="map-overlay task-panel" role="complementary" :aria-label="t('driver.map.aria.taskList')">
             <div class="task-header">
               <div>
                 <p class="eyebrow">{{ t("driver.map.taskList.title") }}</p>
@@ -1396,7 +1396,7 @@ onMounted(async () => {
             <UiModal
               v-model="exceptionModalOpen"
               :title="t('driver.map.exception.title')"
-              aria-label="report exception"
+              :aria-label="t('driver.map.aria.reportException')"
               :close-on-backdrop="!arriveBusy"
               :close-on-esc="!arriveBusy"
               @close="closeExceptionModal"

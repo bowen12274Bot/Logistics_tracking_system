@@ -96,7 +96,7 @@ export class WarehousePackageExceptionCreate extends OpenAPIRoute {
     if (!(latestLoc === nodeId && ["warehouse_in", "warehouse_received", "sorting", "route_decided"].includes(latestStatus))) {
       return c.json(
         {
-          error: "Package not at this warehouse",
+          error: "Package not at this warehouse node",
           warehouse_node_id: nodeId,
           latest_location: latestLoc || null,
           latest_status: latestStatus || null,

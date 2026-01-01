@@ -116,6 +116,7 @@ export function translateCommonBackendMessages(message: string): string {
     // Warehouse Related
     "warehouse has no node": "errorToast.warehouseNoNode",
     "missing tonodeid": "errorToast.missingToNodeId",
+    "package not at this warehouse": "errorToast.packageNotAtWarehouse",
 
     // Payment Related
     "already paid": "errorToast.alreadyPaid",
