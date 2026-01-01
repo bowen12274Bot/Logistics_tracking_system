@@ -125,9 +125,9 @@ const handleLogin = async () => {
   } catch (err: any) {
     const status = Number(err?.status)
     const message = err?.message ?? (status === 401 ? t('login.error') : t('login.loginFailed'))
-    if (status === 401) toast.warning(message)
-    else toastFromApiError(err, message)
-    statusMessage.value = message
+    // Use toastFromApiError for all errors to ensure translation
+    toastFromApiError(err, message)
+    statusMessage.value = status === 401 ? t('login.error') : message
   } finally {
     loading.value = false
   }

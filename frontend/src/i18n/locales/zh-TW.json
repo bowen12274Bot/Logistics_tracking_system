@@ -24,6 +24,7 @@
   "errorToast.hasActiveException": "此包裹目前有未結案的異常，請先由客服處理後再繼續。",
   "errorToast.operationNotAllowed": "目前狀態不允許此操作，請稍後再試。",
   "errorToast.invalidInput": "輸入資料有誤，請檢查後再試。",
+  "errorToast.invalidCredentials": "帳號或密碼錯誤，請再試一次。",
   "errorToast.systemBusy": "系統忙碌，請稍後再試。",
   "errorToast.operationFailed": "操作失敗，請稍後再試。",
   "errorToast.packageNotOnTruck": "包裹尚未裝車，只能在取貨地點申報節點異常。請移動到取貨地點或選擇車上異常。",

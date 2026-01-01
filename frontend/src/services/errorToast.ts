@@ -49,12 +49,32 @@ function resolve409Message(error: ApiErrorLike, rawMessage: string): string {
   return t("errorToast.operationNotAllowed");
 }
 
+function translateCommonBackendMessages(message: string): string {
+  const t = i18n.global.t;
+  const lowerMessage = message.toLowerCase().trim();
+
+  // Map common backend error messages to i18n keys
+  if (lowerMessage === "invalid credentials") {
+    return t("errorToast.invalidCredentials");
+  }
+
+  return message;
+}
+
 export function toastFromApiError(error: unknown, fallbackMessage: string) {
   const toast = useToasts();
   const t = i18n.global.t;
 
   if (isApiErrorLike(error)) {
-    if (error.status === 401 || error.status === 403) return;
+    // Handle 401 with translated message
+    if (error.status === 401) {
+      const rawMessage = messageFromUnknown(error);
+      const translatedMessage = rawMessage ? translateCommonBackendMessages(rawMessage) : t("errorToast.invalidCredentials");
+      toast.warning(translatedMessage);
+      return;
+    }
+
+    if (error.status === 403) return;
 
     const rawMessage = messageFromUnknown(error) || String(fallbackMessage ?? "").trim();
 
@@ -74,12 +94,14 @@ export function toastFromApiError(error: unknown, fallbackMessage: string) {
     }
 
     if (rawMessage) {
-      toast.error(rawMessage);
+      const translatedMessage = translateCommonBackendMessages(rawMessage);
+      toast.error(translatedMessage);
       return;
     }
   }
 
   const rawMessage = messageFromUnknown(error) || String(fallbackMessage ?? "").trim();
-  toast.error(rawMessage || t("errorToast.operationFailed"));
+  const translatedMessage = rawMessage ? translateCommonBackendMessages(rawMessage) : t("errorToast.operationFailed");
+  toast.error(translatedMessage);
 }
 

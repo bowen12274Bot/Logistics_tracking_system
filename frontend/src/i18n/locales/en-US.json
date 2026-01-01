@@ -24,6 +24,7 @@
   "errorToast.hasActiveException": "This package has an active exception. Please contact customer service first.",
   "errorToast.operationNotAllowed": "This operation is not allowed right now. Please try again later.",
   "errorToast.invalidInput": "Invalid input. Please check and try again.",
+  "errorToast.invalidCredentials": "Invalid credentials. Please try again.",
   "errorToast.systemBusy": "System is busy. Please try again later.",
   "errorToast.operationFailed": "Operation failed. Please try again later.",
   "errorToast.packageNotOnTruck": "Package not on truck. Node exceptions can only be reported at the pickup location. Please move to the pickup location or report a truck exception instead.",
