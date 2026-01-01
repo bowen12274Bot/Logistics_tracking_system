@@ -798,6 +798,8 @@
   "driver.map.deliveryTime.standard": "標準",
   "driver.map.deliveryTime.express": "快速",
   "driver.map.deliveryTime.economy": "經濟",
+  "driver.map.deliveryTime.overnight": "隔日",
+  "driver.map.deliveryTime.twoDay": "兩日",
   "driver.map.taskType.pickup": "取貨",
   "driver.map.taskType.deliver": "配送",
   "driver.map.taskType.enroute": "前往",

@@ -940,6 +940,8 @@
   "driver.map.deliveryTime.standard": "Standard",
   "driver.map.deliveryTime.express": "Express",
   "driver.map.deliveryTime.economy": "Economy",
+  "driver.map.deliveryTime.overnight": "Overnight",
+  "driver.map.deliveryTime.twoDay": "Two-day",
   "driver.map.taskType.pickup": "Pickup",
   "driver.map.taskType.deliver": "Deliver",
   "driver.map.taskType.enroute": "En Route",

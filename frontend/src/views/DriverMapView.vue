@@ -215,6 +215,8 @@ function deliveryTimeLabel(raw: unknown) {
   if (key === "standard") return t("driver.map.deliveryTime.standard");
   if (key === "express") return t("driver.map.deliveryTime.express");
   if (key === "economy") return t("driver.map.deliveryTime.economy");
+  if (key === "overnight") return t("driver.map.deliveryTime.overnight");
+  if (["two_day", "two-day", "two_days", "two-days"].includes(key)) return t("driver.map.deliveryTime.twoDay");
   return String(raw);
 }
 

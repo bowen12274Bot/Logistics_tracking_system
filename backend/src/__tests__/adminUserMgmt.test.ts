@@ -5,6 +5,7 @@ import {
   authenticatedRequest,
   apiRequest
 } from "./helpers";
+import { env } from "cloudflare:test";
 
 describe("Admin User Management APIs", () => {
   let adminToken: string;
@@ -182,5 +183,35 @@ describe("Admin User Management APIs", () => {
     expect(reassignStatus).toBe(200);
     expect(reassignData.vehicle.vehicle_code).toBe(vehicleCode);
     expect(reassignData.vehicle.driver_user_id).toBe(driver3Id);
+  });
+
+  it("POST /api/admin/users/:id/assign-vehicle - Can claim vehicle code from deleted driver record", async () => {
+    if (!(env as any).DB) return;
+    const db = (env as any).DB as D1Database;
+
+    const driverA = await createEmployeeUser(adminToken, "driver");
+    const driverAId = driverA.user.id;
+    const driverB = await createEmployeeUser(adminToken, "driver");
+    const driverBId = driverB.user.id;
+
+    const vehicleCode = "TEST_TRUCK_DELETED_OWNER";
+    const { status: assignAStatus } = await authenticatedRequest<any>(
+      `/api/admin/users/${driverAId}/assign-vehicle`,
+      adminToken,
+      { method: "POST", body: JSON.stringify({ vehicle_code: vehicleCode, home_node_id: "HUB_0" }) },
+    );
+    expect(assignAStatus).toBe(200);
+
+    // Simulate soft-deleted driver where vehicle row still exists (e.g. cargo history prevents deletion).
+    await db.prepare("UPDATE users SET status = 'deleted' WHERE id = ?").bind(driverAId).run();
+
+    const { status: assignBStatus, data: assignBData } = await authenticatedRequest<any>(
+      `/api/admin/users/${driverBId}/assign-vehicle`,
+      adminToken,
+      { method: "POST", body: JSON.stringify({ vehicle_code: vehicleCode, home_node_id: "HUB_0" }) },
+    );
+    expect(assignBStatus).toBe(200);
+    expect(assignBData.vehicle.vehicle_code).toBe(vehicleCode);
+    expect(assignBData.vehicle.driver_user_id).toBe(driverBId);
   });
 });
