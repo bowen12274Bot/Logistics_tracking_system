@@ -14,7 +14,7 @@ import UiNotice from "../components/ui/UiNotice.vue";
 import UiPageShell from "../components/ui/UiPageShell.vue";
 import UiButton from "../components/ui/UiButton.vue";
 import { useToasts } from "../components/ui/toast";
-import { toastFromApiError } from "../services/errorToast";
+import { toastFromApiError, translateCommonBackendMessages } from "../services/errorToast";
 
 type WarehouseTab = "await_receive" | "sorting" | "dispatched";
 
@@ -556,7 +556,8 @@ async function submitException() {
     exceptionTarget.value = null;
     await refresh();
   } catch (e: any) {
-    exceptionSubmitError.value = String(e?.message ?? e);
+    const rawMessage = String(e?.message ?? e);
+    exceptionSubmitError.value = translateCommonBackendMessages(rawMessage);
     toastFromApiError(e, exceptionSubmitError.value);
   } finally {
     busy.value = false;

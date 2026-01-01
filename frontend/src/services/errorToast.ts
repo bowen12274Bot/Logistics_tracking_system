@@ -45,11 +45,12 @@ function resolve409Message(error: ApiErrorLike, rawMessage: string): string {
     return t("errorToast.packageNotOnTruck");
   }
 
-  if (rawMessage) return rawMessage;
+  // Translate the raw message using the common backend messages map
+  if (rawMessage) return translateCommonBackendMessages(rawMessage);
   return t("errorToast.operationNotAllowed");
 }
 
-function translateCommonBackendMessages(message: string): string {
+export function translateCommonBackendMessages(message: string): string {
   const t = i18n.global.t;
   const lowerMessage = message.toLowerCase().trim();
 
