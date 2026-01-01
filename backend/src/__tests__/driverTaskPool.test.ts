@@ -185,6 +185,134 @@ describe("Driver tasks (segmented assignment + handoff)", () => {
     const list: any[] = assigned.data.tasks ?? [];
     expect(list.some((t) => t.id === taskId)).toBe(true);
   });
+
+  it("DRV-TASK-ROUTE-001: warehouse dispatch updates package route_path for tracking", async () => {
+    const sender = "END_HOME_1";
+    const receiver = "END_HOME_2";
+
+    const mapRes = await apiRequest<any>("/api/map");
+    expect(mapRes.status).toBe(200);
+    const edges: any[] = mapRes.data.edges ?? [];
+
+    const routeRes = await apiRequest<any>(
+      `/api/map/route?from=${encodeURIComponent(sender)}&to=${encodeURIComponent(receiver)}`,
+    );
+    expect(routeRes.status).toBe(200);
+    const plannedPath: string[] = (routeRes.data?.route?.path ?? []).map((v: any) => String(v).trim().toUpperCase()).filter(Boolean);
+    expect(plannedPath.length).toBeGreaterThan(2);
+
+    const pkg = await createTestPackage(customerToken, {
+      sender_address: sender,
+      receiver_address: receiver,
+      route_path: JSON.stringify(plannedPath),
+    });
+
+    // Find which hub driver got the pickup task.
+    const hubs: string[] = (mapRes.data.nodes ?? [])
+      .filter((n: any) => Number(n.level) === 1 && typeof n.id === "string")
+      .map((n: any) => String(n.id));
+    expect(hubs.length).toBeGreaterThan(0);
+
+    const loginDriver = async (hubId: string) => {
+      const { status, data } = await apiRequest<{ token: string }>(`/api/auth/login`, {
+        method: "POST",
+        body: JSON.stringify({ identifier: `driver_${hubId.toLowerCase()}@example.com`, password: "driver123" }),
+      });
+      expect(status).toBe(200);
+      return data.token;
+    };
+
+    let pickup: any | null = null;
+    let pickupDriverToken: string | null = null;
+    for (const hubId of hubs) {
+      const token = hubId === "HUB_0" ? driverToken : await loginDriver(hubId);
+      const assignedRes = await authenticatedRequest<any>("/api/driver/tasks?scope=assigned", token);
+      expect(assignedRes.status).toBe(200);
+      const hit = (assignedRes.data.tasks ?? []).find((t: any) => t.package_id === pkg.id);
+      if (hit) {
+        pickup = hit;
+        pickupDriverToken = token;
+        break;
+      }
+    }
+    expect(pickup).toBeTruthy();
+    expect(pickupDriverToken).toBeTruthy();
+
+    const handoffNode = String(pickup.to_location ?? "").trim().toUpperCase();
+    expect(handoffNode).toMatch(/^(HUB_|REG_)/i);
+
+    const idx = plannedPath.indexOf(handoffNode);
+    expect(idx).toBeGreaterThan(0);
+    expect(idx).toBeLessThan(plannedPath.length - 1);
+    const recommendedNext = plannedPath[idx + 1];
+
+    // Choose a non-recommended adjacent node that still can reach the receiver.
+    const adjacent = edges.flatMap((e: any) => {
+      const a = String(e.source ?? "").trim().toUpperCase();
+      const b = String(e.target ?? "").trim().toUpperCase();
+      if (a === handoffNode) return [b];
+      if (b === handoffNode) return [a];
+      return [];
+    }).filter(Boolean);
+
+    let overrideNext: string | null = null;
+    for (const cand of adjacent) {
+      if (cand === recommendedNext) continue;
+      if (cand === sender) continue;
+      const r = await apiRequest<any>(`/api/map/route?from=${encodeURIComponent(cand)}&to=${encodeURIComponent(receiver)}`);
+      if (r.status === 200 && Array.isArray(r.data?.route?.path) && (r.data.route.path ?? []).length >= 2) {
+        overrideNext = cand;
+        break;
+      }
+    }
+    expect(overrideNext).toBeTruthy();
+
+    const adminToken = await getAdminToken();
+    const warehouse = await createEmployeeUser(adminToken, "warehouse_staff", { address: String(handoffNode) });
+
+    const complete = await authenticatedRequest<any>(
+      `/api/driver/tasks/${encodeURIComponent(String(pickup.id))}/complete`,
+      String(pickupDriverToken),
+      { method: "POST" },
+    );
+    expect(complete.status).toBe(200);
+    expect(complete.data.success).toBe(true);
+
+    // Simulate truck unloading at this node so warehouse can receive it.
+    const arrive = await authenticatedRequest<any>(`/api/packages/${encodeURIComponent(pkg.id)}/events`, warehouse.token, {
+      method: "POST",
+      body: JSON.stringify({ delivery_status: "warehouse_in", location: handoffNode }),
+    });
+    expect(arrive.status).toBe(200);
+    expect(arrive.data.success).toBe(true);
+
+    const receive = await authenticatedRequest<any>(
+      `/api/warehouse/packages/receive`,
+      warehouse.token,
+      { method: "POST", body: JSON.stringify({ package_ids: [pkg.id] }) },
+    );
+    expect(receive.status).toBe(200);
+    expect(receive.data.success).toBe(true);
+
+    const dispatch = await authenticatedRequest<any>(
+      `/api/warehouse/packages/${encodeURIComponent(pkg.id)}/dispatch-next`,
+      warehouse.token,
+      { method: "POST", body: JSON.stringify({ toNodeId: overrideNext }) },
+    );
+    expect(dispatch.status).toBe(200);
+    expect(dispatch.data.success).toBe(true);
+
+    const status = await authenticatedRequest<any>(`/api/packages/${encodeURIComponent(pkg.id)}/status`, customerToken);
+    expect(status.status).toBe(200);
+    const raw = String(status.data.package?.route_path ?? "").trim();
+    expect(raw.startsWith("[")).toBe(true);
+    const updated: string[] = (JSON.parse(raw) as any[]).map((v) => String(v).trim().toUpperCase()).filter(Boolean);
+
+    expect(updated.slice(0, idx + 1)).toEqual(plannedPath.slice(0, idx + 1));
+    expect(updated[idx + 1]).toBe(String(overrideNext));
+    expect(updated[0]).toBe(sender);
+    expect(updated[updated.length - 1]).toBe(receiver);
+  });
   describe401Tests([
     { method: "GET", path: "/api/driver/tasks" },
     { method: "POST", path: "/api/driver/tasks/123/accept" },

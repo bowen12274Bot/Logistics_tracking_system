@@ -158,4 +158,84 @@ describe('CustomerTrackView', () => {
 
     expect(wrapper.find('button.route-seg.ok').exists()).toBe(true)
   })
+
+  it('does not mark repeated nodes as arrived from non-movement events', async () => {
+    const { api } = await import('../../services/api')
+
+    const pkg = {
+      id: 'PKG-DUPE-1',
+      tracking_number: 'TRK-DUPE-1',
+      status: 'sorting',
+      current_location: null,
+      current_updated_at: new Date().toISOString(),
+      created_at: new Date(Date.now() - 120_000).toISOString(),
+      route_path: JSON.stringify(['END_HOME_33', 'REG_7', 'HUB_1', 'REG_7', 'REG_14', 'END_STORE_18']),
+      delivery_time: 'standard',
+    }
+
+    vi.mocked(api.searchTracking).mockImplementation(async (query: any) => {
+      if (query?.status_group === 'in_transit') return { success: true, packages: [pkg], total: 1 }
+      return { success: true, packages: [], total: 0 }
+    })
+
+    const t0 = new Date(Date.now() - 90_000).toISOString()
+    const t1 = new Date(Date.now() - 60_000).toISOString()
+    const t2 = new Date(Date.now() - 30_000).toISOString()
+
+    vi.mocked(api.getPackageStatus).mockResolvedValue({
+      success: true,
+      package: pkg as any,
+      events: [
+        {
+          id: 'EVT-0',
+          package_id: pkg.id,
+          delivery_status: 'created',
+          delivery_details: 'created',
+          events_at: t0,
+          location: 'END_HOME_33',
+        },
+        {
+          id: 'EVT-1',
+          package_id: pkg.id,
+          delivery_status: 'warehouse_in',
+          delivery_details: 'arrived',
+          events_at: t1,
+          location: 'REG_7',
+        },
+        {
+          id: 'EVT-2',
+          package_id: pkg.id,
+          delivery_status: 'route_decided',
+          delivery_details: 'next=HUB_1',
+          events_at: t2,
+          location: 'REG_7',
+        },
+        {
+          id: 'EVT-3',
+          package_id: pkg.id,
+          delivery_status: 'sorting',
+          delivery_details: 'sorting',
+          events_at: new Date(Date.now() - 10_000).toISOString(),
+          location: 'REG_7',
+        },
+      ],
+      active_exception: null,
+      vehicle: null,
+    } as any)
+
+    const wrapper = mount(CustomerTrackView, {
+      global: {
+        plugins: [router, createPinia(), i18n],
+      },
+    })
+
+    await flushPromises()
+    await wrapper.get('.package-row .row-btn').trigger('click')
+    await flushPromises()
+
+    const steps = wrapper.findAll('.route-step')
+    expect(steps.length).toBeGreaterThanOrEqual(5)
+    expect(steps[2].classes()).toContain('ok') // first REG_7
+    expect(steps[4].classes()).toContain('pending') // second REG_7 should not be pre-marked
+  })
 })

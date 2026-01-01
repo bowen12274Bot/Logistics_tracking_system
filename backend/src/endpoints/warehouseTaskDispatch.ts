@@ -2,6 +2,7 @@ import { OpenAPIRoute } from "chanfana";
 import { z } from "zod";
 import type { AppContext } from "../types";
 import { getTerminalStatus, hasActiveException } from "../lib/packageGuards";
+import { computeRoute } from "./mapRoute";
 import { logWarehouse } from "../middlewares/logger";
 
 type AuthUser = { id: string; user_class: string; address: string | null };
@@ -134,8 +135,13 @@ export class WarehouseDispatchNextTask extends OpenAPIRoute {
     if (!toNodeId) return c.json({ error: "Missing toNodeId" }, 400);
     if (fromNodeId === toNodeId) return c.json({ error: "fromNodeId equals toNodeId" }, 400);
 
-    const pkg = await c.env.DB.prepare("SELECT id FROM packages WHERE id = ? LIMIT 1").bind(packageId).first();
+    const pkg = await c.env.DB.prepare("SELECT id, receiver_address, route_path FROM packages WHERE id = ? LIMIT 1")
+      .bind(packageId)
+      .first<{ id: string; receiver_address: string | null; route_path: string | null }>();
     if (!pkg) return c.json({ error: "Package not found" }, 404);
+
+    const receiverAddress = String(pkg.receiver_address ?? "").trim().toUpperCase();
+    const existingRoutePathRaw = pkg.route_path ?? null;
 
     const terminal = await getTerminalStatus(c.env.DB, packageId);
     if (terminal) return c.json({ error: "Package is terminal", status: terminal }, 409);
@@ -219,6 +225,49 @@ export class WarehouseDispatchNextTask extends OpenAPIRoute {
     )
       .bind(evtId, packageId, `next=${toNodeId}`, now, fromNodeId)
       .run();
+
+    const parseExistingRoutePath = (raw: string | null): string[] => {
+      if (!raw) return [];
+      const s = String(raw).trim();
+      if (!s) return [];
+      if (s.startsWith("[")) {
+        try {
+          const parsed = JSON.parse(s);
+          if (!Array.isArray(parsed)) return [];
+          return parsed.map((v) => String(v).trim().toUpperCase()).filter(Boolean);
+        } catch {
+          return [];
+        }
+      }
+      return s
+        .split(",")
+        .map((v) => String(v).trim().toUpperCase())
+        .filter(Boolean);
+    };
+
+    // Keep customer tracking route in sync with warehouse dispatch decisions.
+    // This prevents the UI from showing the original "recommended" route after a manual override.
+    if (receiverAddress) {
+      const existingPath = parseExistingRoutePath(existingRoutePathRaw);
+      // Route paths may contain repeated nodes after manual overrides; anchor to the latest occurrence.
+      const idx = existingPath.lastIndexOf(fromNodeId);
+      const prefix = idx >= 0 ? existingPath.slice(0, idx + 1) : [fromNodeId];
+
+      const route = await computeRoute(c.env.DB, toNodeId, receiverAddress);
+      if (route.ok && route.path.length >= 2) {
+        const merged = [...prefix, toNodeId, ...route.path.slice(1)];
+        const deduped = merged.filter((node, i) => i === 0 || node !== merged[i - 1]);
+        await c.env.DB.prepare("UPDATE packages SET route_path = ? WHERE id = ?")
+          .bind(JSON.stringify(deduped), packageId)
+          .run();
+      } else {
+        const merged = [...prefix, toNodeId];
+        const deduped = merged.filter((node, i) => i === 0 || node !== merged[i - 1]);
+        await c.env.DB.prepare("UPDATE packages SET route_path = ? WHERE id = ?")
+          .bind(JSON.stringify(deduped), packageId)
+          .run();
+      }
+    }
 
     logWarehouse('task_dispatched', 'info', auth.user.id, packageId, {
       from_location: fromNodeId,

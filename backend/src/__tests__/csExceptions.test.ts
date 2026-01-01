@@ -361,6 +361,232 @@ describe("Customer service exception pool", () => {
     expect(String(resumed.to_location)).not.toBe(regNode);
   });
 
+  it("CS-EXC-005: redirect_destination keeps historical route prefix (no truncation)", async () => {
+    const sender = "END_HOME_33";
+    const receiver = "END_STORE_18";
+
+    const mapRes = await apiRequest<any>("/api/map");
+    expect(mapRes.status).toBe(200);
+    const nodeIds: string[] = (mapRes.data.nodes ?? [])
+      .map((n: any) => String(n?.id ?? "").trim().toUpperCase())
+      .filter(Boolean);
+    expect(nodeIds.includes(sender)).toBe(true);
+    expect(nodeIds.includes(receiver)).toBe(true);
+
+    const routeRes = await apiRequest<any>(
+      `/api/map/route?from=${encodeURIComponent(sender)}&to=${encodeURIComponent(receiver)}`,
+    );
+    expect(routeRes.status).toBe(200);
+    const plannedPath: string[] = (routeRes.data?.route?.path ?? []).map((v: any) => String(v).trim().toUpperCase()).filter(Boolean);
+    expect(plannedPath.length).toBeGreaterThan(2);
+    expect(plannedPath[0]).toBe(sender);
+    expect(plannedPath[plannedPath.length - 1]).toBe(receiver);
+
+    const pkg = await createTestPackage(customerToken, {
+      sender_address: sender,
+      receiver_address: receiver,
+      route_path: JSON.stringify(plannedPath),
+    });
+
+    const statusBefore = await authenticatedRequest<any>(`/api/packages/${encodeURIComponent(pkg.id)}/status`, customerToken);
+    expect(statusBefore.status).toBe(200);
+    const rawRoute = String(statusBefore.data.package?.route_path ?? "").trim();
+    const oldPath: string[] = rawRoute.startsWith("[")
+      ? (JSON.parse(rawRoute) as any[]).map((v) => String(v).trim().toUpperCase()).filter(Boolean)
+      : rawRoute.split(",").map((v) => String(v).trim().toUpperCase()).filter(Boolean);
+    expect(oldPath).toEqual(plannedPath);
+
+    const mid = oldPath.find((n) => n === "REG_14") ?? oldPath.find((n) => /^REG_/i.test(n)) ?? oldPath[1];
+    expect(mid).toBeTruthy();
+    expect(mid).not.toBe(sender);
+    expect(mid).not.toBe(receiver);
+
+    // Find which hub driver got the pickup task.
+    const hubs: string[] = (mapRes.data.nodes ?? [])
+      .filter((n: any) => Number(n.level) === 1 && typeof n.id === "string")
+      .map((n: any) => String(n.id));
+    expect(hubs.length).toBeGreaterThan(0);
+
+    let pickupTask: any | null = null;
+    let pickupDriverToken: string | null = null;
+    for (const hubId of hubs) {
+      const token = hubId === "HUB_0" ? driverToken : await loginDriver(hubId);
+      const assigned = await authenticatedRequest<any>("/api/driver/tasks?scope=assigned", token);
+      expect(assigned.status).toBe(200);
+      const hit = (assigned.data.tasks ?? []).find((t: any) => t.package_id === pkg.id);
+      if (hit) {
+        pickupTask = hit;
+        pickupDriverToken = token;
+        break;
+      }
+    }
+    expect(pickupTask).toBeTruthy();
+    expect(pickupDriverToken).toBeTruthy();
+
+    await walkVehicleTo(String(pickupDriverToken), sender);
+    const pickup = await authenticatedRequest<any>(
+      `/api/driver/tasks/${encodeURIComponent(String(pickupTask.id))}/pickup`,
+      String(pickupDriverToken),
+      { method: "POST" },
+    );
+    expect(pickup.status).toBe(200);
+
+    await walkVehicleTo(String(pickupDriverToken), String(mid));
+    const me = await authenticatedRequest<any>("/api/vehicles/me", String(pickupDriverToken));
+    expect(me.status).toBe(200);
+    const truckCode = String(me.data.vehicle.vehicle_code ?? "").trim();
+    expect(truckCode).toMatch(/^TRUCK_/i);
+
+    const report = await authenticatedRequest<any>(
+      `/api/driver/packages/${encodeURIComponent(pkg.id)}/exception`,
+      String(pickupDriverToken),
+      { method: "POST", body: JSON.stringify({ reason_code: "address_issue", description: "route check", location: truckCode }) },
+    );
+    expect(report.status).toBe(200);
+    const exceptionId = String(report.data.exception_id ?? "");
+    expect(exceptionId).toBeTruthy();
+
+    const handle = await authenticatedRequest<any>(
+      `/api/cs/exceptions/${encodeURIComponent(exceptionId)}/handle`,
+      csToken,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          action: "resume",
+          resume_mode: "redirect_destination",
+          destination_override: receiver,
+          handling_report: "resume without truncation",
+        }),
+      },
+    );
+    expect(handle.status).toBe(200);
+    expect(handle.data.success).toBe(true);
+
+    const statusAfter = await authenticatedRequest<any>(`/api/packages/${encodeURIComponent(pkg.id)}/status`, customerToken);
+    expect(statusAfter.status).toBe(200);
+    const afterRaw = String(statusAfter.data.package?.route_path ?? "").trim();
+    const newPath: string[] = afterRaw.startsWith("[")
+      ? (JSON.parse(afterRaw) as any[]).map((v) => String(v).trim().toUpperCase()).filter(Boolean)
+      : afterRaw.split(",").map((v) => String(v).trim().toUpperCase()).filter(Boolean);
+
+    expect(newPath[0]).toBe(sender);
+    expect(newPath[newPath.length - 1]).toBe(receiver);
+    const idxOld = oldPath.indexOf(mid);
+    const idxNew = newPath.indexOf(mid);
+    expect(idxOld).toBeGreaterThan(0);
+    expect(idxNew).toBe(idxOld);
+    expect(newPath.slice(0, idxNew + 1)).toEqual(oldPath.slice(0, idxOld + 1));
+  });
+
+  it("CS-EXC-006: redirect_destination from repeated node keeps latest occurrence prefix", async () => {
+    const sender = "END_HOME_1";
+    const receiver = "END_HOME_2";
+
+    const mapRes = await apiRequest<any>("/api/map");
+    expect(mapRes.status).toBe(200);
+    const edges: any[] = mapRes.data.edges ?? [];
+
+    const routeRes = await apiRequest<any>(
+      `/api/map/route?from=${encodeURIComponent(sender)}&to=${encodeURIComponent(receiver)}`,
+    );
+    expect(routeRes.status).toBe(200);
+    const planned: string[] = (routeRes.data?.route?.path ?? []).map((v: any) => String(v).trim().toUpperCase()).filter(Boolean);
+    expect(planned.length).toBeGreaterThan(2);
+    const regA = planned[1];
+    expect(String(regA)).toMatch(/^(REG_|HUB_)/i);
+
+    const hubNeighbor = edges.flatMap((e: any) => {
+      const a = String(e.source ?? "").trim().toUpperCase();
+      const b = String(e.target ?? "").trim().toUpperCase();
+      if (a === regA && /^HUB_/i.test(b)) return [b];
+      if (b === regA && /^HUB_/i.test(a)) return [a];
+      return [];
+    })[0] ?? null;
+    expect(String(hubNeighbor ?? "")).toMatch(/^HUB_/i);
+
+    const looped = [planned[0], regA, String(hubNeighbor), regA, ...planned.slice(2)];
+
+    const pkg = await createTestPackage(customerToken, {
+      sender_address: sender,
+      receiver_address: receiver,
+      route_path: JSON.stringify(looped),
+    });
+
+    // Find which hub driver got the pickup task.
+    const hubs: string[] = (mapRes.data.nodes ?? [])
+      .filter((n: any) => Number(n.level) === 1 && typeof n.id === "string")
+      .map((n: any) => String(n.id));
+    expect(hubs.length).toBeGreaterThan(0);
+
+    let pickupTask: any | null = null;
+    let pickupDriverToken: string | null = null;
+    for (const hubId of hubs) {
+      const token = hubId === "HUB_0" ? driverToken : await loginDriver(hubId);
+      const assigned = await authenticatedRequest<any>("/api/driver/tasks?scope=assigned", token);
+      expect(assigned.status).toBe(200);
+      const hit = (assigned.data.tasks ?? []).find((t: any) => t.package_id === pkg.id);
+      if (hit) {
+        pickupTask = hit;
+        pickupDriverToken = token;
+        break;
+      }
+    }
+    expect(pickupTask).toBeTruthy();
+    expect(pickupDriverToken).toBeTruthy();
+
+    await walkVehicleTo(String(pickupDriverToken), sender);
+    const pickup = await authenticatedRequest<any>(
+      `/api/driver/tasks/${encodeURIComponent(String(pickupTask.id))}/pickup`,
+      String(pickupDriverToken),
+      { method: "POST" },
+    );
+    expect(pickup.status).toBe(200);
+
+    // Walk to HUB neighbor then back to the same REG node (second occurrence in route_path).
+    await walkVehicleTo(String(pickupDriverToken), String(hubNeighbor));
+    await walkVehicleTo(String(pickupDriverToken), String(regA));
+
+    const me = await authenticatedRequest<any>("/api/vehicles/me", String(pickupDriverToken));
+    expect(me.status).toBe(200);
+    const truckCode = String(me.data.vehicle.vehicle_code ?? "").trim();
+    expect(truckCode).toMatch(/^TRUCK_/i);
+
+    const report = await authenticatedRequest<any>(
+      `/api/driver/packages/${encodeURIComponent(pkg.id)}/exception`,
+      String(pickupDriverToken),
+      { method: "POST", body: JSON.stringify({ reason_code: "address_issue", description: "repeat node", location: truckCode }) },
+    );
+    expect(report.status).toBe(200);
+    const exceptionId = String(report.data.exception_id ?? "");
+    expect(exceptionId).toBeTruthy();
+
+    const handle = await authenticatedRequest<any>(
+      `/api/cs/exceptions/${encodeURIComponent(exceptionId)}/handle`,
+      csToken,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          action: "resume",
+          resume_mode: "redirect_destination",
+          destination_override: receiver,
+          handling_report: "resume at repeated node",
+        }),
+      },
+    );
+    expect(handle.status).toBe(200);
+    expect(handle.data.success).toBe(true);
+
+    const statusAfter = await authenticatedRequest<any>(`/api/packages/${encodeURIComponent(pkg.id)}/status`, customerToken);
+    expect(statusAfter.status).toBe(200);
+    const afterRaw = String(statusAfter.data.package?.route_path ?? "").trim();
+    expect(afterRaw.startsWith("[")).toBe(true);
+    const newPath: string[] = (JSON.parse(afterRaw) as any[]).map((v) => String(v).trim().toUpperCase()).filter(Boolean);
+
+    const idxSecond = looped.lastIndexOf(regA);
+    expect(idxSecond).toBeGreaterThan(1);
+    expect(newPath.slice(0, idxSecond + 1)).toEqual(looped.slice(0, idxSecond + 1));
+  });
+
   it("CS-EXC-HANDLE-002: handle exception with action=cancel", async () => {
     const pkg = await createTestPackage(customerToken, { sender_address: "END_HOME_1", receiver_address: "END_HOME_2" });
 

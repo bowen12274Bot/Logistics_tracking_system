@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -329,8 +329,6 @@ const routeModel = (pkg: any) => {
     const patterns: RegExp[] = [
       /(?:next|to)\s*([A-Z0-9_]+)/i,
       /destination\s*[:=]\s*([A-Z0-9_]+)/i,
-      /(?:目的地|下一站)\s*[:：]?\s*([A-Z0-9_]+)/i,
-      /前往\s*([A-Z0-9_]+)/i,
     ]
 
     for (const p of patterns) {
@@ -348,14 +346,19 @@ const routeModel = (pkg: any) => {
     return ''
   }
 
-  const nodeTimeById = new Map<string, string>()
+  const baseNodeTimes: Array<string | null> = baseNodes.map(() => null)
   let originAtFromEvent: string | null = null
+  let lastMatchedIndex = -1
+  let lastMatchedLocation = ''
   for (const evt of events) {
     const status = String(evt.delivery_status ?? '').trim().toLowerCase()
-    if (status === 'exception_resolved') continue
+    if (status === 'exception_resolved' || status === 'route_decided') continue
     const loc = String(evt.location ?? '').trim()
     if (!loc) continue
-    
+
+    // A TRUCK_* in_transit event indicates a segment is active, but it should NOT mark a node as "arrived".
+    if (/^TRUCK_/i.test(loc) && status === 'in_transit') continue
+
     // Handle TRUCK_* locations: extract destination from in_transit events
     let resolvedLoc = loc
     if (/^TRUCK_/i.test(loc) && status === 'in_transit') {
@@ -364,8 +367,6 @@ const routeModel = (pkg: any) => {
         const patterns: RegExp[] = [
           /(?:next|to)\s*([A-Z0-9_]+)/i,
           /destination\s*[:=]\s*([A-Z0-9_]+)/i,
-          /(?:目的地|下一站)\s*[:：]?\s*([A-Z0-9_]+)/i,
-          /前往\s*([A-Z0-9_]+)/i,
         ]
         for (const p of patterns) {
           const m = text.match(p)
@@ -378,7 +379,7 @@ const routeModel = (pkg: any) => {
         resolvedLoc = dest
       }
     }
-    
+
     if (!baseNodes.includes(resolvedLoc)) continue
     if (baseNodes.length && resolvedLoc === baseNodes[0] && isPrePickupEvent(evt, baseNodes[0])) {
       if (!originAtFromEvent) originAtFromEvent = evt.events_at
@@ -389,17 +390,15 @@ const routeModel = (pkg: any) => {
       }
       continue
     }
-    const existing = nodeTimeById.get(resolvedLoc)
-    if (!existing) {
-      nodeTimeById.set(resolvedLoc, evt.events_at)
-    } else {
-      const cur = new Date(existing).getTime()
-      const nxt = new Date(evt.events_at).getTime()
-      if (Number.isFinite(nxt) && (!Number.isFinite(cur) || nxt < cur)) nodeTimeById.set(resolvedLoc, evt.events_at)
-    }
-  }
+    if (resolvedLoc === lastMatchedLocation) continue
 
-  const baseNodeTimes = baseNodes.map((node) => nodeTimeById.get(node) ?? null)
+    const idx = baseNodes.findIndex((node, i) => i > lastMatchedIndex && node === resolvedLoc && !baseNodeTimes[i])
+    if (idx < 0) continue
+
+    baseNodeTimes[idx] = evt.events_at
+    lastMatchedIndex = idx
+    lastMatchedLocation = resolvedLoc
+  }
   const startTime = (() => {
     if (originAtFromEvent) return originAtFromEvent
     const createdAt = String(pkg.created_at ?? '').trim()
@@ -503,7 +502,7 @@ const routeModel = (pkg: any) => {
           else segmentExceptionFlags[segIndex] = true
           if (!segmentTruckIds[segIndex]) segmentTruckIds[segIndex] = loc
         }
-        
+
         // For TRUCK exceptions, also try to extract destination and mark segment
         if (!isFailure) {
           const destination = extractDestination(details, nodes)
@@ -695,7 +694,7 @@ watch(
         </div>
         <button type="button" class="filters-toggle" @click="filtersOpen = !filtersOpen">
           <span>{{ filtersOpen ? t('track.filters.hide') : t('track.filters.show') }}</span>
-          <span aria-hidden="true">{{ filtersOpen ? '−' : '+' }}</span>
+          <span aria-hidden="true">{{ filtersOpen ? '-' : '+' }}</span>
         </button>
       </div>
 
@@ -862,7 +861,7 @@ watch(
                   <span class="summary-value">
                     <template v-if="detailByPackageId[pkg.id]?.vehicleCode">
                       {{ detailByPackageId[pkg.id]?.vehicleCode }}
-                    </template>               
+                    </template>
                     <template v-else-if="routeModel(pkg).displayNode">
                       {{ displayNodeText(routeModel(pkg).displayNode) }}
                     </template>
